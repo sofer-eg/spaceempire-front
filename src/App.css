@@ -1,0 +1,914 @@
+/* ---------- Space Empire · Tactical design tokens (oklch, lifted from the
+   "Space Empire · Tactical" mockup). Legacy --accent/--ink-dim/... names are
+   kept as aliases so the existing .sw-* rules pick up the new palette without
+   a tree-wide rename. ---------- */
+:root {
+  --bg-0: oklch(0.16 0.030 235);
+  --bg-1: oklch(0.20 0.030 235);
+  --bg-2: oklch(0.235 0.032 235);
+  --bg-3: oklch(0.28 0.034 235);
+
+  --line:        oklch(0.32 0.045 230);
+  --line-2:      oklch(0.40 0.055 225);
+  --line-3:      oklch(0.50 0.060 220);
+  --line-strong: oklch(0.50 0.060 220);
+
+  --ink:   oklch(0.92 0.025 220);
+  --ink-2: oklch(0.78 0.035 220);
+  --ink-3: oklch(0.58 0.045 220);
+  --ink-4: oklch(0.42 0.045 220);
+  --ink-dim:  var(--ink-2);
+  --ink-mute: var(--ink-3);
+
+  /* core accents */
+  --cyan:   oklch(0.82 0.13 215);
+  --green:  oklch(0.80 0.16 155);
+  --amber:  oklch(0.78 0.13 75);
+  --red:    oklch(0.72 0.18 20);
+  --violet: oklch(0.74 0.13 290);
+
+  --accent:        var(--cyan);
+  --accent-hot:    oklch(0.88 0.12 210);
+  --accent-target: var(--amber);
+  --warn:    var(--amber);
+  --danger:  var(--red);
+  --bad:     var(--red);
+  --good:    var(--green);
+  --magenta: var(--violet);
+
+  /* faction colours (X-universe races) — reserved for phase-5 contacts */
+  --argon:   oklch(0.82 0.13 215);
+  --boron:   oklch(0.80 0.16 155);
+  --teladi:  oklch(0.85 0.14 100);
+  --paranid: oklch(0.74 0.13 290);
+  --split:   oklch(0.78 0.13 75);
+  --xenon:   oklch(0.70 0.20 25);
+  --kaak:    oklch(0.72 0.22 340);
+  --pirate:  oklch(0.75 0.16 50);
+  --self:    var(--green);
+  --ally:    var(--cyan);
+  --enemy:   var(--red);
+  --neutral: oklch(0.62 0.04 220);
+
+  --gridline:        oklch(0.82 0.13 215 / 0.07);
+  --gridline-strong: oklch(0.82 0.13 215 / 0.14);
+
+  /* mockup is monospace everywhere; display/ui fold onto the mono stack */
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-display: var(--font-mono);
+  --font-ui: var(--font-mono);
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  margin: 0; padding: 0; height: 100%;
+  background: var(--bg-0);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  overflow: hidden;
+}
+
+/* The whole app sits in a flex column so the bottom log can take its share. */
+.sw-app {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  background:
+    radial-gradient(ellipse at 30% 20%, rgba(91, 206, 250, 0.06), transparent 50%),
+    radial-gradient(ellipse at 80% 80%, rgba(192, 132, 252, 0.05), transparent 50%),
+    var(--bg-0);
+}
+
+/* Starfield overlay — purely decorative. */
+.sw-stars {
+  position: absolute; inset: 0; pointer-events: none;
+  background-image:
+    radial-gradient(1px 1px at 12% 22%, #ffffff80, transparent),
+    radial-gradient(1px 1px at 28% 64%, #cfe6ff70, transparent),
+    radial-gradient(1px 1px at 44% 18%, #ffffff60, transparent),
+    radial-gradient(1px 1px at 67% 51%, #ffffff90, transparent),
+    radial-gradient(1px 1px at 82% 12%, #cfe6ff50, transparent),
+    radial-gradient(1px 1px at 92% 78%, #ffffff70, transparent),
+    radial-gradient(1px 1px at 8% 86%, #cfe6ff60, transparent),
+    radial-gradient(1.5px 1.5px at 55% 88%, #ffffffcc, transparent),
+    radial-gradient(1px 1px at 36% 36%, #cfe6ff50, transparent),
+    radial-gradient(1px 1px at 73% 30%, #ffffff70, transparent);
+}
+
+/* ---------- typography ---------- */
+.sw-h {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.sw-hh {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  font-size: 10px;
+  color: var(--ink-dim);
+}
+.sw-mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.sw-num  { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+
+/* ---------- panels ---------- */
+.sw-panel {
+  background: linear-gradient(180deg, var(--bg-2), var(--bg-1));
+  border: 1px solid var(--line);
+  position: relative;
+}
+.sw-panel::before {
+  /* corner notches — cut tiny triangles out of each corner */
+  content: "";
+  position: absolute; inset: -1px;
+  pointer-events: none;
+  background:
+    linear-gradient(135deg, transparent 0 9px, var(--bg-0) 9px 10px, transparent 10px) top left / 14px 14px no-repeat,
+    linear-gradient(225deg, transparent 0 9px, var(--bg-0) 9px 10px, transparent 10px) top right / 14px 14px no-repeat,
+    linear-gradient(45deg,  transparent 0 9px, var(--bg-0) 9px 10px, transparent 10px) bottom left / 14px 14px no-repeat,
+    linear-gradient(315deg, transparent 0 9px, var(--bg-0) 9px 10px, transparent 10px) bottom right / 14px 14px no-repeat;
+}
+.sw-panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(90deg, rgba(91, 206, 250, 0.08), transparent);
+}
+.sw-panel-head .title {
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.sw-panel-head .meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-mute);
+  letter-spacing: 0.05em;
+}
+.sw-panel-body { padding: 10px 12px; }
+
+/* ---------- buttons ---------- */
+.sw-btn {
+  appearance: none;
+  background: linear-gradient(180deg, rgba(91, 206, 250, 0.06), rgba(91, 206, 250, 0.02));
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding: 8px 12px;
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 8px;
+  transition: all 0.15s ease;
+  position: relative;
+}
+.sw-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: linear-gradient(180deg, rgba(91, 206, 250, 0.18), rgba(91, 206, 250, 0.05));
+  color: var(--accent-hot);
+}
+.sw-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.sw-btn[data-active="true"] {
+  border-color: var(--accent);
+  color: var(--accent-hot);
+  box-shadow: inset 0 0 16px rgba(91, 206, 250, 0.15);
+}
+.sw-btn.ghost {
+  background: transparent;
+  border-color: rgba(91, 206, 250, 0.1);
+}
+.sw-btn.danger:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* ---------- chip ---------- */
+.sw-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--ink-dim);
+  background: rgba(91, 206, 250, 0.04);
+}
+.sw-chip.dot::before {
+  content: "";
+  width: 6px; height: 6px;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+  border-radius: 50%;
+}
+.sw-chip.warn::before   { background: var(--warn);   box-shadow: 0 0 6px var(--warn); }
+.sw-chip.danger::before { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
+.sw-chip.good::before   { background: var(--good);   box-shadow: 0 0 6px var(--good); }
+/* generic active chip (log tabs, etc.) */
+.sw-chip.active { border-color: var(--accent); color: var(--accent-hot); }
+.sw-log .empty { font-family: var(--font-mono); font-size: 11px; color: var(--ink-mute); }
+
+/* zoom-mode toggle: grey marker when inactive, green (with glow + pop) when
+   active, so the player can tell at a glance which map view is on. */
+.sw-zoom-chip { cursor: pointer; }
+.sw-zoom-chip.dot::before {
+  background: var(--ink-mute);
+  box-shadow: none;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+.sw-zoom-chip.dot.active::before {
+  background: var(--good);
+  box-shadow: 0 0 6px var(--good);
+  animation: sw-zoom-pop 0.3s ease;
+}
+.sw-zoom-chip.active {
+  border-color: var(--good);
+  color: var(--accent-hot);
+}
+@keyframes sw-zoom-pop {
+  0%   { transform: scale(0.3); }
+  60%  { transform: scale(1.35); }
+  100% { transform: scale(1); }
+}
+
+/* ---------- bars ---------- */
+.sw-bar {
+  height: 6px; width: 100%;
+  background: rgba(91, 206, 250, 0.08);
+  border: 1px solid var(--line);
+  position: relative;
+  overflow: hidden;
+}
+.sw-bar > i {
+  display: block; height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-hot));
+  box-shadow: 0 0 10px var(--accent);
+}
+.sw-bar.warn   > i { background: linear-gradient(90deg, var(--warn),   #ffd180); box-shadow: 0 0 10px var(--warn); }
+.sw-bar.danger > i { background: linear-gradient(90deg, var(--danger), #ff8e9c); box-shadow: 0 0 10px var(--danger); }
+.sw-bar.good   > i { background: linear-gradient(90deg, var(--good),   #a3f3c4); box-shadow: 0 0 10px var(--good); }
+
+/* ---------- vital stat (label + value over a fill bar) ---------- */
+.sw-vital__head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin-bottom: 4px;
+}
+.sw-vital__label {
+  font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-mute);
+}
+.sw-vital__value {
+  font-size: 12px; color: var(--ink); font-variant-numeric: tabular-nums;
+}
+
+/* ---------- corners overlay on the map ---------- */
+.sw-corner {
+  position: absolute;
+  width: 18px; height: 18px;
+  border-color: var(--accent);
+  border-style: solid;
+  pointer-events: none;
+}
+.sw-corner.tl { top: 8px;    left: 8px;    border-width: 1px 0 0 1px; }
+.sw-corner.tr { top: 8px;    right: 8px;   border-width: 1px 1px 0 0; }
+.sw-corner.bl { bottom: 8px; left: 8px;    border-width: 0 0 1px 1px; }
+.sw-corner.br { bottom: 8px; right: 8px;   border-width: 0 1px 1px 0; }
+
+/* ---------- scanlines overlay ---------- */
+.sw-scan {
+  position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(91, 206, 250, 0.0) 0px,
+    rgba(91, 206, 250, 0.0) 2px,
+    rgba(91, 206, 250, 0.025) 3px,
+    rgba(91, 206, 250, 0.0) 4px
+  );
+  mix-blend-mode: screen;
+}
+
+/* ---------- key/value grid ---------- */
+.sw-kv { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: baseline; }
+.sw-kv .k {
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--ink-mute); letter-spacing: 0.06em; text-transform: uppercase;
+}
+.sw-kv .v {
+  font-family: var(--font-mono); font-size: 12px;
+  color: var(--ink); text-align: right;
+}
+.sw-kv .v.accent { color: var(--accent); }
+.sw-kv .v.warn   { color: var(--warn); }
+.sw-kv .v.danger { color: var(--danger); }
+.sw-kv .v.good   { color: var(--good); }
+
+/* ---------- log ---------- */
+.sw-log {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-dim);
+  display: flex; flex-direction: column; gap: 4px;
+  max-height: 100%;
+  overflow: hidden;
+}
+.sw-log .row { display: flex; gap: 10px; line-height: 1.4; }
+.sw-log .row .t { color: var(--ink-mute); flex-shrink: 0; }
+.sw-log .row.good   .m { color: var(--good); }
+.sw-log .row.warn   .m { color: var(--warn); }
+.sw-log .row.danger .m { color: var(--danger); }
+.sw-log .row.info   .m { color: var(--ink); }
+
+/* ---------- divider ---------- */
+.sw-div { height: 1px; background: var(--line); margin: 8px 0; }
+
+/* ---------- layout helpers ---------- */
+.sw-row    { display: flex; align-items: center; gap: 8px; }
+.sw-col    { display: flex; flex-direction: column; gap: 8px; }
+.sw-grow   { flex: 1; }
+.sw-spacer { flex: 1; }
+
+/* ---------- app grid ---------- */
+/* Top row = topbar; below = [rail | main]. The rail lives in GameLayout
+   (persistent across routes); each Outlet screen owns its own layout inside
+   .sw-main. */
+.sw-shell {
+  display: grid;
+  grid-template-rows: 44px 1fr;
+  gap: 10px;
+  padding: 10px;
+  width: 100%; height: 100%;
+  position: relative;
+  z-index: 1;
+}
+.sw-shell__body {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  min-height: 0;
+}
+.sw-main { min-height: 0; min-width: 0; position: relative; }
+
+/* SectorView internal grid (inside .sw-main): ship | map | nav, log spans. */
+.sw-sector-grid {
+  display: grid;
+  grid-template-columns: 320px 1fr 380px;
+  grid-template-rows: 1fr 180px;
+  grid-template-areas: "ship map nav" "log log log";
+  gap: 10px;
+  height: 100%;
+  min-height: 0;
+}
+.sw-sector-grid__ship { grid-area: ship; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.sw-sector-grid__map  { grid-area: map; min-height: 0; min-width: 0; position: relative; }
+.sw-sector-grid__nav  { grid-area: nav; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.sw-sector-grid__log  { grid-area: log; min-height: 0; }
+
+/* GalaxyPage fills the main area. */
+.sw-galaxy-page { height: 100%; position: relative; }
+
+/* ---------- clans (phase 6.1) ---------- */
+.sw-clans-page {
+  height: 100%;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.sw-clan { display: flex; flex-direction: column; }
+.sw-clan__section { margin-top: 14px; }
+.sw-clan__subhead {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted, #88aabb);
+  margin-bottom: 6px;
+}
+.sw-clan__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+
+/* ---------- rail (vertical icon nav) ---------- */
+.sw-rail {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 6px 3px;
+  width: 62px;
+  background: linear-gradient(180deg, var(--bg-2), var(--bg-1));
+  border: 1px solid var(--line);
+}
+.sw-rail__item {
+  position: relative;
+  appearance: none; background: transparent; border: none;
+  border-left: 2px solid transparent;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 8px 2px;
+  color: var(--ink-3);
+  font-family: var(--font-mono); font-size: 8.5px; letter-spacing: 0.04em;
+  text-transform: lowercase; cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+.sw-rail__badge {
+  position: absolute;
+  top: 4px; right: 8px;
+  min-width: 14px; height: 14px;
+  padding: 0 3px;
+  display: grid; place-items: center;
+  border-radius: 7px;
+  background: var(--good);
+  color: var(--bg-0, #06090d);
+  font-family: var(--font-mono); font-size: 8.5px; font-weight: 700;
+  line-height: 1; letter-spacing: 0;
+}
+.sw-rail__item svg { width: 18px; height: 18px; display: block; }
+.sw-rail__item:hover:not(:disabled) {
+  color: var(--accent-hot);
+  background: oklch(0.82 0.13 215 / 0.08);
+}
+.sw-rail__item:disabled { opacity: 0.3; cursor: not-allowed; }
+.sw-rail__item.active {
+  color: var(--accent-hot);
+  border-left-color: var(--good);
+  background: var(--bg-3);
+}
+
+/* ---------- HUD header bar ---------- */
+.sw-topbar {
+  height: 100%;
+  display: flex; align-items: center; padding: 0 14px; gap: 16px;
+}
+.sw-topbar__brandbox {
+  width: 26px; height: 26px;
+  border: 1px solid var(--accent);
+  display: grid; place-items: center;
+  color: var(--accent);
+}
+.sw-topbar__brand {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  color: var(--accent);
+  text-decoration: none;
+}
+.sw-topbar__subtitle {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-mute);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.sw-topbar__divider { width: 1px; height: 20px; background: var(--line); }
+.sw-topbar__clock {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-dim);
+}
+
+/* nav links rendered as sw-btn */
+.sw-nav { display: flex; gap: 6px; }
+
+/* ---------- map ---------- */
+.sw-mapcard { height: 100%; display: flex; flex-direction: column; }
+.sw-mapcard__body { flex: 1 1 0; min-height: 0; position: relative; }
+
+.sw-map-wrap {
+  position: absolute; inset: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at center, rgba(91, 206, 250, 0.04), transparent 60%),
+    var(--bg-0);
+}
+.sw-map-canvas {
+  width: 100%; height: 100%; display: block;
+  cursor: crosshair;
+}
+
+/* ---------- navigation panel sections ---------- */
+/* navigation tabs: ships / stations / other (phase 10.9) */
+.sw-nav-tabs {
+  display: flex; align-items: stretch; gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.sw-nav-tab {
+  flex: 1 1 0;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink-mute);
+  padding: 6px 0;
+  cursor: pointer;
+}
+.sw-nav-tab:hover { color: var(--accent-hot); border-color: var(--accent); }
+.sw-nav-tab[data-active='true'] {
+  color: var(--accent-hot);
+  border-color: var(--accent);
+  background: oklch(0.82 0.13 215 / 0.06);
+}
+.sw-nav-tab svg { display: block; }
+
+/* ---------- targets list ---------- */
+.sw-targets {
+  display: flex; flex-direction: column; gap: 4px;
+}
+/* contact marker (inline SVG glyph) + name; name grows so the distance
+   sits flush right. Shapes vary by kind — see objectIcons.tsx. */
+.sw-target-marker { flex: 0 0 auto; display: block; }
+.sw-target-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sw-targets .empty {
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--ink-mute);
+}
+.sw-target-btn {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 5px 8px;
+  cursor: pointer;
+}
+.sw-target-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent-hot);
+}
+.sw-target-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.sw-target-btn .pos {
+  font-size: 10px; color: var(--ink-mute);
+}
+.sw-target-btn.gate { color: var(--magenta); }
+.sw-target-btn.dock { color: var(--warn); }
+.sw-target-btn.dock:hover:not(:disabled) { color: var(--accent-hot); border-color: var(--warn); }
+
+/* Target row composes the main click-to-fly button + the kebab menu
+   trigger on the right. flex with a small gap keeps the kebab visually
+   attached to the row without collapsing into the button. */
+.sw-target-row { display: flex; gap: 4px; align-items: stretch; }
+.sw-target-row .sw-target-btn { flex: 1 1 auto; }
+/* --selected marks the row matching ownShip.currentTargetRef. Orange
+   left border + tinted background gives the row the same visual
+   language as the persistent ring on the canvas, distinct from the
+   blue hover state. */
+.sw-target-row--selected .sw-target-btn {
+  border-color: var(--accent-target);
+  border-left-width: 3px;
+  background: rgba(255, 183, 77, 0.08);
+  color: var(--accent-target);
+}
+.sw-target-row--selected .sw-target-menu-btn {
+  border-color: var(--accent-target);
+}
+.sw-target-menu-btn {
+  flex: 0 0 auto;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink-mute);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  padding: 0 8px;
+  cursor: pointer;
+  min-width: 22px;
+}
+.sw-target-menu-btn:hover { color: var(--accent-hot); border-color: var(--accent); }
+.sw-target-menu-btn[aria-expanded='true'] { color: var(--accent-hot); border-color: var(--accent); }
+
+/* Base popover look shared by the panel-row popover and the canvas
+   context menu. Position is supplied by the parent class (sw-target-menu
+   anchors below a row; sw-canvas-menu floats at the cursor). */
+.sw-menu {
+  background: rgba(7, 16, 28, 0.96);
+  border: 1px solid var(--line-strong, var(--accent));
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+.sw-menu__head {
+  padding: 4px 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-mute);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Relation dot before a ship's context-menu title: self/ally/neutral/hostile
+   colour (phase 10.16), matching the map glyph colour. */
+.sw-menu__relation {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.sw-menu__item {
+  background: transparent;
+  border: none;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-align: left;
+  padding: 6px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sw-menu__item:hover:not(:disabled) {
+  background: rgba(91, 206, 250, 0.12);
+  color: var(--accent-hot);
+}
+.sw-menu__item:disabled { opacity: 0.4; cursor: not-allowed; }
+/* Missile launch shares the menu base style but reads in magenta to
+   match the canvas missile colour — the player ties the menu item to
+   what they will see flying. */
+.sw-menu__item--missile { color: #f158b2; }
+.sw-menu__item--missile:hover:not(:disabled) {
+  background: rgba(241, 88, 178, 0.12);
+  color: #f158b2;
+}
+.sw-menu__error {
+  padding: 4px 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--bad, #ff5d6c);
+  background: rgba(255, 93, 108, 0.08);
+  border-top: 1px solid var(--line);
+  white-space: normal;
+}
+
+/* Panel-row popover position: anchored to the row's right edge so it does
+   not push siblings around. z-index lifts it above the scrolling targets
+   list. */
+.sw-target-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 2px;
+  z-index: 10;
+}
+
+/* Canvas-anchored context menu. Coordinates come from the click position;
+   z-index sits above the canvas glow/scan effects. */
+.sw-canvas-menu {
+  position: absolute;
+  z-index: 20;
+}
+
+/* ---------- autopilot form ---------- */
+.sw-form {
+  display: flex; flex-direction: column; gap: 6px;
+}
+.sw-form label {
+  display: grid; grid-template-columns: 70px 1fr; align-items: center; gap: 8px;
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--ink-mute); letter-spacing: 0.06em; text-transform: uppercase;
+}
+.sw-form input,
+.sw-form select {
+  background: rgba(91, 206, 250, 0.04);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  padding: 4px 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.sw-form input:focus,
+.sw-form select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.sw-form__status {
+  font-family: var(--font-mono); font-size: 10px;
+  min-height: 1em;
+}
+.sw-form__status.ok    { color: var(--good); }
+.sw-form__status.error { color: var(--danger); }
+
+/* ---------- galaxy map ---------- */
+.sw-galaxy { height: 100%; display: flex; flex-direction: column; }
+.sw-galaxy__body {
+  flex: 1 1 0; min-height: 0; position: relative;
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.sw-galaxy__svg {
+  width: 100%; height: 100%;
+}
+.sw-galaxy__footer {
+  padding: 8px 12px;
+  border-top: 1px solid var(--line);
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--ink-mute);
+  min-height: 1.5em;
+}
+.sw-galaxy__zoom {
+  position: absolute; right: 14px; bottom: 14px;
+  display: flex; flex-direction: column; gap: 6px; z-index: 3;
+}
+.sw-galaxy__zoom .sw-btn {
+  padding: 4px 0; width: 34px; justify-content: center;
+  font-size: 14px; letter-spacing: 0; line-height: 1;
+}
+.sw-galaxy__search { position: relative; }
+.sw-galaxy__results {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 6;
+  max-height: 240px; overflow-y: auto;
+  background: rgba(7, 16, 28, 0.97);
+  border: 1px solid var(--line-strong, var(--line));
+}
+.sw-galaxy__result {
+  display: flex; justify-content: space-between; gap: 8px;
+  padding: 5px 8px; cursor: pointer;
+  font-family: var(--font-mono); font-size: 11px; color: var(--ink);
+  border-bottom: 1px solid var(--line);
+}
+.sw-galaxy__result:last-child { border-bottom: none; }
+.sw-galaxy__result:hover { background: rgba(91, 206, 250, 0.1); color: var(--accent-hot); }
+@keyframes sw-galaxy-flash { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+.sw-galaxy__flash { animation: sw-galaxy-flash 0.9s ease-in-out infinite; }
+
+/* ---------- login card ---------- */
+.sw-login-page {
+  display: grid;
+  place-items: center;
+  width: 100%; height: 100%;
+  background:
+    radial-gradient(ellipse at center, rgba(91, 206, 250, 0.06), transparent 60%),
+    var(--bg-0);
+}
+.sw-login-card {
+  width: 340px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.sw-login-card .sw-panel-body {
+  display: flex; flex-direction: column; gap: 10px;
+}
+.sw-login-card__switch {
+  background: none; border: none;
+  color: var(--ink-mute);
+  cursor: pointer;
+  font-family: var(--font-mono); font-size: 10px;
+  text-decoration: underline;
+  padding: 0;
+}
+.sw-login-card__switch:hover { color: var(--accent); }
+.sw-login-card__error {
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--danger);
+}
+
+/* ---------- station view (phase 3.8) ---------- */
+.sw-station {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.sw-station__tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.sw-station__body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 0;
+}
+.sw-station__loader,
+.sw-station__empty,
+.sw-station__error {
+  padding: 16px 12px;
+  color: var(--ink-mute);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sw-station__error { color: var(--danger); }
+
+.sw-market__section { margin-top: 10px; }
+.sw-market__section:first-of-type { margin-top: 2px; }
+.sw-market__subhead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 0 12px 4px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.sw-market__timer {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--accent, #5bcefa);
+}
+
+/* Shipyard outfit screen (phase 10.14): a small section label between the
+   "installed" and "available" equipment tables. */
+.sw-shipyard__subtitle {
+  padding: 10px 12px 4px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+
+.sw-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.sw-table th,
+.sw-table td {
+  text-align: left;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+.sw-table th {
+  color: var(--ink-mute);
+  font-weight: normal;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 10px;
+}
+.sw-table tbody tr:hover {
+  background: rgba(91, 206, 250, 0.04);
+}
+
+.sw-input {
+  background: rgba(91, 206, 250, 0.04);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  padding: 4px 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.sw-input:focus { outline: none; border-color: var(--accent); }
+
+.sw-cargo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 0 12px;
+}
+.sw-cargo__col {
+  border: 1px solid var(--line);
+  background: rgba(91, 206, 250, 0.02);
+}
+.sw-cargo__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.sw-cargo__head .title {
+  font-family: var(--font-display);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-size: 11px;
+  color: var(--ink);
+}
+
+.sw-auction__create {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr auto auto;
+  gap: 10px;
+  align-items: end;
+  padding: 12px;
+  border-top: 1px solid var(--line);
+  margin-top: 8px;
+}
+.sw-auction__create .title {
+  grid-column: 1 / -1;
+  font-family: var(--font-display);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-size: 11px;
+  color: var(--ink);
+}
+

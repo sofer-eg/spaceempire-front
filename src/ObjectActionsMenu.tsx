@@ -1,0 +1,265 @@
+import { useState } from 'react';
+import {
+  EntityKind,
+  sendAttack,
+  sendCeaseFire,
+  sendDock,
+  sendJump,
+  sendLaunchDrone,
+  sendLaunchMissile,
+  sendMove,
+  sendPickupContainer,
+  sendRecallDrones,
+  type EntityRef,
+} from './api';
+import { emitLog } from './eventBus';
+import { relationColor, type Relation } from './sector/shapeData';
+
+// DRONE_SALVO is how many drones one "launch drones" action sends. A
+// small fixed salvo keeps the action one click; a dedicated count picker
+// can come later.
+const DRONE_SALVO = 3;
+
+// PickedObject is the unified target type shared by TargetsPanel (rows) and
+// SectorCanvas (click-on-object). It carries everything the action menu
+// needs to render and to issue the right backend command — world coords for
+// distance gating and sendMove, EntityRef for sendDock, gate id for
+// sendJump.
+export type PickedObject =
+  | { kind: 'ship'; id: number; x: number; y: number; label: string; relation?: Relation }
+  | { kind: 'gate'; id: number; x: number; y: number; label: string }
+  | { kind: 'dock'; ref: EntityRef; x: number; y: number; label: string; letter?: string }
+  | { kind: 'container'; id: number; x: number; y: number; label: string };
+
+type Props = {
+  target: PickedObject;
+  // ownShipID is the ship that will execute the command. 0 disables every
+  // action — the player has no ship in this sector yet.
+  ownShipID: number;
+  // ownShip carries the player's own position for the dock/jump range check.
+  // null when the player has no ship in this sector — every range gate
+  // resolves to false and the corresponding menu items render disabled.
+  ownShip: { x: number; y: number } | null;
+  // ownShipAttackTargetID is the id of the ship the player is currently
+  // firing at (or undefined / 0 when not engaged). Used to flip the
+  // "Атаковать" item to "Прекратить огонь" when the menu is opened on
+  // the current target.
+  ownShipAttackTargetID?: number;
+  dockRange: number;
+  gateRange: number;
+  // className lets the parent position the popover (`.sw-target-menu` for
+  // panel rows, `.sw-canvas-menu` for canvas-anchored). The component
+  // always also carries the base `.sw-menu` look.
+  className?: string;
+  // onActionDone fires after a command resolves successfully so the parent
+  // can dismiss the popover. Failures keep the menu open and surface the
+  // error inline.
+  onActionDone?: () => void;
+};
+
+export function ObjectActionsMenu({
+  target,
+  ownShipID,
+  ownShip,
+  ownShipAttackTargetID,
+  dockRange,
+  gateRange,
+  className,
+  onActionDone,
+}: Props) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const dist = ownShip
+    ? Math.hypot(ownShip.x - target.x, ownShip.y - target.y)
+    : Number.POSITIVE_INFINITY;
+  const canDock = target.kind === 'dock' && dist <= dockRange;
+  const canJump = target.kind === 'gate' && dist <= gateRange;
+  const isOwnShip = target.kind === 'ship' && target.id === ownShipID;
+  const isCurrentlyAttacking =
+    target.kind === 'ship' &&
+    !!ownShipAttackTargetID &&
+    ownShipAttackTargetID === target.id;
+  const baseDisabled = pending || ownShipID === 0;
+
+  const run = (action: Promise<unknown>) => {
+    setPending(true);
+    setError(null);
+    action
+      .then(() => {
+        setPending(false);
+        onActionDone?.();
+      })
+      .catch((err: unknown) => {
+        setPending(false);
+        const msg = formatError(err);
+        setError(msg);
+        emitLog({ category: 'system', kind: 'danger', message: msg });
+      });
+  };
+
+  const doMove = () => {
+    // Pass the EntityRef so the server records the persistent highlight
+    // target. Gate clicks here are a "fly to coords" without a typed ref
+    // (gates aren't an EntityKind on the backend); use sendJump's
+    // affordance instead for the typed action.
+    const ref: EntityRef | undefined =
+      target.kind === 'ship'
+        ? { kind: EntityKind.Ship, id: target.id }
+        : target.kind === 'dock'
+          ? target.ref
+          : undefined;
+    run(sendMove(ownShipID, target.x, target.y, ref));
+  };
+  const doDock = () => {
+    if (target.kind !== 'dock') return;
+    run(sendDock(ownShipID, target.ref));
+  };
+  const doJump = () => {
+    if (target.kind !== 'gate') return;
+    run(sendJump(ownShipID, target.id));
+  };
+  const doAttack = () => {
+    if (target.kind !== 'ship') return;
+    run(sendAttack(ownShipID, { kind: EntityKind.Ship, id: target.id }));
+  };
+  const doCeaseFire = () => {
+    run(sendCeaseFire(ownShipID));
+  };
+  const doLaunchMissile = () => {
+    if (target.kind !== 'ship') return;
+    run(sendLaunchMissile(ownShipID, { kind: EntityKind.Ship, id: target.id }));
+  };
+  const doLaunchDrones = () => {
+    if (target.kind !== 'ship') return;
+    run(sendLaunchDrone(ownShipID, { kind: EntityKind.Ship, id: target.id }, DRONE_SALVO));
+  };
+  const doRecallDrones = () => {
+    run(sendRecallDrones(ownShipID));
+  };
+  const doPickup = () => {
+    if (target.kind !== 'container') return;
+    run(sendPickupContainer(ownShipID, target.id));
+  };
+
+  return (
+    <div className={cx('sw-menu', className)} role="menu">
+      <div className="sw-menu__head">
+        {target.kind === 'ship' && target.relation && (
+          <span className="sw-menu__relation" style={{ background: relationColor(target.relation) }} aria-hidden />
+        )}
+        {target.label}
+      </div>
+      <button
+        type="button"
+        role="menuitem"
+        className="sw-menu__item"
+        onClick={doMove}
+        disabled={baseDisabled}
+      >
+        Лететь
+      </button>
+      {target.kind === 'dock' && target.ref.kind !== EntityKind.Satellite && (
+        <button
+          type="button"
+          role="menuitem"
+          className="sw-menu__item"
+          onClick={doDock}
+          disabled={baseDisabled || !canDock}
+          title={!canDock ? 'Слишком далеко для стыковки' : undefined}
+        >
+          ⚓ Стыковка
+        </button>
+      )}
+      {target.kind === 'gate' && (
+        <button
+          type="button"
+          role="menuitem"
+          className="sw-menu__item"
+          onClick={doJump}
+          disabled={baseDisabled || !canJump}
+          title={!canJump ? 'Слишком далеко от ворот' : undefined}
+        >
+          ⚡ Прыжок
+        </button>
+      )}
+      {target.kind === 'ship' && !isOwnShip && !isCurrentlyAttacking && (
+        <button
+          type="button"
+          role="menuitem"
+          className="sw-menu__item"
+          onClick={doAttack}
+          disabled={baseDisabled}
+        >
+          ✶ Атаковать
+        </button>
+      )}
+      {target.kind === 'ship' && isCurrentlyAttacking && (
+        <button
+          type="button"
+          role="menuitem"
+          className="sw-menu__item"
+          onClick={doCeaseFire}
+          disabled={baseDisabled}
+        >
+          ◇ Прекратить огонь
+        </button>
+      )}
+      {target.kind === 'ship' && !isOwnShip && (
+        <button
+          type="button"
+          role="menuitem"
+          className="sw-menu__item sw-menu__item--missile"
+          onClick={doLaunchMissile}
+          disabled={baseDisabled}
+        >
+          ◈ Запустить ракету
+        </button>
+      )}
+      {target.kind === 'ship' && !isOwnShip && (
+        <button
+          type="button"
+          role="menuitem"
+          className="sw-menu__item"
+          onClick={doLaunchDrones}
+          disabled={baseDisabled}
+        >
+          ⬡ Запустить дронов
+        </button>
+      )}
+      {target.kind === 'ship' && isOwnShip && (
+        <button
+          type="button"
+          role="menuitem"
+          className="sw-menu__item"
+          onClick={doRecallDrones}
+          disabled={baseDisabled}
+        >
+          ⬡ Вернуть дронов
+        </button>
+      )}
+      {target.kind === 'container' && (
+        <button
+          type="button"
+          role="menuitem"
+          className="sw-menu__item"
+          onClick={doPickup}
+          disabled={baseDisabled}
+          title="Корабль должен быть рядом с контейнером"
+        >
+          ⬚ Подобрать
+        </button>
+      )}
+      {error && <div className="sw-menu__error">{error}</div>}
+    </div>
+  );
+}
+
+function cx(...parts: (string | undefined | null | false)[]): string {
+  return parts.filter(Boolean).join(' ');
+}
+
+function formatError(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return String(err);
+}

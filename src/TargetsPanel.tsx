@@ -5,6 +5,7 @@ import {
   sendMove,
   type Container,
   type EntityRef,
+  type InstalledEquipment,
   type Race,
   type SectorStatics,
   type StationType,
@@ -364,6 +365,7 @@ export function TargetsPanel({
                     ? ownShip.attackTarget.id
                     : undefined
                 }
+                ownEquipment={ownShip?.equipment}
                 dockRange={dockRange}
                 gateRange={gateRange}
                 selected={isSelectedRow(t.picked, selectedTarget)}
@@ -399,6 +401,9 @@ type TargetRowProps = {
   ownShipID: number;
   ownShipPos: { x: number; y: number } | null;
   ownShipAttackTargetID?: number;
+  // ownEquipment is the controlled ship's fit, gating the launch items in
+  // ObjectActionsMenu (phase 10.3.2).
+  ownEquipment?: InstalledEquipment[];
   dockRange: number;
   gateRange: number;
   selected: boolean;
@@ -420,6 +425,7 @@ function TargetRow({
   ownShipID,
   ownShipPos,
   ownShipAttackTargetID,
+  ownEquipment,
   dockRange,
   gateRange,
   selected,
@@ -530,6 +536,7 @@ function TargetRow({
               ownShipID={ownShipID}
               ownShip={ownShipPos}
               ownShipAttackTargetID={ownShipAttackTargetID}
+              ownEquipment={ownEquipment}
               dockRange={dockRange}
               gateRange={gateRange}
               onActionDone={onMenuClose}

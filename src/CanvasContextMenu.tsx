@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import type { InstalledEquipment } from './api';
 import { ObjectActionsMenu, type PickedObject } from './ObjectActionsMenu';
 
 type Props = {
@@ -6,6 +7,9 @@ type Props = {
   ownShipID: number;
   ownShip: { x: number; y: number } | null;
   ownShipAttackTargetID?: number;
+  // ownEquipment is the controlled ship's module list, gating the launch items
+  // in ObjectActionsMenu (phase 10.3.2).
+  ownEquipment?: InstalledEquipment[];
   dockRange: number;
   gateRange: number;
   // px / py are canvas-local pixel coordinates of the picked object. The
@@ -22,6 +26,7 @@ export function CanvasContextMenu({
   ownShipID,
   ownShip,
   ownShipAttackTargetID,
+  ownEquipment,
   dockRange,
   gateRange,
   px,
@@ -60,6 +65,7 @@ export function CanvasContextMenu({
         ownShipID={ownShipID}
         ownShip={ownShip}
         ownShipAttackTargetID={ownShipAttackTargetID}
+        ownEquipment={ownEquipment}
         dockRange={dockRange}
         gateRange={gateRange}
         onActionDone={onClose}

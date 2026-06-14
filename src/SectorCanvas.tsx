@@ -309,6 +309,10 @@ export function SectorCanvas(props: Props) {
 
   const ownShipNow = findOwnShip(props);
   const ownShipPos = ownShipNow ? { x: ownShipNow.x, y: ownShipNow.y } : null;
+  // Gate the launch items on the controlled ship's own fit (phase 10.3.2):
+  // the command runs on controlledShipID, so its equipment must decide the
+  // affordance — not findOwnShip's first-in-sector pick.
+  const ownEquipment = props.ships.get(props.controlledShipID)?.equipment;
 
   return (
     <div ref={wrapRef} className="sw-map-wrap">
@@ -350,6 +354,7 @@ export function SectorCanvas(props: Props) {
           ownShipID={props.controlledShipID}
           ownShip={ownShipPos}
           ownShipAttackTargetID={props.ownShipAttackTargetID}
+          ownEquipment={ownEquipment}
           dockRange={props.dockRange}
           gateRange={props.gateRange}
           px={visibleMenu.px}

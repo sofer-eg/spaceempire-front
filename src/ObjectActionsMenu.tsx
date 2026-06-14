@@ -11,6 +11,7 @@ import {
   sendPickupContainer,
   sendRecallDrones,
   type EntityRef,
+  type InstalledEquipment,
 } from './api';
 import { emitLog } from './eventBus';
 import { relationColor, type Relation } from './sector/shapeData';
@@ -45,6 +46,12 @@ type Props = {
   // "Атаковать" item to "Прекратить огонь" when the menu is opened on
   // the current target.
   ownShipAttackTargetID?: number;
+  // ownEquipment is the controlled ship's installed-module list (phase 10.3.2).
+  // Used to gate the launch-missile / launch-drones items: the server rejects
+  // those commands with 422 when the ship lacks up_launcher / up_drone_control,
+  // so the menu disables the affordance instead of letting the click fail into
+  // the journal. Absent (undefined) for a ship with no modules → both gated off.
+  ownEquipment?: InstalledEquipment[];
   dockRange: number;
   gateRange: number;
   // className lets the parent position the popover (`.sw-target-menu` for
@@ -62,6 +69,7 @@ export function ObjectActionsMenu({
   ownShipID,
   ownShip,
   ownShipAttackTargetID,
+  ownEquipment,
   dockRange,
   gateRange,
   className,
@@ -81,6 +89,10 @@ export function ObjectActionsMenu({
     !!ownShipAttackTargetID &&
     ownShipAttackTargetID === target.id;
   const baseDisabled = pending || ownShipID === 0;
+  // Capability gates (phase 10.3.2): missiles need up_launcher, drones need
+  // up_drone_control. Mirrors the server's 422 gate so the click never fails.
+  const hasLauncher = !!ownEquipment?.some((e) => e.type === 'up_launcher');
+  const hasDroneControl = !!ownEquipment?.some((e) => e.type === 'up_drone_control');
 
   const run = (action: Promise<unknown>) => {
     setPending(true);
@@ -211,7 +223,8 @@ export function ObjectActionsMenu({
           role="menuitem"
           className="sw-menu__item sw-menu__item--missile"
           onClick={doLaunchMissile}
-          disabled={baseDisabled}
+          disabled={baseDisabled || !hasLauncher}
+          title={!hasLauncher ? 'Нужна пусковая установка (up_launcher)' : undefined}
         >
           ◈ Запустить ракету
         </button>
@@ -222,7 +235,8 @@ export function ObjectActionsMenu({
           role="menuitem"
           className="sw-menu__item"
           onClick={doLaunchDrones}
-          disabled={baseDisabled}
+          disabled={baseDisabled || !hasDroneControl}
+          title={!hasDroneControl ? 'Нужен контроль дронов (up_drone_control)' : undefined}
         >
           ⬡ Запустить дронов
         </button>

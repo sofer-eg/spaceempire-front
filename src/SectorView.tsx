@@ -156,7 +156,7 @@ export function SectorView() {
           />
         )}
         {!docked && !riding && (
-          <SetCoursePanel shipID={ownShipID} currentSectorID={ownSectorID} />
+          <SetCoursePanel shipID={ownShipID} currentSectorID={ownSectorID} equipment={ownShip?.equipment} />
         )}
       </aside>
       <section className="sw-sector-grid__map">

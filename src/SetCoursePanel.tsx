@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { sendSetCourse } from './api';
+import { sendSetCourse, type InstalledEquipment } from './api';
 import { useGalaxy } from './useGalaxy';
 
 type Props = {
@@ -9,6 +9,10 @@ type Props = {
   // to the sector they're already in (the autopilot handles that case
   // anyway, but the UI is clearer this way).
   currentSectorID: number;
+  // equipment is the active ship's installed-module list. The autopilot is
+  // gated server-side on up_autopilot (phase 10.3.11, 422); mirroring the
+  // gate here disables the form so the click never fails.
+  equipment?: InstalledEquipment[];
 };
 
 type Status =
@@ -17,8 +21,9 @@ type Status =
   | { kind: 'ok'; hops: number }
   | { kind: 'error'; message: string };
 
-export function SetCoursePanel({ shipID, currentSectorID }: Props) {
+export function SetCoursePanel({ shipID, currentSectorID, equipment }: Props) {
   const galaxy = useGalaxy();
+  const hasAutopilot = !!equipment?.some((e) => e.type === 'up_autopilot');
   const [destSectorChoice, setDestSectorChoice] = useState<number>(0);
   const [destX, setDestX] = useState<string>('0');
   const [destY, setDestY] = useState<string>('0');
@@ -99,7 +104,8 @@ export function SetCoursePanel({ shipID, currentSectorID }: Props) {
           <button
             type="submit"
             className="sw-btn"
-            disabled={shipID === 0 || destSector === 0 || status.kind === 'pending'}
+            disabled={shipID === 0 || destSector === 0 || status.kind === 'pending' || !hasAutopilot}
+            title={!hasAutopilot ? 'Нужен модуль автопилота (up_autopilot)' : undefined}
           >
             Задать курс
           </button>
@@ -108,9 +114,10 @@ export function SetCoursePanel({ shipID, currentSectorID }: Props) {
               status.kind === 'ok' ? 'ok' : status.kind === 'error' ? 'error' : ''
             }`}
           >
-            {status.kind === 'ok' && `Курс задан, ${status.hops} прыжков`}
-            {status.kind === 'error' && status.message}
-            {status.kind === 'pending' && 'Отправка…'}
+            {!hasAutopilot && 'Нужен модуль автопилота (up_autopilot)'}
+            {hasAutopilot && status.kind === 'ok' && `Курс задан, ${status.hops} прыжков`}
+            {hasAutopilot && status.kind === 'error' && status.message}
+            {hasAutopilot && status.kind === 'pending' && 'Отправка…'}
           </span>
         </form>
       </div>

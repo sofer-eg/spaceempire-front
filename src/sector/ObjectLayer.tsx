@@ -11,12 +11,12 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import type { MutableRefObject } from 'react';
 import { EntityKind } from '../api';
-import type { Container, DestructibleStatic, Drone, Missile, Race, SectorStatics, StationType, WorldGate } from '../api';
+import type { Asteroid, Container, DestructibleStatic, Drone, GoodsRow, Missile, Race, SectorStatics, StationType, WorldGate } from '../api';
 import type { TrackedShip } from '../useWorldState';
 import type { HighlightRef } from '../TargetsPanel';
 import type { PickedObject } from '../ObjectActionsMenu';
 import type { SelectedTargetRef } from '../SectorCanvas';
-import { shipDisplayName, staticTypeLabel, stationLetter, stationTypeName } from '../gameContext';
+import { goodsName, shipDisplayName, staticTypeLabel, stationLetter, stationTypeName } from '../gameContext';
 import { RADAR_BIG_MULTIPLIER, worldToCanvas as wToC, type Viewport } from '../sectorViewport';
 import {
   ShapeDefs,
@@ -28,6 +28,7 @@ import {
   LaserTowerGlyph,
   SatelliteGlyph,
   ContainerGlyph,
+  AsteroidGlyph,
   SpacesuitGlyph,
 } from './shapes';
 import { HIT_R, categoryForShip, relationColor, shipRelation } from './shapeData';
@@ -46,6 +47,12 @@ type Props = {
   drones?: Map<number, Drone>;
   missiles?: Map<number, Missile>;
   containers?: Map<number, Container>;
+  // asteroids is the live minable ore-body set within AOI (drawn on the
+  // overlay, clickable for the «Бурить» action). Phase 10.3.6.
+  asteroids?: Map<number, Asteroid>;
+  // goods is the GET /api/goods catalog, forwarded so a picked asteroid's menu
+  // reads its ore type by name (goodsName) instead of a raw ore_type id.
+  goods: GoodsRow[];
   statics: SectorStatics;
   staticCombat: Map<string, DestructibleStatic>;
   gates: WorldGate[];
@@ -201,6 +208,7 @@ export const ObjectLayer = forwardRef<ObjectLayerHandle, Props>(function ObjectL
         }
       }
       for (const c of p.containers?.values() ?? []) place(`container:${c.id}`, c.x, c.y);
+      for (const a of p.asteroids?.values() ?? []) place(`asteroid:${a.id}`, a.x, a.y);
 
       // Selected-target and hover-highlight rings — resolve live position.
       positionMarker(selectedRef.current, resolveSelected(p), vp, w, h, now, p.tickIntervalMs);
@@ -309,6 +317,18 @@ export const ObjectLayer = forwardRef<ObjectLayerHandle, Props>(function ObjectL
             <circle className="hit" r={HIT_R} fill="transparent" style={{ pointerEvents: 'auto', cursor: 'pointer' }}
               onClick={(e) => p.onPick({ kind: 'gate', id: g.id, x: wx, y: wy, label: `Врата → ${name}` }, ...evXY(e.clientX, e.clientY))} />
             <GateGlyph color="var(--violet)" letter={cardinal(wx, wy)} label={`→ ${name}`} />
+          </g>
+        );
+      })}
+
+      {/* Asteroids (z below containers/ships — static rock) */}
+      {[...(p.asteroids?.values() ?? [])].map((a) => {
+        const ore = goodsName(p.goods, a.ore_type);
+        return (
+          <g key={`asteroid-${a.id}`} ref={simpleRef(simpleNodes, `asteroid:${a.id}`)} style={{ color: 'var(--steel, #8a98a6)' }}>
+            <circle className="hit" r={HIT_R} fill="transparent" style={{ pointerEvents: 'auto', cursor: 'pointer' }}
+              onClick={(e) => p.onPick({ kind: 'asteroid', id: a.id, x: a.x, y: a.y, label: `${ore} · ${a.mass}` }, ...evXY(e.clientX, e.clientY))} />
+            <AsteroidGlyph color="var(--steel, #8a98a6)" />
           </g>
         );
       })}

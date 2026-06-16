@@ -205,6 +205,8 @@ export function SectorView() {
                 drones={world.drones}
                 droneImpacts={world.droneImpacts}
                 containers={world.containers}
+                asteroids={world.asteroids}
+                goods={goods}
                 ownShipAttackTargetID={ownShipAttackTargetID}
               />
               <div className="sw-corner tl" />

@@ -49,6 +49,16 @@ export function ObjectMarker({ picked, ships, ownPlayerID, ownRace, size = 14 }:
     );
   }
 
+  if (picked.kind === 'asteroid') {
+    // Irregular rock lump — mirrors the canvas AsteroidGlyph so a contact row
+    // and its map marker read as the same object (phase 10.3.6).
+    return (
+      <svg width={size} height={size} viewBox="0 0 14 14" className="sw-target-marker" aria-hidden>
+        <path d="M2 5 L4 2 L9 2 L12 5 L11 10 L7 12 L3 11 L2 7 Z" fill="none" stroke="var(--steel, #8a98a6)" strokeWidth="1.2" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
   // dock kinds — shapes echo the original StarWind icons and the canvas
   // glyphs in SectorCanvas, so a contact row and its map marker read as the
   // same object. Trade station = ring + core, pirate base = nested square,

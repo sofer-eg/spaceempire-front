@@ -488,8 +488,9 @@ function TargetRow({
           onMouseEnter={() => {
             // Containers aren't highlighted on the canvas and HighlightRef
             // has no 'container' kind — skip the hover highlight for them
-            // (phase 10.9).
-            if (target.kind === 'container') return;
+            // (phase 10.9). Asteroids likewise have no HighlightRef kind and
+            // aren't listed in this panel (phase 10.3.6).
+            if (target.kind === 'container' || target.kind === 'asteroid') return;
             onHoverTarget?.({
               kind: target.kind,
               id: target.kind === 'dock' ? target.ref.id : target.id,

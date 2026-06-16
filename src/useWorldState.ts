@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type {
+  Asteroid,
   Container,
   DestructibleStatic,
   Drone,
@@ -193,6 +194,11 @@ export type WorldState = {
   // bucket). Phase 4.6.
   containers: Map<number, Container>;
 
+  // asteroids is the live minable ore-body set per Asteroid.id, accumulated
+  // from the added/updated/removed delta (updated carries a lower mass as the
+  // body is drilled). Phase 10.3.6.
+  asteroids: Map<number, Asteroid>;
+
   // staticCombat is the live HP/Shield of statics that have taken damage or
   // recharged, keyed by `${kind}:${id}`. Patched from the staticsUpdated /
   // staticsRemoved delta; destroyed statics are also dropped from `statics`.
@@ -244,6 +250,7 @@ export function useWorldState(): WorldState {
     drones: new Map(),
     droneImpacts: [],
     containers: new Map(),
+    asteroids: new Map(),
     staticCombat: new Map(),
     policeScanSeq: 0,
     lastPoliceScan: null,
@@ -261,6 +268,9 @@ export function useWorldState(): WorldState {
   const dronesRef = useRef<Map<number, Drone>>(new Map());
   // containersRef stores the live loot-container set between snapshots.
   const containersRef = useRef<Map<number, Container>>(new Map());
+  // asteroidsRef stores the live minable ore-body set between snapshots, same
+  // "mutate, then setState with a fresh map" pattern as containersRef.
+  const asteroidsRef = useRef<Map<number, Asteroid>>(new Map());
   // staticCombatRef stores live static HP/Shield between snapshots, keyed by
   // `${kind}:${id}`. Reset on (re)connect and on a sector change. Phase 6.2b.
   const staticCombatRef = useRef<Map<string, DestructibleStatic>>(new Map());
@@ -291,6 +301,7 @@ export function useWorldState(): WorldState {
         missilesRef.current = new Map();
         dronesRef.current = new Map();
         containersRef.current = new Map();
+        asteroidsRef.current = new Map();
         staticCombatRef.current = new Map();
         shipsSectorRef.current = 0;
         setState({
@@ -313,6 +324,7 @@ export function useWorldState(): WorldState {
           drones: dronesRef.current,
           droneImpacts: [],
           containers: containersRef.current,
+          asteroids: asteroidsRef.current,
           staticCombat: staticCombatRef.current,
           policeScanSeq: 0,
           lastPoliceScan: null,
@@ -338,6 +350,7 @@ export function useWorldState(): WorldState {
             missilesRef.current = new Map();
             dronesRef.current = new Map();
             containersRef.current = new Map();
+            asteroidsRef.current = new Map();
             staticCombatRef.current = new Map();
             shipsSectorRef.current = msg.sectorID;
           } else if (shipsSectorRef.current === 0 && msg.sectorID !== 0) {
@@ -348,6 +361,7 @@ export function useWorldState(): WorldState {
             ships: sectorChanged ? shipsRef.current : s.ships,
             sectorID: msg.sectorID || s.sectorID,
             statics: msg.statics ?? {},
+            asteroids: sectorChanged ? asteroidsRef.current : s.asteroids,
             staticCombat: sectorChanged ? staticCombatRef.current : s.staticCombat,
             tickIntervalMs: msg.tickIntervalMs > 0 ? msg.tickIntervalMs : s.tickIntervalMs,
             sectorBoundsRadius: msg.sectorBoundsRadius > 0 ? msg.sectorBoundsRadius : s.sectorBoundsRadius,
@@ -469,6 +483,12 @@ export function useWorldState(): WorldState {
         for (const c of snap.containersAdded ?? []) nextContainers.set(c.id, c);
         for (const id of snap.containersRemoved ?? []) nextContainers.delete(id);
 
+        // Asteroid delta — added/updated (mass shrinks while drilled)/removed.
+        const nextAsteroids = new Map(asteroidsRef.current);
+        for (const a of snap.asteroidsAdded ?? []) nextAsteroids.set(a.id, a);
+        for (const a of snap.asteroidsUpdated ?? []) nextAsteroids.set(a.id, a);
+        for (const id of snap.asteroidsRemoved ?? []) nextAsteroids.delete(id);
+
         // Static-combat delta (6.2b): patch HP/Shield of damaged/recharging
         // statics; drop destroyed ones from both the combat map and the
         // rendered layout so they disappear.
@@ -485,6 +505,7 @@ export function useWorldState(): WorldState {
         missilesRef.current = nextMissiles;
         dronesRef.current = nextDrones;
         containersRef.current = nextContainers;
+        asteroidsRef.current = nextAsteroids;
         staticCombatRef.current = nextStaticCombat;
         const staticsAdded = snap.staticsAdded;
         setState((s) => {
@@ -515,6 +536,7 @@ export function useWorldState(): WorldState {
           drones: nextDrones,
           droneImpacts: snap.droneImpacts ?? [],
           containers: nextContainers,
+          asteroids: nextAsteroids,
           policeScanSeq: s.policeScanSeq,
           lastPoliceScan: s.lastPoliceScan,
           };

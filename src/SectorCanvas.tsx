@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { EntityKind } from './api';
-import type { Container, DestructibleStatic, Drone, DroneImpact, LaserBeam, Missile, MissileImpact, Race, SectorStatics, StationType, WorldGate } from './api';
+import type { Asteroid, Container, DestructibleStatic, Drone, DroneImpact, GoodsRow, LaserBeam, Missile, MissileImpact, Race, SectorStatics, StationType, WorldGate } from './api';
 import type { TrackedShip } from './useWorldState';
 import type { HighlightRef } from './TargetsPanel';
 import {
@@ -97,6 +97,12 @@ type Props = {
   // containers is the live loot-container set within AOI (drawn on the
   // overlay, clickable for the "Подобрать" action). Phase 4.6.
   containers?: Map<number, Container>;
+  // asteroids is the live minable ore-body set within AOI (drawn on the
+  // overlay, clickable for the «Бурить» action). Phase 10.3.6.
+  asteroids?: Map<number, Asteroid>;
+  // goods is the GET /api/goods catalog, forwarded to the overlay so a picked
+  // asteroid's menu reads its ore type by name instead of a raw id.
+  goods: GoodsRow[];
   // ownShipAttackTargetID, when set, identifies the ship the player is
   // currently firing at — flips the context menu's Attack/Cease-fire item.
   ownShipAttackTargetID?: number;
@@ -257,8 +263,11 @@ export function SectorCanvas(props: Props) {
     if (menu.target.kind === 'container') {
       return props.containers?.has(menu.target.id) ? menu : null;
     }
+    if (menu.target.kind === 'asteroid') {
+      return props.asteroids?.has(menu.target.id) ? menu : null;
+    }
     return menu;
-  }, [menu, props.ships, props.statics, props.currentSectorID, props.containers]);
+  }, [menu, props.ships, props.statics, props.currentSectorID, props.containers, props.asteroids]);
 
   // Empty-space click → "fly here" menu. Object clicks are caught by the SVG
   // overlay's per-node hit areas (onPickObject) and never reach the canvas,
@@ -328,6 +337,8 @@ export function SectorCanvas(props: Props) {
         drones={props.drones}
         missiles={props.missiles}
         containers={props.containers}
+        asteroids={props.asteroids}
+        goods={props.goods}
         statics={props.statics}
         staticCombat={props.staticCombat}
         gates={props.gates}

@@ -7,6 +7,7 @@ import {
   sendJump,
   sendLaunchDrone,
   sendLaunchMissile,
+  sendMine,
   sendMove,
   sendPickupContainer,
   sendRecallDrones,
@@ -30,7 +31,10 @@ export type PickedObject =
   | { kind: 'ship'; id: number; x: number; y: number; label: string; relation?: Relation }
   | { kind: 'gate'; id: number; x: number; y: number; label: string }
   | { kind: 'dock'; ref: EntityRef; x: number; y: number; label: string; letter?: string }
-  | { kind: 'container'; id: number; x: number; y: number; label: string };
+  | { kind: 'container'; id: number; x: number; y: number; label: string }
+  // asteroid carries the human-readable ore label and remaining mass so the
+  // menu head reads "Руда · 240" rather than a raw ore_type id (phase 10.3.6).
+  | { kind: 'asteroid'; id: number; x: number; y: number; label: string };
 
 type Props = {
   target: PickedObject;
@@ -93,6 +97,9 @@ export function ObjectActionsMenu({
   // up_drone_control. Mirrors the server's 422 gate so the click never fails.
   const hasLauncher = !!ownEquipment?.some((e) => e.type === 'up_launcher');
   const hasDroneControl = !!ownEquipment?.some((e) => e.type === 'up_drone_control');
+  // Mining needs up_drill (phase 10.3.6). Mirrors the server's 422
+  // ErrEquipmentRequired gate so the click never fails into the journal.
+  const hasDrill = !!ownEquipment?.some((e) => e.type === 'up_drill');
 
   const run = (action: Promise<unknown>) => {
     setPending(true);
@@ -152,6 +159,17 @@ export function ObjectActionsMenu({
   const doPickup = () => {
     if (target.kind !== 'container') return;
     run(sendPickupContainer(ownShipID, target.id));
+  };
+  const doMine = () => {
+    if (target.kind !== 'asteroid') return;
+    run(sendMine(ownShipID, target.id));
+  };
+  const doStopMine = () => {
+    // asteroidID 0 is the stop request — clears the ship's mining mode. The
+    // ship's per-asteroid mining state is not in the snapshot, so the stop
+    // affordance is always offered alongside «Бурить» (mirrors «Прекратить
+    // огонь» being a dedicated item).
+    run(sendMine(ownShipID, 0));
   };
 
   return (
@@ -263,6 +281,30 @@ export function ObjectActionsMenu({
         >
           ⬚ Подобрать
         </button>
+      )}
+      {target.kind === 'asteroid' && (
+        <>
+          <button
+            type="button"
+            role="menuitem"
+            className="sw-menu__item"
+            onClick={doMine}
+            disabled={baseDisabled || !hasDrill}
+            title={!hasDrill ? 'Нужен бур (up_drill)' : 'Корабль должен быть рядом с астероидом'}
+          >
+            ⛏ Бурить
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="sw-menu__item"
+            onClick={doStopMine}
+            disabled={baseDisabled || !hasDrill}
+            title={!hasDrill ? 'Нужен бур (up_drill)' : undefined}
+          >
+            ◇ Прекратить добычу
+          </button>
+        </>
       )}
       {error && <div className="sw-menu__error">{error}</div>}
     </div>

@@ -124,6 +124,19 @@ export function ContainerGlyph({ color }: { color: string }) {
   );
 }
 
+// AsteroidGlyph renders a minable ore body (phase 10.3.6): an irregular rocky
+// lump, distinct from the square container so the two read apart on the radar.
+// Tinted by the caller (greyish ore colour); a couple of pits hint at texture.
+export function AsteroidGlyph({ color }: { color: string }) {
+  return (
+    <g style={{ color }}>
+      <path d="M-6,-3 L-3,-6 L3,-6 L6,-2 L5,4 L1,6 L-4,5 L-6,1 Z" fill="currentColor" fillOpacity={0.22} stroke="currentColor" strokeWidth={1.3} strokeLinejoin="round" />
+      <circle cx={-1.5} cy={-1} r={1.1} fill="currentColor" fillOpacity={0.5} stroke="none" />
+      <circle cx={2} cy={2} r={0.9} fill="currentColor" fillOpacity={0.5} stroke="none" />
+    </g>
+  );
+}
+
 // Spacesuit — the weak pilot "ship" a player drops into (phase 10.1). A small
 // helmet/figure, drawn instead of a hull silhouette. Authored nose-up so it
 // still rotates with heading.

@@ -202,6 +202,18 @@ export type Container = {
   y: number;
 };
 
+// Asteroid is a minable ore body. Pos and oreType are fixed at creation;
+// mass shrinks as the body is mined, so a WS update may re-send a lower
+// mass. oreType is a goods-catalog type id (resolve via goodsName for the
+// human-readable ore label). Phase 10.3.6.
+export type Asteroid = {
+  id: number;
+  x: number;
+  y: number;
+  mass: number;
+  ore_type: number;
+};
+
 export type Snapshot = {
   type: 'snapshot';
   sectorID: number;
@@ -213,6 +225,10 @@ export type Snapshot = {
   // bootstrap deterministically; WS always uses the delta fields.
   ships?: Ship[];
   statics?: SectorStatics;
+  // asteroids is the full minable ore-body set returned by the /api/state
+  // snapshot (mirrors ships). WS deltas use the asteroidsAdded/Updated/Removed
+  // buckets below instead. Phase 10.3.6.
+  asteroids?: Asteroid[];
   added?: Ship[];
   updated?: Ship[];
   removed?: number[];
@@ -233,6 +249,12 @@ export type Snapshot = {
   // no "updated"). Phase 4.6.
   containersAdded?: Container[];
   containersRemoved?: number[];
+  // Asteroid delta against the previous frame within AOI. Added carries full
+  // bodies, Updated carries bodies whose mass changed (mining), Removed is the
+  // id list of asteroids that depleted or left view. Phase 10.3.6.
+  asteroidsAdded?: Asteroid[];
+  asteroidsUpdated?: Asteroid[];
+  asteroidsRemoved?: number[];
   // Static-combat delta (phase 6.2b): statics whose HP/Shield changed this
   // tick, and statics destroyed this tick (ref-only). Patches the combat
   // state of objects received once via the `statics` frame.
@@ -766,6 +788,23 @@ export async function sendInstallSatellite(
   }
   const body = (await res.json()) as { ok: boolean; satelliteID: number };
   return { satelliteID: body.satelliteID };
+}
+
+// sendMine arms sustained ore mining on shipID against the given asteroid, or
+// stops it when asteroidID is 0 (phase 10.3.6). The server only sets the
+// intent; the per-tick drilling, drill gate (up_drill), range check and energy
+// gate run in the sector worker. Throws ApiError on a non-2xx — notably 422
+// when the ship lacks a mining drill (the menu gates the button to avoid this),
+// 404 asteroid gone, 400 out of range / docked.
+export async function sendMine(shipID: number, asteroidID: number): Promise<void> {
+  const res = await fetch('/api/cmd/mine', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ shipID, asteroidID }),
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await parseErrorBody(res));
+  }
 }
 
 export type WorldSector = {

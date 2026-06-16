@@ -1102,6 +1102,43 @@ export async function sendSell(
   return (await res.json()) as TradeAck;
 }
 
+// --- Sector price scanner (trade_up) --------------------------------------
+// ScanGood mirrors dto.ScanGood. priceLevel ("high"/"medium"/"low") is always
+// present (module level 1+); buyPrice/sellPrice are real only at level >=2 and
+// arrive as 0 below that; stock is real only at level >=3, else 0. The zeros
+// are intentional masks — branch on the response level, not on the values.
+export type ScanGood = {
+  typeID: number;
+  priceLevel: 'high' | 'medium' | 'low';
+  buyPrice: number;
+  sellPrice: number;
+  stock: number;
+};
+
+// ScanStation is one tradeable station's price board in the player's sector.
+export type ScanStation = {
+  owner: EntityRef;
+  name: string;
+  pos: { x: number; y: number };
+  goods: ScanGood[];
+};
+
+// ScanResponse is the body of GET /api/market-scan. level echoes the active
+// ship's trade_up level so the UI knows how much detail to render.
+export type ScanResponse = {
+  level: number;
+  stations: ScanStation[];
+};
+
+// fetchMarketScan reads the trade_up sector price-scan for the player's active
+// ship. 403 when no trade_up module is fitted — the caller only calls this when
+// the ship carries one, so a 403 surfaces as an ApiError the block can hide on.
+export async function fetchMarketScan(): Promise<ScanResponse> {
+  const res = await fetch('/api/market-scan');
+  await requireOk(res, 'GET /api/market-scan');
+  return (await res.json()) as ScanResponse;
+}
+
 // --- Auction ---------------------------------------------------------------
 export type AuctionLot = {
   id: number;

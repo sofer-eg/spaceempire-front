@@ -13,6 +13,7 @@ import {
 } from '../api';
 import { goodsName, goodsSpace, usePlayer, useGameContext } from '../gameContext';
 import { emitLog } from '../eventBus';
+import { MarketScanPanel } from './MarketScanPanel';
 
 type Props = {
   station: EntityRef;
@@ -30,7 +31,7 @@ type RowStatus = { kind: 'idle' } | { kind: 'pending' };
 // player can type a number once and click Buy/Sell without losing it.
 export function MarketView({ station, shipID, reloadSignal }: Props) {
   const { goods } = useGameContext();
-  const { player, setCash, refreshPlayer } = usePlayer();
+  const { player, ownShip, setCash, refreshPlayer } = usePlayer();
   const [items, setItems] = useState<MarketEntry[]>([]);
   // Production-cycle adornment, present only for producing factories
   // (EntityKind.Station with a recipe). remaining drives the local
@@ -233,6 +234,11 @@ export function MarketView({ station, shipID, reloadSignal }: Props) {
   const products = items.filter((it) => it.sellPrice !== null);
   const materials = items.filter((it) => it.buyPrice !== null);
 
+  // The sector price-scanner block is shown only when the active ship carries a
+  // trade_up module (phase 10.3.12). Detail (tier / prices / stock) is gated by
+  // the module level server-side; here we just gate the block's presence.
+  const hasTradeScanner = (ownShip?.equipment ?? []).some((e) => e.type === 'trade_up');
+
   const renderRow = (it: MarketEntry, mode: 'buy' | 'sell' | 'both') => {
     const status = rowStatus[it.typeID] ?? { kind: 'idle' };
     const canBuy = it.sellPrice !== null && it.stock > 0;
@@ -368,6 +374,7 @@ export function MarketView({ station, shipID, reloadSignal }: Props) {
       ) : (
         renderTable(items, 'both')
       )}
+      {hasTradeScanner && <MarketScanPanel reloadSignal={reloadSignal} />}
     </div>
   );
 }

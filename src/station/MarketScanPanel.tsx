@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { fetchMarketScan, type ScanGood, type ScanResponse } from '../api';
-import { goodsName, useGameContext } from '../gameContext';
+import { goodsName, staticTypeLabel, useGameContext } from '../gameContext';
 
 // MarketScanPanel renders the trade_up sector price-scanner: a товар × станция
 // matrix of every tradeable station in the player's current sector. Detail is
@@ -22,7 +22,7 @@ const TIER: Record<ScanGood['priceLevel'], { dot: string; label: string }> = {
 };
 
 export function MarketScanPanel({ reloadSignal }: Props) {
-  const { goods } = useGameContext();
+  const { goods, stationTypes } = useGameContext();
   const [scan, setScan] = useState<ScanResponse | null>(null);
   const [status, setStatus] = useState<'loading' | 'ok' | 'error'>('loading');
   const [error, setError] = useState('');
@@ -62,50 +62,54 @@ export function MarketScanPanel({ reloadSignal }: Props) {
   const goodIDs = Array.from(
     new Set(scan.stations.flatMap((st) => st.goods.map((g) => g.typeID))),
   );
-  // Per-station lookup: typeID → ScanGood, so the cell render is O(1).
+  // Per-station lookup: typeID → ScanGood, so the cell render is O(1). label
+  // resolves a production station's station_types name from its catalog id (so
+  // several factories in one sector are distinct); trade-stations / pirbases
+  // fall back to their generic per-kind name.
   const byStation = scan.stations.map((st) => {
     const map = new Map<number, ScanGood>();
     for (const g of st.goods) map.set(g.typeID, g);
-    return { station: st, map };
+    const label = staticTypeLabel(st.owner.kind, st.stationType, stationTypes) || st.name;
+    return { station: st, label, map };
   });
 
   const renderCell = (g: ScanGood | undefined) => {
     if (!g) return <span className="sw-muted">—</span>;
     const tier = TIER[g.priceLevel];
     return (
-      <div className="sw-scan__cell" title={`Цена: ${tier.label}`}>
-        <span className="sw-scan__tier">
+      <div className="sw-mscan__cell" title={`Цена: ${tier.label}`}>
+        <span className="sw-mscan__tier">
           {tier.dot}
           {level >= 2 && (
-            <span className="sw-mono sw-scan__price">
+            <span className="sw-mono sw-mscan__price">
               {g.sellPrice > 0 ? g.sellPrice : g.buyPrice > 0 ? g.buyPrice : '—'}
             </span>
           )}
         </span>
-        {level >= 3 && <span className="sw-mono sw-muted sw-scan__stock">×{g.stock}</span>}
+        {level >= 3 && <span className="sw-mono sw-muted sw-mscan__stock">×{g.stock}</span>}
       </div>
     );
   };
 
   return (
-    <section className="sw-market__section sw-scan">
+    <section className="sw-market__section sw-mscan">
       <div className="sw-market__subhead">
         <span>Сканер рынка сектора · ур. {level}</span>
-        <span className="sw-muted sw-scan__hint">
+        <span className="sw-muted sw-mscan__hint">
           {level === 1 && 'уровень цены'}
           {level === 2 && 'уровень цены + реальные цены'}
           {level >= 3 && 'уровень цены + цены + количество'}
         </span>
       </div>
-      <div className="sw-scan__legend">
+      <div className="sw-mscan__legend">
         {TIER.high.dot} высокая&nbsp;&nbsp;{TIER.medium.dot} средняя&nbsp;&nbsp;{TIER.low.dot} низкая
       </div>
-      <table className="sw-table sw-scan__table">
+      <table className="sw-table sw-mscan__table">
         <thead>
           <tr>
             <th>Товар</th>
-            {byStation.map(({ station }) => (
-              <th key={`${station.owner.kind}:${station.owner.id}`}>{station.name}</th>
+            {byStation.map(({ station, label }) => (
+              <th key={`${station.owner.kind}:${station.owner.id}`}>{label}</th>
             ))}
           </tr>
         </thead>

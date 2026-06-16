@@ -1116,9 +1116,13 @@ export type ScanGood = {
 };
 
 // ScanStation is one tradeable station's price board in the player's sector.
+// name is a generic per-kind fallback; stationType is the station_types catalog
+// id of a production station (0 for trade-stations / pirbases) so the UI can
+// resolve a precise type name and tell several factories in one sector apart.
 export type ScanStation = {
   owner: EntityRef;
   name: string;
+  stationType: number;
   pos: { x: number; y: number };
   goods: ScanGood[];
 };

@@ -827,18 +827,21 @@ html, body, #root {
 
 /* Sector price scanner (trade_up, phase 10.3.12): a товар × станция matrix
    below the docked station's own market. */
-.sw-scan { border-top: 1px dashed var(--border, #2a3340); margin-top: 14px; padding-top: 10px; }
-.sw-scan__hint { font-size: 10px; letter-spacing: 0; text-transform: none; }
-.sw-scan__legend {
+/* Market sector-scanner (trade_up). Namespaced sw-mscan, NOT sw-scan: the bare
+   .sw-scan (above) is the absolute-inset scanlines overlay, which the scanner
+   would otherwise inherit and float over neighbouring content. */
+.sw-mscan { border-top: 1px dashed var(--border, #2a3340); margin-top: 14px; padding-top: 10px; }
+.sw-mscan__hint { font-size: 10px; letter-spacing: 0; text-transform: none; }
+.sw-mscan__legend {
   padding: 0 12px 6px;
   font-size: 11px;
   color: var(--ink-mute);
 }
-.sw-scan__table th { white-space: nowrap; }
-.sw-scan__cell { display: flex; align-items: baseline; gap: 6px; }
-.sw-scan__tier { display: inline-flex; align-items: baseline; gap: 4px; }
-.sw-scan__price { font-size: 12px; }
-.sw-scan__stock { font-size: 11px; }
+.sw-mscan__table th { white-space: nowrap; }
+.sw-mscan__cell { display: flex; align-items: baseline; gap: 6px; }
+.sw-mscan__tier { display: inline-flex; align-items: baseline; gap: 4px; }
+.sw-mscan__price { font-size: 12px; }
+.sw-mscan__stock { font-size: 11px; }
 .sw-muted { color: var(--ink-mute); }
 
 /* Shipyard outfit screen (phase 10.14): a small section label between the

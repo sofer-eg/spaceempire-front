@@ -222,8 +222,20 @@ export function MarketView({ station, shipID, reloadSignal }: Props) {
     );
   }
 
+  // The sector price-scanner block is shown only when the active ship carries a
+  // trade_up module (phase 10.3.12). Detail (tier / prices / stock) is gated by
+  // the module level server-side; here we just gate the block's presence. It
+  // scans the whole sector, so it is independent of the docked station's own
+  // market — it must still render when this station does not trade.
+  const hasTradeScanner = (ownShip?.equipment ?? []).some((e) => e.type === 'trade_up');
+
   if (items.length === 0) {
-    return <div className="sw-station__empty">Станция не торгует.</div>;
+    return (
+      <div className="sw-market">
+        <div className="sw-station__empty">Станция не торгует.</div>
+        {hasTradeScanner && <MarketScanPanel reloadSignal={reloadSignal} />}
+      </div>
+    );
   }
 
   // On a producing factory the inputs and the output never overlap, so we
@@ -233,11 +245,6 @@ export function MarketView({ station, shipID, reloadSignal }: Props) {
   const isFactory = station.kind === EntityKind.Station;
   const products = items.filter((it) => it.sellPrice !== null);
   const materials = items.filter((it) => it.buyPrice !== null);
-
-  // The sector price-scanner block is shown only when the active ship carries a
-  // trade_up module (phase 10.3.12). Detail (tier / prices / stock) is gated by
-  // the module level server-side; here we just gate the block's presence.
-  const hasTradeScanner = (ownShip?.equipment ?? []).some((e) => e.type === 'trade_up');
 
   const renderRow = (it: MarketEntry, mode: 'buy' | 'sell' | 'both') => {
     const status = rowStatus[it.typeID] ?? { kind: 'idle' };

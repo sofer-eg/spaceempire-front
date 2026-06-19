@@ -53,6 +53,11 @@ type Props = {
   // goods is the GET /api/goods catalog, forwarded so a picked asteroid's menu
   // reads its ore type by name (goodsName) instead of a raw ore_type id.
   goods: GoodsRow[];
+  // hasOreScanner gates the asteroid ore-type/yield reveal (phase 10.3.19,
+  // up_ore_scanner): with the module the label reads «<руда> · <масса>», without
+  // it the body is coarsened to a bare «Астероид». Affordance gate (the data is
+  // still on the wire), mirroring up_drill/up_launcher.
+  hasOreScanner?: boolean;
   statics: SectorStatics;
   staticCombat: Map<string, DestructibleStatic>;
   gates: WorldGate[];
@@ -323,11 +328,13 @@ export const ObjectLayer = forwardRef<ObjectLayerHandle, Props>(function ObjectL
 
       {/* Asteroids (z below containers/ships — static rock) */}
       {[...(p.asteroids?.values() ?? [])].map((a) => {
-        const ore = goodsName(p.goods, a.ore_type);
+        // up_ore_scanner gate (phase 10.3.19): the ore type and yield (mass) are
+        // only legible with the scanner; otherwise the body reads «Астероид».
+        const label = p.hasOreScanner ? `${goodsName(p.goods, a.ore_type)} · ${a.mass}` : 'Астероид';
         return (
           <g key={`asteroid-${a.id}`} ref={simpleRef(simpleNodes, `asteroid:${a.id}`)} style={{ color: 'var(--steel, #8a98a6)' }}>
             <circle className="hit" r={HIT_R} fill="transparent" style={{ pointerEvents: 'auto', cursor: 'pointer' }}
-              onClick={(e) => p.onPick({ kind: 'asteroid', id: a.id, x: a.x, y: a.y, label: `${ore} · ${a.mass}` }, ...evXY(e.clientX, e.clientY))} />
+              onClick={(e) => p.onPick({ kind: 'asteroid', id: a.id, x: a.x, y: a.y, label }, ...evXY(e.clientX, e.clientY))} />
             <AsteroidGlyph color="var(--steel, #8a98a6)" />
           </g>
         );

@@ -325,6 +325,9 @@ export function SectorCanvas(props: Props) {
   // the command runs on controlledShipID, so its equipment must decide the
   // affordance — not findOwnShip's first-in-sector pick.
   const ownEquipment = props.ships.get(props.controlledShipID)?.equipment;
+  // up_ore_scanner (phase 10.3.19) reveals an asteroid's ore type + yield; the
+  // controlled ship's fit decides it, like the launch/mine affordance gates.
+  const hasOreScanner = !!ownEquipment?.some((e) => e.type === 'up_ore_scanner');
 
   return (
     <div ref={wrapRef} className="sw-map-wrap">
@@ -342,6 +345,7 @@ export function SectorCanvas(props: Props) {
         containers={props.containers}
         asteroids={props.asteroids}
         goods={props.goods}
+        hasOreScanner={hasOreScanner}
         statics={props.statics}
         staticCombat={props.staticCombat}
         gates={props.gates}

@@ -100,6 +100,11 @@ export function SectorView() {
   // is not a ship (phase 4.2 only supports ship targets anyway).
   const ownShipAttackTargetID =
     ownShip?.attackTarget?.kind === EntityKind.Ship ? ownShip.attackTarget.id : undefined;
+  // ownShipMiningTargetID feeds the canvas context menu so an asteroid's menu
+  // renders «Прекратить добычу» instead of «Бурить» when the player is already
+  // mining it (phase 10.3.21). A bare asteroid id (asteroids are not an
+  // EntityKind), so no kind check unlike attack.
+  const ownShipMiningTargetID = ownShip?.miningTarget;
 
   const selectedTargetRef = useMemo<SelectedTargetRef | null>(() => {
     const ref = ownShip?.currentTargetRef;
@@ -208,6 +213,7 @@ export function SectorView() {
                 asteroids={world.asteroids}
                 goods={goods}
                 ownShipAttackTargetID={ownShipAttackTargetID}
+                ownShipMiningTargetID={ownShipMiningTargetID}
               />
               <div className="sw-corner tl" />
               <div className="sw-corner tr" />

@@ -365,6 +365,7 @@ export function TargetsPanel({
                     ? ownShip.attackTarget.id
                     : undefined
                 }
+                ownShipMiningTargetID={ownShip?.miningTarget}
                 ownEquipment={ownShip?.equipment}
                 dockRange={dockRange}
                 gateRange={gateRange}
@@ -401,6 +402,7 @@ type TargetRowProps = {
   ownShipID: number;
   ownShipPos: { x: number; y: number } | null;
   ownShipAttackTargetID?: number;
+  ownShipMiningTargetID?: number;
   // ownEquipment is the controlled ship's fit, gating the launch items in
   // ObjectActionsMenu (phase 10.3.2).
   ownEquipment?: InstalledEquipment[];
@@ -425,6 +427,7 @@ function TargetRow({
   ownShipID,
   ownShipPos,
   ownShipAttackTargetID,
+  ownShipMiningTargetID,
   ownEquipment,
   dockRange,
   gateRange,
@@ -537,6 +540,7 @@ function TargetRow({
               ownShipID={ownShipID}
               ownShip={ownShipPos}
               ownShipAttackTargetID={ownShipAttackTargetID}
+              ownShipMiningTargetID={ownShipMiningTargetID}
               ownEquipment={ownEquipment}
               dockRange={dockRange}
               gateRange={gateRange}

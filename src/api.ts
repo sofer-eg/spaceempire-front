@@ -88,6 +88,11 @@ export type Ship = {
   // at. Phase 4.2 emits EntityKindShip targets only. Cleared on cease-
   // fire, target death, or sector handoff.
   attackTarget?: EntityRef;
+  // miningTarget, when set, is the id of the asteroid the ship is sustained-
+  // mining (phase 10.3.6/10.3.21) — a bare asteroid id. The action menu reads
+  // it on the player's own active ship to flip «Бурить»/«Прекратить добычу»
+  // into one toggle, mirroring attackTarget for fire/cease-fire.
+  miningTarget?: number;
   // isSpacesuit marks the weak pilot suit a player flies after their ship was
   // destroyed (phase 10.1). The HUD shows a "СКАФАНДР" indicator.
   isSpacesuit?: boolean;

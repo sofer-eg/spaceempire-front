@@ -106,6 +106,9 @@ type Props = {
   // ownShipAttackTargetID, when set, identifies the ship the player is
   // currently firing at — flips the context menu's Attack/Cease-fire item.
   ownShipAttackTargetID?: number;
+  // ownShipMiningTargetID, when set, is the asteroid the player is mining —
+  // flips the context menu's «Бурить»/«Прекратить добычу» item (phase 10.3.21).
+  ownShipMiningTargetID?: number;
 };
 
 type MenuState = { target: PickedObject; px: number; py: number };
@@ -365,6 +368,7 @@ export function SectorCanvas(props: Props) {
           ownShipID={props.controlledShipID}
           ownShip={ownShipPos}
           ownShipAttackTargetID={props.ownShipAttackTargetID}
+          ownShipMiningTargetID={props.ownShipMiningTargetID}
           ownEquipment={ownEquipment}
           dockRange={props.dockRange}
           gateRange={props.gateRange}

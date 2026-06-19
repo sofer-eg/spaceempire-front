@@ -7,6 +7,7 @@ type Props = {
   ownShipID: number;
   ownShip: { x: number; y: number } | null;
   ownShipAttackTargetID?: number;
+  ownShipMiningTargetID?: number;
   // ownEquipment is the controlled ship's module list, gating the launch items
   // in ObjectActionsMenu (phase 10.3.2).
   ownEquipment?: InstalledEquipment[];
@@ -26,6 +27,7 @@ export function CanvasContextMenu({
   ownShipID,
   ownShip,
   ownShipAttackTargetID,
+  ownShipMiningTargetID,
   ownEquipment,
   dockRange,
   gateRange,
@@ -65,6 +67,7 @@ export function CanvasContextMenu({
         ownShipID={ownShipID}
         ownShip={ownShip}
         ownShipAttackTargetID={ownShipAttackTargetID}
+        ownShipMiningTargetID={ownShipMiningTargetID}
         ownEquipment={ownEquipment}
         dockRange={dockRange}
         gateRange={gateRange}

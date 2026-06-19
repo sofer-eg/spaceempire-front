@@ -113,6 +113,9 @@ export type TrackedShip = {
   docked?: EntityRef;
   currentTargetRef?: EntityRef;
   attackTarget?: EntityRef;
+  // miningTarget is the asteroid id this ship is sustained-mining (phase
+  // 10.3.21); the action menu flips «Бурить/Стоп» on the own active ship.
+  miningTarget?: number;
   isSpacesuit?: boolean;
   isOpen?: boolean;
   isNPC?: boolean;
@@ -447,6 +450,7 @@ export function useWorldState(): WorldState {
             docked: s.docked,
             currentTargetRef: s.currentTargetRef,
             attackTarget: s.attackTarget,
+            miningTarget: s.miningTarget,
             isSpacesuit: s.isSpacesuit,
             isOpen: s.isOpen,
             isNPC: s.isNPC,

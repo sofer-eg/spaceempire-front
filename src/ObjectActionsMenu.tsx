@@ -50,6 +50,11 @@ type Props = {
   // "Атаковать" item to "Прекратить огонь" when the menu is opened on
   // the current target.
   ownShipAttackTargetID?: number;
+  // ownShipMiningTargetID is the id of the asteroid the controlled ship is
+  // currently sustained-mining (or undefined when idle). Used to flip «Бурить»
+  // to «Прекратить добычу» when the menu is opened on that asteroid (phase
+  // 10.3.21), mirroring ownShipAttackTargetID for fire/cease-fire.
+  ownShipMiningTargetID?: number;
   // ownEquipment is the controlled ship's installed-module list (phase 10.3.2).
   // Used to gate the launch-missile / launch-drones items: the server rejects
   // those commands with 422 when the ship lacks up_launcher / up_drone_control,
@@ -73,6 +78,7 @@ export function ObjectActionsMenu({
   ownShipID,
   ownShip,
   ownShipAttackTargetID,
+  ownShipMiningTargetID,
   ownEquipment,
   dockRange,
   gateRange,
@@ -92,6 +98,14 @@ export function ObjectActionsMenu({
     target.kind === 'ship' &&
     !!ownShipAttackTargetID &&
     ownShipAttackTargetID === target.id;
+  // Mining toggle (phase 10.3.21): show «Прекратить добычу» only when the
+  // controlled ship is mining this very asteroid; otherwise «Бурить» (which
+  // also switches targets when mining a different rock), mirroring the
+  // attack/cease-fire flip above.
+  const isCurrentlyMining =
+    target.kind === 'asteroid' &&
+    !!ownShipMiningTargetID &&
+    ownShipMiningTargetID === target.id;
   const baseDisabled = pending || ownShipID === 0;
   // Capability gates (phase 10.3.2): missiles need up_launcher, drones need
   // up_drone_control. Mirrors the server's 422 gate so the click never fails.
@@ -165,10 +179,10 @@ export function ObjectActionsMenu({
     run(sendMine(ownShipID, target.id));
   };
   const doStopMine = () => {
-    // asteroidID 0 is the stop request — clears the ship's mining mode. The
-    // ship's per-asteroid mining state is not in the snapshot, so the stop
-    // affordance is always offered alongside «Бурить» (mirrors «Прекратить
-    // огонь» being a dedicated item).
+    // asteroidID 0 is the stop request — clears the ship's mining mode. Shown
+    // only when this asteroid is the ship's current MiningTarget (phase
+    // 10.3.21), so «Бурить» and «Прекратить добычу» form one state-driven
+    // toggle (mirrors «Атаковать»/«Прекратить огонь»).
     run(sendMine(ownShipID, 0));
   };
 
@@ -282,29 +296,28 @@ export function ObjectActionsMenu({
           ⬚ Подобрать
         </button>
       )}
-      {target.kind === 'asteroid' && (
-        <>
-          <button
-            type="button"
-            role="menuitem"
-            className="sw-menu__item"
-            onClick={doMine}
-            disabled={baseDisabled || !hasDrill}
-            title={!hasDrill ? 'Нужен бур (up_drill)' : 'Корабль должен быть рядом с астероидом'}
-          >
-            ⛏ Бурить
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="sw-menu__item"
-            onClick={doStopMine}
-            disabled={baseDisabled || !hasDrill}
-            title={!hasDrill ? 'Нужен бур (up_drill)' : undefined}
-          >
-            ◇ Прекратить добычу
-          </button>
-        </>
+      {target.kind === 'asteroid' && !isCurrentlyMining && (
+        <button
+          type="button"
+          role="menuitem"
+          className="sw-menu__item"
+          onClick={doMine}
+          disabled={baseDisabled || !hasDrill}
+          title={!hasDrill ? 'Нужен бур (up_drill)' : 'Корабль должен быть рядом с астероидом'}
+        >
+          ⛏ Бурить
+        </button>
+      )}
+      {target.kind === 'asteroid' && isCurrentlyMining && (
+        <button
+          type="button"
+          role="menuitem"
+          className="sw-menu__item"
+          onClick={doStopMine}
+          disabled={baseDisabled}
+        >
+          ◇ Прекратить добычу
+        </button>
       )}
       {error && <div className="sw-menu__error">{error}</div>}
     </div>

@@ -21,6 +21,14 @@ const TIER: Record<ScanGood['priceLevel'], { dot: string; label: string }> = {
   low: { dot: '🟢', label: 'низкая' },
 };
 
+// forecastTrend compares the projected price to the current one for the level-4
+// arrow + colour class. A rising price (scarcity ahead) is "up"/red; a falling
+// one "down"/green.
+function forecastTrend(current: number, forecast: number): { arrow: string; cls: string } {
+  if (current <= 0 || forecast === current) return { arrow: '→', cls: '' };
+  return forecast > current ? { arrow: '↑', cls: 'up' } : { arrow: '↓', cls: 'down' };
+}
+
 export function MarketScanPanel({ reloadSignal }: Props) {
   const { goods, stationTypes } = useGameContext();
   const [scan, setScan] = useState<ScanResponse | null>(null);
@@ -76,17 +84,26 @@ export function MarketScanPanel({ reloadSignal }: Props) {
   const renderCell = (g: ScanGood | undefined) => {
     if (!g) return <span className="sw-muted">—</span>;
     const tier = TIER[g.priceLevel];
+    const current = g.sellPrice > 0 ? g.sellPrice : g.buyPrice;
+    const trend = forecastTrend(current, g.forecastPrice);
     return (
       <div className="sw-mscan__cell" title={`Цена: ${tier.label}`}>
         <span className="sw-mscan__tier">
           {tier.dot}
           {level >= 2 && (
-            <span className="sw-mono sw-mscan__price">
-              {g.sellPrice > 0 ? g.sellPrice : g.buyPrice > 0 ? g.buyPrice : '—'}
-            </span>
+            <span className="sw-mono sw-mscan__price">{current > 0 ? current : '—'}</span>
           )}
         </span>
         {level >= 3 && <span className="sw-mono sw-muted sw-mscan__stock">×{g.stock}</span>}
+        {level >= 4 && g.forecastPrice > 0 && (
+          <span
+            className={`sw-mono sw-mscan__forecast ${trend.cls}`}
+            title={`Прогноз цены: ${g.forecastPrice} cr · прогноз запаса: ${g.forecastStock}`}
+          >
+            {trend.arrow}
+            {g.forecastPrice}
+          </span>
+        )}
       </div>
     );
   };
@@ -98,7 +115,8 @@ export function MarketScanPanel({ reloadSignal }: Props) {
         <span className="sw-muted sw-mscan__hint">
           {level === 1 && 'уровень цены'}
           {level === 2 && 'уровень цены + реальные цены'}
-          {level >= 3 && 'уровень цены + цены + количество'}
+          {level === 3 && 'уровень цены + цены + количество'}
+          {level >= 4 && 'цены + количество + прогноз цен'}
         </span>
       </div>
       <div className="sw-mscan__legend">

@@ -1118,6 +1118,11 @@ export type ScanGood = {
   buyPrice: number;
   sellPrice: number;
   stock: number;
+  // forecastStock / forecastPrice are the projected stock and dynamic price
+  // after a production horizon, revealed only at trade_up level 4 (0 below that,
+  // and 0 for non-producing stations) — phase 10.3.22.
+  forecastStock: number;
+  forecastPrice: number;
 };
 
 // ScanStation is one tradeable station's price board in the player's sector.

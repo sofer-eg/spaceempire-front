@@ -16,6 +16,7 @@ import {
   SHIP_CATEGORIES,
   DRONE_BODY,
   MISSILE_BODY,
+  TORPEDO_BODY,
   SATELLITE_BODY,
   octagon,
   type ShipCategory,
@@ -33,6 +34,7 @@ export function ShapeDefs() {
       ))}
       <g id="hull-drone" dangerouslySetInnerHTML={{ __html: DRONE_BODY }} />
       <g id="hull-missile" dangerouslySetInnerHTML={{ __html: MISSILE_BODY }} />
+      <g id="hull-torpedo" dangerouslySetInnerHTML={{ __html: TORPEDO_BODY }} />
       <g id="hull-satellite" dangerouslySetInnerHTML={{ __html: SATELLITE_BODY }} />
     </defs>
   );

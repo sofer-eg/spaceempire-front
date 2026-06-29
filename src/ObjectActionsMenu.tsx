@@ -7,6 +7,7 @@ import {
   sendJump,
   sendLaunchDrone,
   sendLaunchMissile,
+  sendLaunchTorpedo,
   sendMine,
   sendMove,
   sendPickupContainer,
@@ -21,6 +22,13 @@ import { relationColor, type Relation } from './sector/shapeData';
 // small fixed salvo keeps the action one click; a dedicated count picker
 // can come later.
 const DRONE_SALVO = 3;
+
+// Torpedo ammunition classes (ЧТЗ doc-1 §3): 2 = «Огненная Буря» (gt23),
+// 3 = «Святая Торпеда» (gt24). The on-canvas menu offers one button per class,
+// gated on the launcher module; the hold-count gate lives in CombatHUD (which
+// has the cargo), mirroring how the missile item here gates on launcher only.
+const TORPEDO_CLASS_FIRESTORM = 2;
+const TORPEDO_CLASS_HOLY = 3;
 
 // PickedObject is the unified target type shared by TargetsPanel (rows) and
 // SectorCanvas (click-on-object). It carries everything the action menu
@@ -111,6 +119,9 @@ export function ObjectActionsMenu({
   // up_drone_control. Mirrors the server's 422 gate so the click never fails.
   const hasLauncher = !!ownEquipment?.some((e) => e.type === 'up_launcher');
   const hasDroneControl = !!ownEquipment?.some((e) => e.type === 'up_drone_control');
+  // Torpedoes need up_torpedo_launcher (phase 10.3.5). Mirrors the server's 422
+  // ErrEquipmentRequired gate so the click never fails into the journal.
+  const hasTorpedoLauncher = !!ownEquipment?.some((e) => e.type === 'up_torpedo_launcher');
   // Mining needs up_drill (phase 10.3.6). Mirrors the server's 422
   // ErrEquipmentRequired gate so the click never fails into the journal.
   const hasDrill = !!ownEquipment?.some((e) => e.type === 'up_drill');
@@ -166,6 +177,10 @@ export function ObjectActionsMenu({
   const doLaunchDrones = () => {
     if (target.kind !== 'ship') return;
     run(sendLaunchDrone(ownShipID, { kind: EntityKind.Ship, id: target.id }, DRONE_SALVO));
+  };
+  const doLaunchTorpedo = (torpedoClass: number) => {
+    if (target.kind !== 'ship') return;
+    run(sendLaunchTorpedo(ownShipID, { kind: EntityKind.Ship, id: target.id }, torpedoClass));
   };
   const doRecallDrones = () => {
     run(sendRecallDrones(ownShipID));
@@ -271,6 +286,30 @@ export function ObjectActionsMenu({
           title={!hasDroneControl ? 'Нужен контроль дронов (up_drone_control)' : undefined}
         >
           ⬡ Запустить дронов
+        </button>
+      )}
+      {target.kind === 'ship' && !isOwnShip && (
+        <button
+          type="button"
+          role="menuitem"
+          className="sw-menu__item"
+          onClick={() => doLaunchTorpedo(TORPEDO_CLASS_FIRESTORM)}
+          disabled={baseDisabled || !hasTorpedoLauncher}
+          title={!hasTorpedoLauncher ? 'Нужна торпедная установка (up_torpedo_launcher)' : 'Боеприпас «Огненная Буря» (gt23)'}
+        >
+          ☄ Торпеда: Огненная Буря
+        </button>
+      )}
+      {target.kind === 'ship' && !isOwnShip && (
+        <button
+          type="button"
+          role="menuitem"
+          className="sw-menu__item"
+          onClick={() => doLaunchTorpedo(TORPEDO_CLASS_HOLY)}
+          disabled={baseDisabled || !hasTorpedoLauncher}
+          title={!hasTorpedoLauncher ? 'Нужна торпедная установка (up_torpedo_launcher)' : 'Боеприпас «Святая Торпеда» (gt24)'}
+        >
+          ☄ Торпеда: Святая Торпеда
         </button>
       )}
       {target.kind === 'ship' && isOwnShip && (

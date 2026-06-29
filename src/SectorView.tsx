@@ -209,6 +209,8 @@ export function SectorView() {
                 missileImpacts={world.missileImpacts}
                 drones={world.drones}
                 droneImpacts={world.droneImpacts}
+                torpedos={world.torpedos}
+                torpedoImpacts={world.torpedoImpacts}
                 containers={world.containers}
                 asteroids={world.asteroids}
                 goods={goods}

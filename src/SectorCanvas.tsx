@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { EntityKind } from './api';
-import type { Asteroid, Container, DestructibleStatic, Drone, DroneImpact, GoodsRow, LaserBeam, Missile, MissileImpact, Race, SectorStatics, StationType, WorldGate } from './api';
+import type { Asteroid, Container, DestructibleStatic, Drone, DroneImpact, GoodsRow, LaserBeam, Missile, MissileImpact, Race, SectorStatics, StationType, Torpedo, TorpedoImpact, WorldGate } from './api';
 import type { TrackedShip } from './useWorldState';
 import type { HighlightRef } from './TargetsPanel';
 import {
@@ -94,6 +94,11 @@ type Props = {
   // droneImpacts holds one-frame shot/death events (drawn on canvas).
   drones?: Map<number, Drone>;
   droneImpacts?: DroneImpact[];
+  // torpedos is the live torpedo set within AOI (heads on the overlay; trails
+  // here). torpedoImpacts holds one-frame detonation/shot-down events drawn as a
+  // flash + a splash-radius ring (ЧТЗ §5.3). Phase 10.3.5.
+  torpedos?: Map<number, Torpedo>;
+  torpedoImpacts?: TorpedoImpact[];
   // containers is the live loot-container set within AOI (drawn on the
   // overlay, clickable for the "Подобрать" action). Phase 4.6.
   containers?: Map<number, Container>;
@@ -127,14 +132,23 @@ type HoverState = {
 // loop and pruned once aged out.
 type Explosion = { x: number; y: number; startedAt: number };
 
+// TorpedoSplash is a transient area-blast effect: a ring that expands to the
+// detonation's world-space splashRadius and fades over SPLASH_MS, conveying the
+// reach of the friendly-fire area damage (ЧТЗ §5.3). Spawned from a `hit`
+// TorpedoImpact, animated in the rAF loop, pruned once aged out. radius is in
+// world units (converted to px per-frame so it tracks zoom).
+type TorpedoSplash = { x: number; y: number; radius: number; startedAt: number };
+
 const GRID_DIVS = 20;
 const EXPLOSION_MS = 450;
+const SPLASH_MS = 650;
 
 export function SectorCanvas(props: Props) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const objectLayerRef = useRef<ObjectLayerHandle | null>(null);
   const explosionsRef = useRef<Explosion[]>([]);
+  const torpedoSplashesRef = useRef<TorpedoSplash[]>([]);
   const [hover, setHover] = useState<HoverState>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [spaceMenu, setSpaceMenu] = useState<SpaceMenuState | null>(null);
@@ -167,7 +181,7 @@ export function SectorCanvas(props: Props) {
   // Spawn a kill explosion for every killed combat effect in this snapshot.
   // The impact arrays are replaced wholesale each frame, so keying on their
   // identity fires once per snapshot. Positions are world coords.
-  const { laserEffects, missileImpacts, droneImpacts } = props;
+  const { laserEffects, missileImpacts, droneImpacts, torpedoImpacts } = props;
   useEffect(() => {
     const now = performance.now();
     for (const b of laserEffects ?? []) {
@@ -179,13 +193,22 @@ export function SectorCanvas(props: Props) {
     for (const d of droneImpacts ?? []) {
       if (d.killed) explosionsRef.current.push({ x: d.x, y: d.y, startedAt: now });
     }
-  }, [laserEffects, missileImpacts, droneImpacts]);
+    // A torpedo detonation (hit) or a shot-down torpedo (killed) both flash a
+    // bright kill core; a hit additionally expands a splash ring to its radius.
+    for (const t of torpedoImpacts ?? []) {
+      if (t.hit || t.killed) explosionsRef.current.push({ x: t.x, y: t.y, startedAt: now });
+      if (t.hit && t.splashRadius && t.splashRadius > 0) {
+        torpedoSplashesRef.current.push({ x: t.x, y: t.y, radius: t.splashRadius, startedAt: now });
+      }
+    }
+  }, [laserEffects, missileImpacts, droneImpacts, torpedoImpacts]);
 
   // Drop pending explosions on a sector jump — their world coords belong to
   // the old sector and would flash at the wrong spot in the new view.
   const currentSectorID = props.currentSectorID;
   useEffect(() => {
     explosionsRef.current = [];
+    torpedoSplashesRef.current = [];
   }, [currentSectorID]);
 
   useEffect(() => {
@@ -225,6 +248,9 @@ export function SectorCanvas(props: Props) {
       drawMissileTrails(ctx, vp, w, h, p);
       drawMissileImpacts(ctx, vp, w, h, p);
       drawDroneImpacts(ctx, vp, w, h, p);
+      drawTorpedoTrails(ctx, vp, w, h, p);
+      drawTorpedoImpacts(ctx, vp, w, h, p);
+      drawTorpedoSplashes(ctx, vp, w, h, torpedoSplashesRef.current);
       drawExplosions(ctx, vp, w, h, explosionsRef.current);
       drawScaleBar(ctx, vp, w, h);
 
@@ -342,6 +368,7 @@ export function SectorCanvas(props: Props) {
         ships={props.ships}
         drones={props.drones}
         missiles={props.missiles}
+        torpedos={props.torpedos}
         containers={props.containers}
         asteroids={props.asteroids}
         goods={props.goods}
@@ -716,6 +743,103 @@ function drawDroneImpacts(
     ctx.beginPath();
     ctx.arc(cx, cy, 4, 0, Math.PI * 2);
     ctx.fill();
+  }
+  ctx.restore();
+}
+
+// drawTorpedoTrails paints the fading trail behind each in-flight torpedo. The
+// warhead itself is on the SVG overlay; the trail is an ephemeral canvas effect,
+// tinted by class (Firestorm orange / Holy gold) and longer/thicker than a
+// missile's so the heavy projectile reads apart.
+function drawTorpedoTrails(
+  ctx: CanvasRenderingContext2D,
+  vp: Viewport,
+  w: number,
+  h: number,
+  p: Props,
+) {
+  const torpedos = p.torpedos;
+  if (!torpedos || torpedos.size === 0) return;
+  ctx.save();
+  ctx.lineWidth = 2.2;
+  const trailLen = 20;
+  for (const t of torpedos.values()) {
+    const [cx, cy] = wToC(t.x, t.y, vp, w, h);
+    if (cx < -20 || cx > w + 20 || cy < -20 || cy > h + 20) continue;
+    ctx.strokeStyle = t.class === 3 ? 'rgba(255, 224, 138, 0.6)' : 'rgba(255, 138, 60, 0.6)';
+    const [tx, ty] = wToC(t.x - t.dirX * trailLen, t.y - t.dirY * trailLen, vp, w, h);
+    ctx.beginPath();
+    ctx.moveTo(tx, ty);
+    ctx.lineTo(cx, cy);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// drawTorpedoImpacts renders the one-frame fizzle for a torpedo that ended
+// without a detonation: an Expired torpedo (TTL / owner loss) gets a soft grey
+// ring. Hits and shot-downs are drawn by the transient splash / explosion rings,
+// so they need no per-frame marker here.
+function drawTorpedoImpacts(
+  ctx: CanvasRenderingContext2D,
+  vp: Viewport,
+  w: number,
+  h: number,
+  p: Props,
+) {
+  const imps = p.torpedoImpacts;
+  if (!imps || imps.length === 0) return;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(150, 150, 160, 0.7)';
+  ctx.lineWidth = 1.5;
+  for (const imp of imps) {
+    if (!imp.expired) continue;
+    const [cx, cy] = wToC(imp.x, imp.y, vp, w, h);
+    if (cx < -30 || cx > w + 30 || cy < -30 || cy > h + 30) continue;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 7, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// drawTorpedoSplashes animates the area-blast rings. Each ring expands from the
+// detonation centre to its world-space splashRadius over SPLASH_MS and fades —
+// the player sees exactly how far the friendly-fire damage reached. Prunes
+// aged-out entries in place.
+function drawTorpedoSplashes(
+  ctx: CanvasRenderingContext2D,
+  vp: Viewport,
+  w: number,
+  h: number,
+  splashes: TorpedoSplash[],
+) {
+  const now = performance.now();
+  for (let i = splashes.length - 1; i >= 0; i--) {
+    if (now - splashes[i].startedAt > SPLASH_MS) splashes.splice(i, 1);
+  }
+  if (splashes.length === 0) return;
+  ctx.save();
+  for (const s of splashes) {
+    const age = (now - s.startedAt) / SPLASH_MS;
+    const [cx, cy] = wToC(s.x, s.y, vp, w, h);
+    // World radius → px via a horizontal reference point (matches the radar
+    // rings' approach), so the splash tracks zoom.
+    const [edgeX] = wToC(s.x + s.radius, s.y, vp, w, h);
+    const fullPr = Math.abs(edgeX - cx);
+    const pr = fullPr * Math.min(1, age * 1.6);
+    if (pr <= 0.5) continue;
+    const alpha = 1 - age;
+    // Filled core fades fast; the ring traces the full reach.
+    ctx.fillStyle = `rgba(255, 150, 60, ${0.18 * alpha})`;
+    ctx.beginPath();
+    ctx.arc(cx, cy, pr, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.lineWidth = 2 * alpha + 0.5;
+    ctx.strokeStyle = `rgba(255, ${Math.round(180 * (1 - age))}, 80, ${alpha})`;
+    ctx.beginPath();
+    ctx.arc(cx, cy, pr, 0, Math.PI * 2);
+    ctx.stroke();
   }
   ctx.restore();
 }

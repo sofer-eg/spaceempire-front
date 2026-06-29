@@ -198,6 +198,44 @@ export type DroneImpact = {
   expired?: boolean;
 };
 
+// Torpedo is a persistent, shoot-downable homing projectile broadcast in WS
+// patches (ЧТЗ doc-1 §3 FR-010). Same scalar-pair layout as Drone/Missile;
+// `cls` selects the ammunition profile/icon (2 = "Огненная Буря", 3 = "Святая
+// Торпеда") and `hp` lets the renderer show it can be shot down. Kept as a
+// separate list so the Ship DTO stays untouched (NFR-006). Phase 10.3.5.
+export type Torpedo = {
+  id: number;
+  owner: number;
+  target: EntityRef;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  dirX: number;
+  dirY: number;
+  // class is the ammunition profile: 2 = Firestorm (gt23), 3 = Holy (gt24).
+  // (`class` is a valid object key in JS — only an identifier reserved word.)
+  class: number;
+  hp: number;
+};
+
+// TorpedoImpact is a one-frame torpedo event in the same Snapshot that removes
+// the torpedo (mirrors MissileImpact / DroneImpact). Exactly one outcome flag
+// is set: `hit` (a detonation — carries `splashRadius` so the SPA can animate
+// the area blast), `killed` (shot down — dies in place, no splash), or `expired`
+// (TTL / owner-loss — no damage). Phase 10.3.5.
+export type TorpedoImpact = {
+  torpedoID: number;
+  owner: number;
+  target: EntityRef;
+  x: number;
+  y: number;
+  splashRadius?: number;
+  hit?: boolean;
+  killed?: boolean;
+  expired?: boolean;
+};
+
 // Container is a loot drop floating in space — the cargo of a destroyed
 // ship, pickup-able by a nearby ship. Only the glyph position travels in
 // the radar delta; the contents transfer on pickup. Phase 4.6.
@@ -250,6 +288,12 @@ export type Snapshot = {
   dronesUpdated?: Drone[];
   dronesRemoved?: number[];
   droneImpacts?: DroneImpact[];
+  // Torpedo delta against the previous frame within AOI. Same diff/upsert
+  // pattern as drones; impacts carry the splash centre + radius. Phase 10.3.5.
+  torpedosAdded?: Torpedo[];
+  torpedosUpdated?: Torpedo[];
+  torpedosRemoved?: number[];
+  torpedoImpacts?: TorpedoImpact[];
   // Container delta against the previous frame within AOI (immutable, so
   // no "updated"). Phase 4.6.
   containersAdded?: Container[];
@@ -757,6 +801,28 @@ export async function sendRecallDrones(
   }
   const body = (await res.json()) as { ok: boolean; recalled: number };
   return { recalled: body.recalled };
+}
+
+// sendLaunchTorpedo fires one torpedo of `torpedoClass` (2 = "Огненная Буря" /
+// gt23, 3 = "Святая Торпеда" / gt24) from shipID at targetRef. The server debits
+// one ammunition unit of the class's goods type and spawns a homing torpedo;
+// returns the server-allocated torpedo id. Throws ApiError on a non-2xx (no
+// ammunition → 400, no up_torpedo_launcher → 422). Phase 10.3.5.
+export async function sendLaunchTorpedo(
+  shipID: number,
+  targetRef: EntityRef,
+  torpedoClass: number,
+): Promise<{ torpedoID: number }> {
+  const res = await fetch('/api/cmd/launch-torpedo', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ shipID, targetRef, class: torpedoClass }),
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await parseErrorBody(res));
+  }
+  const body = (await res.json()) as { ok: boolean; torpedoID: number };
+  return { torpedoID: body.torpedoID };
 }
 
 // sendPickupContainer scoops a loot container into the ship's hold. The

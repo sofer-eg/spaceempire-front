@@ -15,6 +15,8 @@ import type {
   Ship,
   Snapshot,
   StaticsMessage,
+  Torpedo,
+  TorpedoImpact,
 } from './api';
 import { wsURL } from './api';
 
@@ -192,6 +194,12 @@ export type WorldState = {
   drones: Map<number, Drone>;
   droneImpacts: DroneImpact[];
 
+  // torpedos is the live torpedo set per Torpedo.id, accumulated like drones.
+  // torpedoImpacts holds the one-frame detonation/shot-down events (with the
+  // splash radius) from the most recent snapshot. Phase 10.3.5.
+  torpedos: Map<number, Torpedo>;
+  torpedoImpacts: TorpedoImpact[];
+
   // containers is the live loot-container set per Container.id, accumulated
   // from the added/removed delta (containers are immutable — no update
   // bucket). Phase 4.6.
@@ -252,6 +260,8 @@ export function useWorldState(): WorldState {
     missileImpacts: [],
     drones: new Map(),
     droneImpacts: [],
+    torpedos: new Map(),
+    torpedoImpacts: [],
     containers: new Map(),
     asteroids: new Map(),
     staticCombat: new Map(),
@@ -269,6 +279,8 @@ export function useWorldState(): WorldState {
   const missilesRef = useRef<Map<number, Missile>>(new Map());
   // dronesRef stores the live drone set between snapshots, same pattern.
   const dronesRef = useRef<Map<number, Drone>>(new Map());
+  // torpedosRef stores the live torpedo set between snapshots, same pattern.
+  const torpedosRef = useRef<Map<number, Torpedo>>(new Map());
   // containersRef stores the live loot-container set between snapshots.
   const containersRef = useRef<Map<number, Container>>(new Map());
   // asteroidsRef stores the live minable ore-body set between snapshots, same
@@ -303,6 +315,7 @@ export function useWorldState(): WorldState {
         shipsRef.current = new Map();
         missilesRef.current = new Map();
         dronesRef.current = new Map();
+        torpedosRef.current = new Map();
         containersRef.current = new Map();
         asteroidsRef.current = new Map();
         staticCombatRef.current = new Map();
@@ -326,6 +339,8 @@ export function useWorldState(): WorldState {
           missileImpacts: [],
           drones: dronesRef.current,
           droneImpacts: [],
+          torpedos: torpedosRef.current,
+          torpedoImpacts: [],
           containers: containersRef.current,
           asteroids: asteroidsRef.current,
           staticCombat: staticCombatRef.current,
@@ -352,6 +367,7 @@ export function useWorldState(): WorldState {
             shipsRef.current = new Map();
             missilesRef.current = new Map();
             dronesRef.current = new Map();
+            torpedosRef.current = new Map();
             containersRef.current = new Map();
             asteroidsRef.current = new Map();
             staticCombatRef.current = new Map();
@@ -482,6 +498,12 @@ export function useWorldState(): WorldState {
         for (const d of snap.dronesUpdated ?? []) nextDrones.set(d.id, d);
         for (const id of snap.dronesRemoved ?? []) nextDrones.delete(id);
 
+        // Torpedo delta — same diff/upsert pattern as drones.
+        const nextTorpedos = new Map(torpedosRef.current);
+        for (const t of snap.torpedosAdded ?? []) nextTorpedos.set(t.id, t);
+        for (const t of snap.torpedosUpdated ?? []) nextTorpedos.set(t.id, t);
+        for (const id of snap.torpedosRemoved ?? []) nextTorpedos.delete(id);
+
         // Container delta — added/removed only (containers are immutable).
         const nextContainers = new Map(containersRef.current);
         for (const c of snap.containersAdded ?? []) nextContainers.set(c.id, c);
@@ -508,6 +530,7 @@ export function useWorldState(): WorldState {
         shipsRef.current = next;
         missilesRef.current = nextMissiles;
         dronesRef.current = nextDrones;
+        torpedosRef.current = nextTorpedos;
         containersRef.current = nextContainers;
         asteroidsRef.current = nextAsteroids;
         staticCombatRef.current = nextStaticCombat;
@@ -539,6 +562,8 @@ export function useWorldState(): WorldState {
           missileImpacts: snap.missileImpacts ?? [],
           drones: nextDrones,
           droneImpacts: snap.droneImpacts ?? [],
+          torpedos: nextTorpedos,
+          torpedoImpacts: snap.torpedoImpacts ?? [],
           containers: nextContainers,
           asteroids: nextAsteroids,
           policeScanSeq: s.policeScanSeq,

@@ -5,6 +5,7 @@ import {
   sendInstallSatellite,
   sendLaunchDrone,
   sendLaunchMissile,
+  sendLaunchTorpedo,
   sendRecallDrones,
   type CargoInventory,
   type EntityRef,
@@ -20,6 +21,13 @@ const DRONE_GOODS = 51;
 // Satellite goods id consumed by one install (phase 10.15). Mirrors
 // api.SatelliteGoodsType.
 const SATELLITE_GOODS = 26;
+// Torpedo ammunition goods (migration 0042) backing the two torpedo classes.
+// Mirror api.TorpedoFirestormGoodsType (gt23, class 2) and
+// api.TorpedoHolyGoodsType (gt24, class 3). Phase 10.3.5.
+const TORPEDO_FIRESTORM_GOODS = 23;
+const TORPEDO_HOLY_GOODS = 24;
+const TORPEDO_CLASS_FIRESTORM = 2;
+const TORPEDO_CLASS_HOLY = 3;
 // DRONE_SALVO matches ObjectActionsMenu — one launch action sends a small
 // fixed salvo so the button stays a single click.
 const DRONE_SALVO = 3;
@@ -61,6 +69,12 @@ export function CombatHUD({ ownShip, ships, logins, races, ownCargo, ownSectorID
   const missiles = cargoCount(ownCargo, MISSILE_GOODS);
   const drones = cargoCount(ownCargo, DRONE_GOODS);
   const satellites = cargoCount(ownCargo, SATELLITE_GOODS);
+  // Torpedo ammunition per class (phase 10.3.5) + the launcher gate. Without
+  // up_torpedo_launcher the server rejects the launch with 422, so both class
+  // buttons stay disabled; with the module each is gated on its own hold count.
+  const torpedoFirestorm = cargoCount(ownCargo, TORPEDO_FIRESTORM_GOODS);
+  const torpedoHoly = cargoCount(ownCargo, TORPEDO_HOLY_GOODS);
+  const hasTorpedoLauncher = !!ownShip.equipment?.some((e) => e.type === 'up_torpedo_launcher');
 
   const run = (action: Promise<unknown>, refresh: boolean) => {
     setPending(true);
@@ -152,6 +166,38 @@ export function CombatHUD({ ownShip, ships, logins, races, ownCargo, ownSectorID
               disabled={pending || !targetRef || drones === 0}
               title={!targetRef ? 'Нет цели' : drones === 0 ? 'Нет дронов в трюме' : undefined}
               onClick={() => targetRef && run(sendLaunchDrone(ownShip.id, targetRef, DRONE_SALVO), true)}
+            />
+            <WeaponButton
+              glyph="☄"
+              label="Торпеда: Огненная Буря"
+              count={torpedoFirestorm}
+              disabled={pending || !targetRef || !hasTorpedoLauncher || torpedoFirestorm === 0}
+              title={
+                !hasTorpedoLauncher
+                  ? 'Нужна торпедная установка (up_torpedo_launcher)'
+                  : !targetRef
+                    ? 'Нет цели'
+                    : torpedoFirestorm === 0
+                      ? 'Нет торпед «Огненная Буря» (gt23)'
+                      : undefined
+              }
+              onClick={() => targetRef && run(sendLaunchTorpedo(ownShip.id, targetRef, TORPEDO_CLASS_FIRESTORM), true)}
+            />
+            <WeaponButton
+              glyph="☄"
+              label="Торпеда: Святая Торпеда"
+              count={torpedoHoly}
+              disabled={pending || !targetRef || !hasTorpedoLauncher || torpedoHoly === 0}
+              title={
+                !hasTorpedoLauncher
+                  ? 'Нужна торпедная установка (up_torpedo_launcher)'
+                  : !targetRef
+                    ? 'Нет цели'
+                    : torpedoHoly === 0
+                      ? 'Нет торпед «Святая Торпеда» (gt24)'
+                      : undefined
+              }
+              onClick={() => targetRef && run(sendLaunchTorpedo(ownShip.id, targetRef, TORPEDO_CLASS_HOLY), true)}
             />
             <button
               type="button"

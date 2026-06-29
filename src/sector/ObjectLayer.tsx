@@ -11,7 +11,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import type { MutableRefObject } from 'react';
 import { EntityKind } from '../api';
-import type { Asteroid, Container, DestructibleStatic, Drone, GoodsRow, Missile, Race, SectorStatics, StationType, WorldGate } from '../api';
+import type { Asteroid, Container, DestructibleStatic, Drone, GoodsRow, Missile, Race, SectorStatics, StationType, Torpedo, WorldGate } from '../api';
 import type { TrackedShip } from '../useWorldState';
 import type { HighlightRef } from '../TargetsPanel';
 import type { PickedObject } from '../ObjectActionsMenu';
@@ -46,6 +46,9 @@ type Props = {
   ships: Map<number, TrackedShip>;
   drones?: Map<number, Drone>;
   missiles?: Map<number, Missile>;
+  // torpedos is the live torpedo set within AOI (heads drawn here; trails +
+  // splash on the canvas). Phase 10.3.5.
+  torpedos?: Map<number, Torpedo>;
   containers?: Map<number, Container>;
   // asteroids is the live minable ore-body set within AOI (drawn on the
   // overlay, clickable for the «Бурить» action). Phase 10.3.6.
@@ -172,6 +175,7 @@ export const ObjectLayer = forwardRef<ObjectLayerHandle, Props>(function ObjectL
       };
       for (const d of p.drones?.values() ?? []) placeDir(`drone:${d.id}`, d.x, d.y, d.dirX, d.dirY);
       for (const m of p.missiles?.values() ?? []) placeDir(`missile:${m.id}`, m.x, m.y, m.dirX, m.dirY);
+      for (const t of p.torpedos?.values() ?? []) placeDir(`torpedo:${t.id}`, t.x, t.y, t.dirX, t.dirY);
 
       // Static positions (statics / gates / containers) — translate only.
       const place = (key: string, x: number, y: number) => {
@@ -360,6 +364,12 @@ export const ObjectLayer = forwardRef<ObjectLayerHandle, Props>(function ObjectL
           <g className="heading"><use href="#hull-missile" /></g>
         </g>
       ))}
+      {/* Torpedoes — class tints the warhead: 2 = Firestorm (fiery), 3 = Holy (gold) */}
+      {[...(p.torpedos?.values() ?? [])].map((t) => (
+        <g key={`torpedo-${t.id}`} ref={dirRef(dirNodes, `torpedo:${t.id}`)} style={{ color: torpedoColor(t.class), pointerEvents: 'none' }}>
+          <g className="heading"><use href="#hull-torpedo" /></g>
+        </g>
+      ))}
 
       {/* Ships (z-top among objects) */}
       {shipList.map((s) => {
@@ -423,6 +433,13 @@ export const ObjectLayer = forwardRef<ObjectLayerHandle, Props>(function ObjectL
     </svg>
   );
 });
+
+// torpedoColor tints a torpedo warhead by its ammunition class so the two
+// profiles read apart on the radar: class 2 "Огненная Буря" fiery orange,
+// class 3 "Святая Торпеда" holy gold. Phase 10.3.5.
+function torpedoColor(cls: number): string {
+  return cls === 3 ? '#ffe08a' : '#ff8a3c';
+}
 
 // raceTint resolves a static's owning-race colour (phase 8.13), falling back to
 // the per-type colour for neutral/unknown owners.

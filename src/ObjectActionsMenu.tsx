@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   EntityKind,
+  isStaticTargetKind,
   sendAttack,
   sendCeaseFire,
   sendDock,
@@ -99,9 +100,28 @@ export function ObjectActionsMenu({
   const dist = ownShip
     ? Math.hypot(ownShip.x - target.x, ownShip.y - target.y)
     : Number.POSITIVE_INFINITY;
-  const canDock = target.kind === 'dock' && dist <= dockRange;
+  // A laser tower is a weapon target (TASK-113) but not dockable — exclude it
+  // from the dock affordance like the satellite, so we never offer a "Стыковка"
+  // the server would reject.
+  const canDock =
+    target.kind === 'dock' &&
+    target.ref.kind !== EntityKind.Satellite &&
+    target.ref.kind !== EntityKind.LaserTower &&
+    dist <= dockRange;
   const canJump = target.kind === 'gate' && dist <= gateRange;
   const isOwnShip = target.kind === 'ship' && target.id === ownShipID;
+  // Weapon targeting (TASK-113 FR-02): missiles and torpedoes may strike an
+  // enemy ship OR a destructible static (isStaticTargetKind). weaponRef is the
+  // EntityRef the launch commands take; null when the target takes no weapon
+  // (own ship, gate, container, asteroid). Drones stay ship-only (C-03).
+  const isStaticWeaponTarget = target.kind === 'dock' && isStaticTargetKind(target.ref.kind);
+  const canTargetWeapon = (target.kind === 'ship' && !isOwnShip) || isStaticWeaponTarget;
+  const weaponRef: EntityRef | null =
+    target.kind === 'ship' && !isOwnShip
+      ? { kind: EntityKind.Ship, id: target.id }
+      : target.kind === 'dock' && isStaticTargetKind(target.ref.kind)
+        ? target.ref
+        : null;
   const isCurrentlyAttacking =
     target.kind === 'ship' &&
     !!ownShipAttackTargetID &&
@@ -171,16 +191,17 @@ export function ObjectActionsMenu({
     run(sendCeaseFire(ownShipID));
   };
   const doLaunchMissile = () => {
-    if (target.kind !== 'ship') return;
-    run(sendLaunchMissile(ownShipID, { kind: EntityKind.Ship, id: target.id }));
+    if (!weaponRef) return;
+    run(sendLaunchMissile(ownShipID, weaponRef));
   };
   const doLaunchDrones = () => {
+    // Drones stay ship-only (TASK-113 C-03) — the server rejects a static target.
     if (target.kind !== 'ship') return;
     run(sendLaunchDrone(ownShipID, { kind: EntityKind.Ship, id: target.id }, DRONE_SALVO));
   };
   const doLaunchTorpedo = (torpedoClass: number) => {
-    if (target.kind !== 'ship') return;
-    run(sendLaunchTorpedo(ownShipID, { kind: EntityKind.Ship, id: target.id }, torpedoClass));
+    if (!weaponRef) return;
+    run(sendLaunchTorpedo(ownShipID, weaponRef, torpedoClass));
   };
   const doRecallDrones = () => {
     run(sendRecallDrones(ownShipID));
@@ -218,18 +239,20 @@ export function ObjectActionsMenu({
       >
         Лететь
       </button>
-      {target.kind === 'dock' && target.ref.kind !== EntityKind.Satellite && (
-        <button
-          type="button"
-          role="menuitem"
-          className="sw-menu__item"
-          onClick={doDock}
-          disabled={baseDisabled || !canDock}
-          title={!canDock ? 'Слишком далеко для стыковки' : undefined}
-        >
-          ⚓ Стыковка
-        </button>
-      )}
+      {target.kind === 'dock' &&
+        target.ref.kind !== EntityKind.Satellite &&
+        target.ref.kind !== EntityKind.LaserTower && (
+          <button
+            type="button"
+            role="menuitem"
+            className="sw-menu__item"
+            onClick={doDock}
+            disabled={baseDisabled || !canDock}
+            title={!canDock ? 'Слишком далеко для стыковки' : undefined}
+          >
+            ⚓ Стыковка
+          </button>
+        )}
       {target.kind === 'gate' && (
         <button
           type="button"
@@ -264,7 +287,7 @@ export function ObjectActionsMenu({
           ◇ Прекратить огонь
         </button>
       )}
-      {target.kind === 'ship' && !isOwnShip && (
+      {canTargetWeapon && (
         <button
           type="button"
           role="menuitem"
@@ -288,7 +311,7 @@ export function ObjectActionsMenu({
           ⬡ Запустить дронов
         </button>
       )}
-      {target.kind === 'ship' && !isOwnShip && (
+      {canTargetWeapon && (
         <button
           type="button"
           role="menuitem"
@@ -300,7 +323,7 @@ export function ObjectActionsMenu({
           ☄ Торпеда: Огненная Буря
         </button>
       )}
-      {target.kind === 'ship' && !isOwnShip && (
+      {canTargetWeapon && (
         <button
           type="button"
           role="menuitem"

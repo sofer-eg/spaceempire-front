@@ -238,6 +238,8 @@ export function staticTypeLabel(
       return 'Пиратская база';
     case EntityKind.Satellite:
       return 'Навигационный спутник';
+    case EntityKind.LaserTower:
+      return 'Лазерная башня';
     default:
       return 'Объект';
   }

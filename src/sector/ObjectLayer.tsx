@@ -296,6 +296,10 @@ export const ObjectLayer = forwardRef<ObjectLayerHandle, Props>(function ObjectL
         const combat = p.staticCombat.get(`${EntityKind.LaserTower}:${s.id}`);
         return (
           <g key={`lt-${s.id}`} ref={simpleRef(simpleNodes, `7:${s.id}`)}>
+            {/* TASK-113 D3: a laser tower is a weapon target — make its glyph
+                pickable (a dock-pick whose ref the weapon buttons consume). */}
+            <circle className="hit" r={HIT_R} fill="transparent" style={{ pointerEvents: 'auto', cursor: 'pointer' }}
+              onClick={(e) => p.onPick(dockPick(EntityKind.LaserTower, s.id, s.x, s.y, undefined, p.stationTypes), ...evXY(e.clientX, e.clientY))} />
             <LaserTowerGlyph color={tint} />
             {shieldBar(combat)}
           </g>

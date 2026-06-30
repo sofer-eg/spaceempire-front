@@ -283,7 +283,13 @@ export function SectorCanvas(props: Props) {
               ? props.statics.tradeStations
               : ref.kind === EntityKind.Pirbase
                 ? props.statics.pirbases
-                : undefined;
+                : // TASK-113 D3: laser towers and satellites are weapon targets,
+                  // so their dock-pick menu must stay open while they exist.
+                  ref.kind === EntityKind.LaserTower
+                  ? props.statics.laserTowers
+                  : ref.kind === EntityKind.Satellite
+                    ? props.statics.satellites
+                    : undefined;
       const found = list?.some(
         (s) => s.id === ref.id && s.sectorID === props.currentSectorID,
       );

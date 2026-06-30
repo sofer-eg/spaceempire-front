@@ -25,6 +25,23 @@ export const EntityKind = {
   Satellite: 11,
 } as const;
 
+// isStaticTargetKind mirrors the server's sector.IsStaticTargetKind (TASK-113
+// FR-01): the destructible statics a weapon may lock onto besides ships —
+// stations, shipyards, trade stations, pirbases, laser towers, satellites.
+// Gates/containers/asteroids are NOT weapon targets (gates excluded until
+// TASK-110). One source of truth for the weapon-button gates so the UI never
+// offers a target the server would reject with ErrInvalidAttackTarget.
+export function isStaticTargetKind(kind: number): boolean {
+  return (
+    kind === EntityKind.Station ||
+    kind === EntityKind.Shipyard ||
+    kind === EntityKind.TradeStation ||
+    kind === EntityKind.Pirbase ||
+    kind === EntityKind.LaserTower ||
+    kind === EntityKind.Satellite
+  );
+}
+
 export type Ship = {
   id: number;
   playerID: number;

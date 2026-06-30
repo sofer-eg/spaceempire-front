@@ -155,6 +155,9 @@ export function SectorView() {
             ships={ships}
             logins={logins}
             races={races}
+            statics={statics}
+            staticCombat={world.staticCombat}
+            stationTypes={stationTypes}
             ownCargo={ownCargo}
             ownSectorID={ownSectorID}
             onCargoChanged={refreshPlayer}

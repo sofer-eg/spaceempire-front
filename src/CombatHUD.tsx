@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   EntityKind,
+  isStaticTargetKind,
   sendCeaseFire,
   sendInstallSatellite,
   sendLaunchDrone,
@@ -8,10 +9,13 @@ import {
   sendLaunchTorpedo,
   sendRecallDrones,
   type CargoInventory,
+  type DestructibleStatic,
   type EntityRef,
   type Race,
+  type SectorStatics,
+  type StationType,
 } from './api';
-import { shipDisplayName } from './gameContext';
+import { shipDisplayName, staticTypeLabel } from './gameContext';
 import type { TrackedShip } from './useWorldState';
 
 // Cargo goods that back the launch buttons. Mirror the backend constants:
@@ -38,6 +42,11 @@ type Props = {
   logins: Map<number, string>;
   // races backs shipDisplayName for the target label (phase 10.7).
   races: Race[];
+  // statics + stationTypes resolve the label of a destructible-static target
+  // (TASK-113 FR-03); staticCombat carries its live HP/Shield for the bars.
+  statics: SectorStatics;
+  staticCombat: Map<string, DestructibleStatic>;
+  stationTypes: StationType[];
   ownCargo: CargoInventory | null;
   ownSectorID: number;
   // onCargoChanged re-fetches the wallet/cargo after a launch or recall so
@@ -51,20 +60,27 @@ type Props = {
 // actions — the same commands the canvas context menu issues, hoisted to
 // a persistent HUD so the player isn't hunting for a right-click during a
 // fight.
-export function CombatHUD({ ownShip, ships, logins, races, ownCargo, ownSectorID, onCargoChanged }: Props) {
+export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat, stationTypes, ownCargo, ownSectorID, onCargoChanged }: Props) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // The combat target is whatever the laser is firing at; falls back to
-  // the navigation target when it is a ship (so the player can pre-arm
-  // missiles/drones at a ship they are flying toward before opening fire).
-  const attackRef = refIfShip(ownShip.attackTarget);
-  const navRef = refIfShip(ownShip.currentTargetRef);
+  // The combat target is whatever the laser is firing at; falls back to the
+  // navigation target when it is targetable (a ship OR a destructible static),
+  // so the player can pre-arm missiles/torpedoes at a station/ship they are
+  // flying toward before opening fire (TASK-113 FR-03).
+  const attackRef = refIfTargetable(ownShip.attackTarget);
+  const navRef = refIfTargetable(ownShip.currentTargetRef);
   const targetRef = attackRef ?? navRef;
   const firing = attackRef !== null;
 
-  const targetShip = targetRef ? ships.get(targetRef.id) : undefined;
+  // A ship target resolves from the live ship map (HP/shield bars); a static
+  // target resolves from the static-combat snapshot. ships.get is gated on the
+  // kind so a static id never collides with a same-numbered ship.
+  const targetIsShip = targetRef?.kind === EntityKind.Ship;
+  const targetShip = targetIsShip ? ships.get(targetRef.id) : undefined;
   const inScanner = targetShip != null && targetShip.sectorID === ownSectorID;
+  const targetStatic =
+    targetRef && !targetIsShip ? staticCombat.get(`${targetRef.kind}:${targetRef.id}`) : undefined;
 
   const missiles = cargoCount(ownCargo, MISSILE_GOODS);
   const drones = cargoCount(ownCargo, DRONE_GOODS);
@@ -90,17 +106,22 @@ export function CombatHUD({ ownShip, ships, logins, races, ownCargo, ownSectorID
       });
   };
 
-  // Phase 10.7: same name · owner format as the navigation panel. When the
-  // target is outside the AOI scanner (no targetShip) we only have the id.
+  // Phase 10.7: same name · owner format as the navigation panel. A static
+  // target reads as its type · race (TASK-113 FR-03). When a ship target is
+  // outside the AOI scanner (no targetShip) we only have the id.
   let targetLabel: string | null = null;
   if (targetRef) {
-    if (targetShip) {
-      const name = shipDisplayName(targetShip, races);
-      const ownerLogin = logins.get(targetShip.playerID);
-      const owner = ownerLogin && ownerLogin !== '__npc__' ? ownerLogin : '';
-      targetLabel = owner ? `${name} · ${owner}` : name;
+    if (targetIsShip) {
+      if (targetShip) {
+        const name = shipDisplayName(targetShip, races);
+        const ownerLogin = logins.get(targetShip.playerID);
+        const owner = ownerLogin && ownerLogin !== '__npc__' ? ownerLogin : '';
+        targetLabel = owner ? `${name} · ${owner}` : name;
+      } else {
+        targetLabel = `SHIP-${targetRef.id}`;
+      }
     } else {
-      targetLabel = `SHIP-${targetRef.id}`;
+      targetLabel = staticTargetLabel(targetRef, statics, stationTypes, races);
     }
   }
 
@@ -123,10 +144,24 @@ export function CombatHUD({ ownShip, ships, logins, races, ownCargo, ownSectorID
                 {targetLabel ?? '—'}
               </span>
             </div>
-            {targetRef && inScanner && targetShip ? (
+            {targetIsShip && inScanner && targetShip ? (
               <>
                 <MiniBar label="Корпус" value={targetShip.hp} max={targetShip.maxHP} variant="danger" />
                 <MiniBar label="Щиты" value={targetShip.shield} max={targetShip.maxShield} variant="" />
+              </>
+            ) : targetStatic ? (
+              // A destructible static carries no maxHP on the client (TASK-113
+              // NFR-02), so the hull is a numeric readout and only the shield —
+              // which has a max — gets a bar. Absent staticCombat falls through
+              // to the scanner message below (AC-5: never crashes the panel).
+              <>
+                <div className="sw-vital__head">
+                  <span className="sw-vital__label">Корпус</span>
+                  <span className="sw-vital__value sw-mono">{targetStatic.hp}</span>
+                </div>
+                {targetStatic.maxShield > 0 && (
+                  <MiniBar label="Щиты" value={targetStatic.shield} max={targetStatic.maxShield} variant="" />
+                )}
               </>
             ) : (
               <span className="sw-mono" style={{ fontSize: 10, color: 'var(--ink-mute)' }}>
@@ -163,8 +198,16 @@ export function CombatHUD({ ownShip, ships, logins, races, ownCargo, ownSectorID
               glyph="⬡"
               label="Запустить дронов"
               count={drones}
-              disabled={pending || !targetRef || drones === 0}
-              title={!targetRef ? 'Нет цели' : drones === 0 ? 'Нет дронов в трюме' : undefined}
+              disabled={pending || !targetRef || !targetIsShip || drones === 0}
+              title={
+                !targetRef
+                  ? 'Нет цели'
+                  : !targetIsShip
+                    ? 'Дроны атакуют только корабли'
+                    : drones === 0
+                      ? 'Нет дронов в трюме'
+                      : undefined
+              }
               onClick={() => targetRef && run(sendLaunchDrone(ownShip.id, targetRef, DRONE_SALVO), true)}
             />
             <WeaponButton
@@ -290,8 +333,51 @@ function MiniBar({ label, value, max, variant }: { label: string; value: number;
   );
 }
 
-function refIfShip(ref: EntityRef | undefined): EntityRef | null {
-  return ref && ref.kind === EntityKind.Ship ? ref : null;
+// refIfTargetable keeps a ref the HUD weapons can lock onto (TASK-113 FR-03):
+// a ship OR a destructible static. Other kinds (gate/container/asteroid) yield
+// null so the panel shows "no target".
+function refIfTargetable(ref: EntityRef | undefined): EntityRef | null {
+  if (!ref) return null;
+  return ref.kind === EntityKind.Ship || isStaticTargetKind(ref.kind) ? ref : null;
+}
+
+// staticTargetLabel resolves a destructible static's HUD caption — its type
+// (station/shipyard/…) and, when known, its race (TASK-113 FR-03). Falls back
+// to the bare type name when the static is not in the current statics frame
+// (e.g. just left the radar window).
+function staticTargetLabel(
+  ref: EntityRef,
+  statics: SectorStatics,
+  stationTypes: StationType[],
+  races: Race[],
+): string {
+  const hit = findStatic(ref, statics);
+  const base = staticTypeLabel(ref.kind, hit?.type, stationTypes);
+  const raceName = hit?.race ? races.find((r) => r.id === hit.race)?.name : undefined;
+  return raceName ? `${base} · ${raceName}` : base;
+}
+
+// findStatic locates the static object matching ref so its type/race can label
+// the HUD target. Returns undefined when the static is not in the frame.
+function findStatic(ref: EntityRef, statics: SectorStatics): { type?: number; race: number } | undefined {
+  const byId = <T extends { id: number; race: number; type?: number }>(list: T[] | undefined) =>
+    list?.find((s) => s.id === ref.id);
+  switch (ref.kind) {
+    case EntityKind.Station:
+      return byId(statics.stations);
+    case EntityKind.Shipyard:
+      return byId(statics.shipyards);
+    case EntityKind.TradeStation:
+      return byId(statics.tradeStations);
+    case EntityKind.Pirbase:
+      return byId(statics.pirbases);
+    case EntityKind.LaserTower:
+      return byId(statics.laserTowers);
+    case EntityKind.Satellite:
+      return byId(statics.satellites);
+    default:
+      return undefined;
+  }
 }
 
 function cargoCount(cargo: CargoInventory | null, typeID: number): number {

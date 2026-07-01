@@ -141,8 +141,6 @@ export function SectorView() {
       <aside className="sw-sector-grid__ship">
         <PilotPanel
           ownShip={ownShip}
-          maxHP={world.maxHP}
-          maxShield={world.maxShield}
           ownCargo={ownCargo}
           races={races}
           riding={riding}

@@ -4,11 +4,6 @@ import type { TrackedShip } from './useWorldState';
 
 type Props = {
   ownShip: TrackedShip | null;
-  // maxHP / maxShield from the WS welcome — denominators for the hull/shield
-  // bars. Combat (damage, charge) is phase 4, so hp/shield currently sit at
-  // the max and the bars read full.
-  maxHP: number;
-  maxShield: number;
   // ownCargo backs the ГРУЗ bar (used/capacity). Null until the first fetch
   // or when the player has no ship.
   ownCargo: CargoInventory | null;
@@ -27,7 +22,7 @@ type Props = {
 // PilotPanel is the "КОРАБЛЬ" HUD: identity + vital bars (hull, shield,
 // speed, cargo) + the flight telemetry that the mockup omits but is useful
 // in-flight (sector, position, heading, turn rate, target, route).
-export function PilotPanel({ ownShip, maxHP, maxShield, ownCargo, races, onExit, riding }: Props) {
+export function PilotPanel({ ownShip, ownCargo, races, onExit, riding }: Props) {
   return (
     <div className="sw-panel">
       <div className="sw-panel-head">
@@ -142,9 +137,15 @@ export function PilotPanel({ ownShip, maxHP, maxShield, ownCargo, races, onExit,
               </span>
             </div>
 
+            {/* Hull/shield denominators come from the ship itself (per-ship
+                maxHP/maxShield, refreshed on every snapshot so up_hull/up_shield
+                upgrades are reflected), NOT the global welcome maxHP/maxShield
+                which defaults to 100 and is unrelated to the real ship
+                (TASK-115). Both fields are always present inside this
+                ownShip !== null branch, so no null / divide-by-zero risk. */}
             <div className="sw-col" style={{ gap: 8 }}>
-              <Vital label="Корпус" value={ownShip.hp} max={maxHP} unit="" variant={hullVariant(ownShip.hp, maxHP)} />
-              <Vital label="Щиты" value={ownShip.shield} max={maxShield} unit="" variant="" />
+              <Vital label="Корпус" value={ownShip.hp} max={ownShip.maxHP} unit="" variant={hullVariant(ownShip.hp, ownShip.maxHP)} />
+              <Vital label="Щиты" value={ownShip.shield} max={ownShip.maxShield} unit="" variant="" />
               <Vital label="Энергия" value={ownShip.energy} max={ownShip.maxEnergy} unit="" variant="" />
               <Vital
                 label="Скорость"

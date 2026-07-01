@@ -455,10 +455,6 @@ export type StaticsMessage = {
   // enabled, so the affordance matches what the worker will accept.
   dockRange: number;
   gateRange: number;
-  // maxHP/maxShield are the ship hull/shield maxima — denominators for the
-  // ship HUD's КОРПУС/ЩИТЫ bars. Currently the spawn constants.
-  maxHP: number;
-  maxShield: number;
   statics: SectorStatics;
 };
 

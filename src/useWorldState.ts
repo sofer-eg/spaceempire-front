@@ -164,10 +164,6 @@ export type WorldState = {
   // render is consistent before welcome arrives.
   dockRange: number;
   gateRange: number;
-  // maxHP / maxShield are the ship hull/shield maxima from the welcome —
-  // denominators for the ship HUD's КОРПУС/ЩИТЫ bars.
-  maxHP: number;
-  maxShield: number;
   tick: number;
   // timeScale is the sector's time-dilation factor (phase 7.2): 1 = real
   // time, < 1 = slowed under server overload. Drives the "замедление времени"
@@ -230,8 +226,6 @@ const DEFAULT_BOUNDS_RADIUS = 5000;
 const DEFAULT_NEAR_ZOOM_RADIUS = 125;
 const DEFAULT_DOCK_RANGE = 3;
 const DEFAULT_GATE_RANGE = 50;
-const DEFAULT_MAX_HP = 100;
-const DEFAULT_MAX_SHIELD = 100;
 
 // Exponential backoff for WS reconnect: start at 1s, double on each failure,
 // cap at RECONNECT_MAX_MS. Reset to RECONNECT_MIN_MS once a connection
@@ -250,8 +244,6 @@ export function useWorldState(): WorldState {
     nearZoomRadius: DEFAULT_NEAR_ZOOM_RADIUS,
     dockRange: DEFAULT_DOCK_RANGE,
     gateRange: DEFAULT_GATE_RANGE,
-    maxHP: DEFAULT_MAX_HP,
-    maxShield: DEFAULT_MAX_SHIELD,
     tick: 0,
     timeScale: 1,
     connection: 'connecting',
@@ -329,8 +321,6 @@ export function useWorldState(): WorldState {
           nearZoomRadius: DEFAULT_NEAR_ZOOM_RADIUS,
           dockRange: DEFAULT_DOCK_RANGE,
           gateRange: DEFAULT_GATE_RANGE,
-          maxHP: DEFAULT_MAX_HP,
-          maxShield: DEFAULT_MAX_SHIELD,
           tick: 0,
           timeScale: 1,
           connection: 'open',
@@ -387,8 +377,6 @@ export function useWorldState(): WorldState {
             nearZoomRadius: msg.nearZoomRadius > 0 ? msg.nearZoomRadius : s.nearZoomRadius,
             dockRange: msg.dockRange > 0 ? msg.dockRange : s.dockRange,
             gateRange: msg.gateRange > 0 ? msg.gateRange : s.gateRange,
-            maxHP: msg.maxHP > 0 ? msg.maxHP : s.maxHP,
-            maxShield: msg.maxShield > 0 ? msg.maxShield : s.maxShield,
           }));
           return;
         }
@@ -551,8 +539,6 @@ export function useWorldState(): WorldState {
           nearZoomRadius: s.nearZoomRadius,
           dockRange: s.dockRange,
           gateRange: s.gateRange,
-          maxHP: s.maxHP,
-          maxShield: s.maxShield,
           tick: snap.tick,
           // Snapshots omit timeScale at real time (1.0) — default to 1.
           timeScale: snap.timeScale ?? 1,

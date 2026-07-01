@@ -582,6 +582,15 @@ html, body, #root {
 .sw-target-row--selected .sw-target-menu-btn {
   border-color: var(--accent-target);
 }
+/* --self marks the pinned "свой" row (the controlled ship) at the top of the
+   Ships tab (TASK-118 FR-2). A cyan left accent reads it apart as "you" —
+   distinct from the orange --selected (fly-to target) treatment. The row is an
+   indicator (click focuses the camera), so it has no kebab menu. */
+.sw-target-row--self .sw-target-btn {
+  border-color: var(--cyan);
+  border-left-width: 3px;
+  background: rgba(0, 200, 220, 0.07);
+}
 .sw-target-menu-btn {
   flex: 0 0 auto;
   background: transparent;

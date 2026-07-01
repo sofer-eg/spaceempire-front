@@ -73,6 +73,11 @@ type Props = {
   stationTypes: StationType[];
   currentSectorID: number;
   ownPlayerID: number;
+  // controlShipID is the ship the player is actively controlling. It is lifted
+  // out of the main ship group and drawn LAST in the DOM so it always sits on
+  // top of every other object of the layer (TASK-118 FR-1). 0 while riding /
+  // before spawn — then no ship is lifted.
+  controlShipID: number;
   ownRace: number;
   tickIntervalMs: number;
   width: number;
@@ -229,6 +234,57 @@ export const ObjectLayer = forwardRef<ObjectLayerHandle, Props>(function ObjectL
   const sid = p.currentSectorID;
   const shipList = [...p.ships.values()].filter((s) => s.sectorID === sid);
   const gatesHere = p.gates.filter((g) => g.sectorA === sid || g.sectorB === sid);
+  // The controlled ship is lifted out of the main group and drawn last so it
+  // sits on top of every object (TASK-118 FR-1). It still registers in
+  // shipNodes by id, so the rAF update() positions it exactly like the rest.
+  const controlledShip = p.controlShipID ? shipList.find((s) => s.id === p.controlShipID) : undefined;
+
+  // renderShip builds one ship <g> (hit-circle + own-ring + shield arc +
+  // velocity vector + hull). Shared by the main ship group and the lifted
+  // controlled-ship node so both render identically (only the DOM position
+  // differs, which decides z-order).
+  const renderShip = (s: TrackedShip) => {
+    const cat = categoryForShip(s);
+    const rel = shipRelation(s, p.ownPlayerID, p.ownRace);
+    const colour = relationColor(rel);
+    const own = s.playerID === p.ownPlayerID;
+    const login = own ? 'свой' : (p.logins.get(s.playerID) ?? `#${s.playerID}`);
+    // Context-menu title: name (10.6) · owner. The owner suffix is shown
+    // only for player ships (own → «свой», others → login); NPC ships
+    // (the system __npc__ owner) drop it since the name already carries
+    // the race/model (mirrors TargetsPanel, phase 10.7/10.16).
+    const name = shipDisplayName(s, p.races);
+    const ownerLogin = own ? 'свой' : p.logins.get(s.playerID);
+    const owner = ownerLogin && ownerLogin !== '__npc__' ? ownerLogin : '';
+    const menuLabel = owner ? `${name} · ${owner}` : name;
+    const hasShield = (s.maxShield ?? 0) > 0 && s.shield < s.maxShield;
+    return (
+      <g key={`ship-${s.id}`} ref={shipRef(shipNodes, s.id)} style={{ color: colour }}>
+        <circle
+          className="hit"
+          r={HIT_R}
+          fill="transparent"
+          style={{ pointerEvents: 'auto', cursor: 'pointer' }}
+          onClick={(e) => p.onPick({ kind: 'ship', id: s.id, x: s.x, y: s.y, label: menuLabel, relation: rel }, ...evXY(e.clientX, e.clientY))}
+          onMouseEnter={(e) => { const [px, py] = evXY(e.clientX, e.clientY); p.onHover({ shipID: s.id, login, x: px, y: py }); }}
+          onMouseLeave={() => p.onHover(null)}
+        />
+        {own && (
+          <circle r={18} fill="none" stroke="currentColor" strokeWidth={1} strokeOpacity={0.5} strokeDasharray="2 3" pointerEvents="none" />
+        )}
+        {hasShield && (
+          <path d="M-7,-13 A 7 7 0 0 1 7,-13" fill="none" stroke="currentColor" strokeWidth={1.5} strokeOpacity={0.85} pointerEvents="none" />
+        )}
+        <g className="vel" pointerEvents="none" style={{ visibility: 'hidden' }}>
+          <line className="vel-line" x1={0} y1={0} x2={0} y2={-1} stroke="currentColor" strokeWidth={1.4} strokeOpacity={0.6} strokeDasharray="2.6 2.2" />
+          <path className="vel-head" d="M0,0 L2.2,4 L-2.2,4 Z" fill="currentColor" fillOpacity={0.7} transform="translate(0 0)" />
+        </g>
+        <g className="heading" pointerEvents="none">
+          {s.isSpacesuit ? <SpacesuitGlyph /> : <use href={`#hull-${cat}`} />}
+        </g>
+      </g>
+    );
+  };
 
   return (
     <svg
@@ -375,49 +431,13 @@ export const ObjectLayer = forwardRef<ObjectLayerHandle, Props>(function ObjectL
         </g>
       ))}
 
-      {/* Ships (z-top among objects) */}
-      {shipList.map((s) => {
-        const cat = categoryForShip(s);
-        const rel = shipRelation(s, p.ownPlayerID, p.ownRace);
-        const colour = relationColor(rel);
-        const own = s.playerID === p.ownPlayerID;
-        const login = own ? 'свой' : (p.logins.get(s.playerID) ?? `#${s.playerID}`);
-        // Context-menu title: name (10.6) · owner. The owner suffix is shown
-        // only for player ships (own → «свой», others → login); NPC ships
-        // (the system __npc__ owner) drop it since the name already carries
-        // the race/model (mirrors TargetsPanel, phase 10.7/10.16).
-        const name = shipDisplayName(s, p.races);
-        const ownerLogin = own ? 'свой' : p.logins.get(s.playerID);
-        const owner = ownerLogin && ownerLogin !== '__npc__' ? ownerLogin : '';
-        const menuLabel = owner ? `${name} · ${owner}` : name;
-        const hasShield = (s.maxShield ?? 0) > 0 && s.shield < s.maxShield;
-        return (
-          <g key={`ship-${s.id}`} ref={shipRef(shipNodes, s.id)} style={{ color: colour }}>
-            <circle
-              className="hit"
-              r={HIT_R}
-              fill="transparent"
-              style={{ pointerEvents: 'auto', cursor: 'pointer' }}
-              onClick={(e) => p.onPick({ kind: 'ship', id: s.id, x: s.x, y: s.y, label: menuLabel, relation: rel }, ...evXY(e.clientX, e.clientY))}
-              onMouseEnter={(e) => { const [px, py] = evXY(e.clientX, e.clientY); p.onHover({ shipID: s.id, login, x: px, y: py }); }}
-              onMouseLeave={() => p.onHover(null)}
-            />
-            {own && (
-              <circle r={18} fill="none" stroke="currentColor" strokeWidth={1} strokeOpacity={0.5} strokeDasharray="2 3" pointerEvents="none" />
-            )}
-            {hasShield && (
-              <path d="M-7,-13 A 7 7 0 0 1 7,-13" fill="none" stroke="currentColor" strokeWidth={1.5} strokeOpacity={0.85} pointerEvents="none" />
-            )}
-            <g className="vel" pointerEvents="none" style={{ visibility: 'hidden' }}>
-              <line className="vel-line" x1={0} y1={0} x2={0} y2={-1} stroke="currentColor" strokeWidth={1.4} strokeOpacity={0.6} strokeDasharray="2.6 2.2" />
-              <path className="vel-head" d="M0,0 L2.2,4 L-2.2,4 Z" fill="currentColor" fillOpacity={0.7} transform="translate(0 0)" />
-            </g>
-            <g className="heading" pointerEvents="none">
-              {s.isSpacesuit ? <SpacesuitGlyph /> : <use href={`#hull-${cat}`} />}
-            </g>
-          </g>
-        );
-      })}
+      {/* Ships (z-top among objects) — controlled ship excluded here, it is
+          lifted below so it always draws over every other ship/object. */}
+      {shipList.filter((s) => s.id !== p.controlShipID).map(renderShip)}
+
+      {/* Controlled ship — last object node in the DOM, so its silhouette and
+          hit-circle sit on top of everything else (TASK-118 FR-1). */}
+      {controlledShip && renderShip(controlledShip)}
 
       {/* Selected target (amber) — rendered when present, positioned in update */}
       {p.selectedTarget && (

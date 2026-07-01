@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   EntityKind,
   sendMove,
+  type Asteroid,
   type Container,
   type EntityRef,
   type InstalledEquipment,
@@ -44,6 +45,11 @@ type Props = {
   // Listed under the "Другие" tab so loot is reachable from the panel, not
   // only by clicking the crate on the canvas (phase 10.9).
   containers?: Map<number, Container>;
+  // asteroids is the live minable ore-body set within AOI (world.asteroids),
+  // the same set the map draws. Listed under the "Другое" tab so the player
+  // can fly to / mine a rock from the panel, not only by clicking it on the
+  // canvas (TASK-118 FR-4).
+  asteroids?: Map<number, Asteroid>;
   // races is the GET /api/races reference; static row labels get a " · Раса"
   // suffix so the owning faction is visible in the UI (phase 8.13).
   races: Race[];
@@ -65,6 +71,10 @@ type Props = {
   gateRange: number;
   logins: Map<number, string>;
   onHoverTarget?: (h: HighlightRef | null) => void;
+  // onFocusOwnShip centers the camera on the controlled ship (zoomMode='near'
+  // in SectorView). Called when the player clicks the pinned "свой" row in the
+  // Ships tab instead of issuing a move command (TASK-118 FR-2).
+  onFocusOwnShip?: () => void;
   // selectedTarget identifies the row the player is currently flying to
   // (derived from ownShip.currentTargetRef in SectorView). The matching
   // row renders with the .sw-target-row--selected modifier so the panel
@@ -74,13 +84,15 @@ type Props = {
 
 // The navigation panel groups contacts into three tabs, mirroring the
 // original StarWind: ships, stations (stations/shipyards/trade-stations/
-// pirbases), and "other" (gates + loot containers). Phase 10.9.
+// pirbases), and "other" (gates + asteroids + loot containers). Phase 10.9;
+// asteroids added in TASK-118. Rows within each tab are sorted deterministically
+// (group priority, then id) — see the `order`/`id` fields on Target.
 type TabId = 'ships' | 'stations' | 'other';
 
 const TABS: { id: TabId; title: string; noun: string; empty: string }[] = [
   { id: 'ships', title: 'Корабли', noun: 'кораблей', empty: 'Кораблей рядом нет.' },
   { id: 'stations', title: 'Станции', noun: 'станций', empty: 'Станций в секторе нет.' },
-  { id: 'other', title: 'Другие объекты (ворота, контейнеры)', noun: 'объектов', empty: 'Других объектов нет.' },
+  { id: 'other', title: 'Другие объекты (ворота, астероиды, контейнеры)', noun: 'объектов', empty: 'Других объектов нет.' },
 ];
 
 // NavTabIcon is the glyph shown on a tab button. Shapes echo the canvas /
@@ -121,12 +133,22 @@ type Target = {
   key: string;
   cat: TabId;
   picked: PickedObject;
+  // id is the numeric entity id used as the stable secondary sort key inside a
+  // group (TASK-118 FR-5). order is the group priority within the tab (lower =
+  // higher up): ships → self 0 / others 1; stations → TradeStation 0 / Shipyard
+  // 1 / rest 2; other → gate 0 / asteroid 1 / container 2.
+  id: number;
+  order: number;
+  // own marks the controlled ship's self row in the Ships tab: pinned first,
+  // click focuses the camera (no move), kebab menu hidden (TASK-118 FR-2).
+  own?: boolean;
 };
 
 export function TargetsPanel({
   ships,
   statics,
   containers,
+  asteroids,
   races,
   stationTypes,
   currentSectorID,
@@ -137,6 +159,7 @@ export function TargetsPanel({
   gateRange,
   logins,
   onHoverTarget,
+  onFocusOwnShip,
   selectedTarget,
 }: Props) {
   const galaxy = useGalaxy();
@@ -158,18 +181,22 @@ export function TargetsPanel({
     };
     for (const s of ships.values()) {
       if (s.sectorID !== currentSectorID) continue;
-      if (s.id === ownShipID) continue;
-      // Phase 10.7: label ships by name (10.6 shipDisplayName) · owner. The
-      // owner suffix is shown only for player-owned ships — own ships read
-      // "свой", other players read their login. NPC ships (no human login /
-      // the system __npc__) drop the suffix since their name already carries
-      // the race/model.
+      // TASK-118 FR-2: the controlled ship is now INCLUDED and pinned first
+      // (order 0, own flag) instead of being skipped. Phase 10.7: label ships
+      // by name (10.6 shipDisplayName) · owner. The owner suffix is shown only
+      // for player-owned ships — own ships read "свой", other players read
+      // their login. NPC ships (no human login / the system __npc__) drop the
+      // suffix since their name already carries the race/model.
+      const isSelf = s.id === ownShipID;
       const name = shipDisplayName(s, races);
       const ownerLogin = s.playerID === ownPlayerID ? 'свой' : logins.get(s.playerID);
       const owner = ownerLogin && ownerLogin !== '__npc__' ? ownerLogin : '';
       out.push({
         key: `ship-${s.id}`,
         cat: 'ships',
+        id: s.id,
+        order: isSelf ? 0 : 1,
+        own: isSelf,
         picked: {
           kind: 'ship',
           id: s.id,
@@ -191,6 +218,8 @@ export function TargetsPanel({
         out.push({
           key: `gate-${g.id}`,
           cat: 'other',
+          id: g.id,
+          order: 0,
           picked: {
             kind: 'gate',
             id: g.id,
@@ -201,10 +230,31 @@ export function TargetsPanel({
         });
       }
     }
+    // Asteroids (TASK-118 FR-4): the same AOI set the map draws (world.asteroids),
+    // surfaced under the "Другое" tab between gates and containers. Labelled by
+    // id (ore type / mass stay on the map glyph, gated by the ore scanner) so a
+    // rock is reachable for a fly-to / «Бурить» from the panel.
+    for (const a of asteroids?.values() ?? []) {
+      out.push({
+        key: `asteroid-${a.id}`,
+        cat: 'other',
+        id: a.id,
+        order: 1,
+        picked: {
+          kind: 'asteroid',
+          id: a.id,
+          x: a.x,
+          y: a.y,
+          label: `Астероид #${a.id}`,
+        },
+      });
+    }
     for (const st of statics.stations ?? []) {
       out.push({
         key: `station-${st.id}`,
         cat: 'stations',
+        id: st.id,
+        order: 2,
         picked: {
           kind: 'dock',
           ref: { kind: EntityKind.Station, id: st.id },
@@ -219,6 +269,8 @@ export function TargetsPanel({
       out.push({
         key: `shipyard-${sy.id}`,
         cat: 'stations',
+        id: sy.id,
+        order: 1,
         picked: {
           kind: 'dock',
           ref: { kind: EntityKind.Shipyard, id: sy.id },
@@ -232,6 +284,8 @@ export function TargetsPanel({
       out.push({
         key: `trade-station-${ts.id}`,
         cat: 'stations',
+        id: ts.id,
+        order: 0,
         picked: {
           kind: 'dock',
           ref: { kind: EntityKind.TradeStation, id: ts.id },
@@ -245,6 +299,8 @@ export function TargetsPanel({
       out.push({
         key: `pirbase-${pb.id}`,
         cat: 'stations',
+        id: pb.id,
+        order: 2,
         picked: {
           kind: 'dock',
           ref: { kind: EntityKind.Pirbase, id: pb.id },
@@ -258,6 +314,8 @@ export function TargetsPanel({
       out.push({
         key: `container-${c.id}`,
         cat: 'other',
+        id: c.id,
+        order: 2,
         picked: {
           kind: 'container',
           id: c.id,
@@ -268,10 +326,21 @@ export function TargetsPanel({
       });
     }
     return out;
-  }, [ships, statics, containers, races, stationTypes, currentSectorID, ownShipID, ownPlayerID, logins, galaxy]);
+  }, [ships, statics, containers, asteroids, races, stationTypes, currentSectorID, ownShipID, ownPlayerID, logins, galaxy]);
 
-  // visible is the subset of contacts for the active tab (phase 10.9).
-  const visible = useMemo(() => targets.filter((t) => t.cat === tab), [targets, tab]);
+  // visible is the subset of contacts for the active tab (phase 10.9),
+  // deterministically ordered (TASK-118 FR-5): first by group priority
+  // (`order`), then by id ascending, then by key as a final tiebreak so rows
+  // never reshuffle between ticks (distance stays in the label only, it is not
+  // a sort key). key is unique per entity, so the sort is fully stable even if
+  // two different-typed statics share an id.
+  const visible = useMemo(
+    () =>
+      targets
+        .filter((t) => t.cat === tab)
+        .sort((a, b) => a.order - b.order || a.id - b.id || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)),
+    [targets, tab],
+  );
 
   // distTo is the planar distance from the player's current position to
   // a target's world coords. Returns Infinity when ownShip is missing so
@@ -345,6 +414,8 @@ export function TargetsPanel({
               <TargetRow
                 key={t.key}
                 target={t.picked}
+                own={t.own ?? false}
+                onFocusOwnShip={onFocusOwnShip}
                 labelPrefix={labelPrefix}
                 dist={dist}
                 ships={ships}
@@ -385,6 +456,10 @@ export function TargetsPanel({
 // menu toggles.
 type TargetRowProps = {
   target: PickedObject;
+  // own marks the controlled ship's self row (TASK-118 FR-2): click focuses the
+  // camera via onFocusOwnShip (no move command), and the kebab menu is hidden.
+  own: boolean;
+  onFocusOwnShip?: () => void;
   labelPrefix: string;
   // dist is the planar distance from the own ship (Infinity when no ship).
   // ships + ownPlayerID feed ObjectMarker so it can resolve own-vs-enemy
@@ -413,6 +488,8 @@ type TargetRowProps = {
 
 function TargetRow({
   target,
+  own,
+  onFocusOwnShip,
   labelPrefix,
   dist,
   ships,
@@ -466,6 +543,13 @@ function TargetRow({
   };
 
   const onRowClick = () => {
+    // The pinned "свой" row is an indicator, not a move target (TASK-118 FR-2):
+    // clicking it centers the camera on the controlled ship (zoomMode='near')
+    // instead of issuing a move command against the ship's own position.
+    if (own) {
+      onFocusOwnShip?.();
+      return;
+    }
     if (disabled || ownShipID === 0) return;
     // Gate rows fall through to a bare sendMove (no ref) — gates are not
     // valid EntityRef kinds on the backend, and "Лететь к воротам" still
@@ -481,7 +565,7 @@ function TargetRow({
 
   return (
     <div ref={wrapRef} style={{ position: 'relative' }}>
-      <div className={`sw-target-row${selected ? ' sw-target-row--selected' : ''}`}>
+      <div className={`sw-target-row${own ? ' sw-target-row--self' : ''}${selected ? ' sw-target-row--selected' : ''}`}>
         <button
           type="button"
           className={`sw-target-btn ${target.kind === 'gate' ? 'gate' : ''}${
@@ -491,8 +575,8 @@ function TargetRow({
           onMouseEnter={() => {
             // Containers aren't highlighted on the canvas and HighlightRef
             // has no 'container' kind — skip the hover highlight for them
-            // (phase 10.9). Asteroids likewise have no HighlightRef kind and
-            // aren't listed in this panel (phase 10.3.6).
+            // (phase 10.9). Asteroids likewise have no HighlightRef kind
+            // (phase 10.3.6 / TASK-118).
             if (target.kind === 'container' || target.kind === 'asteroid') return;
             onHoverTarget?.({
               kind: target.kind,
@@ -505,22 +589,25 @@ function TargetRow({
           }}
           onMouseLeave={() => onHoverTarget?.(null)}
           disabled={disabled}
-          title={`Лететь к (${target.x.toFixed(0)}, ${target.y.toFixed(0)})`}
+          title={own ? 'Показать свой корабль' : `Лететь к (${target.x.toFixed(0)}, ${target.y.toFixed(0)})`}
         >
           <ObjectMarker picked={target} ships={ships} ownPlayerID={ownPlayerID} ownRace={ownRace} />
           <span className="sw-target-name">{`${labelPrefix}${target.label}`}</span>
           <span className="pos sw-mono">{Number.isFinite(dist) ? fmtDist(dist) : ''}</span>
         </button>
-        <button
-          type="button"
-          className="sw-target-menu-btn"
-          onClick={handleMenuClick}
-          aria-expanded={menuOpen}
-          aria-label="Действия над целью"
-          title="Действия"
-        >
-          ⋯
-        </button>
+        {/* The self row is an indicator only — no action menu (TASK-118 FR-2). */}
+        {!own && (
+          <button
+            type="button"
+            className="sw-target-menu-btn"
+            onClick={handleMenuClick}
+            aria-expanded={menuOpen}
+            aria-label="Действия над целью"
+            title="Действия"
+          >
+            ⋯
+          </button>
+        )}
       </div>
       {menuOpen && menuRect &&
         createPortal(

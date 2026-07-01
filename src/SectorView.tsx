@@ -233,6 +233,7 @@ export function SectorView() {
           ships={ships}
           statics={statics}
           containers={world.containers}
+          asteroids={world.asteroids}
           races={races}
           stationTypes={stationTypes}
           currentSectorID={ownSectorID}
@@ -243,6 +244,7 @@ export function SectorView() {
           gateRange={world.gateRange}
           logins={logins}
           onHoverTarget={setHighlight}
+          onFocusOwnShip={() => setZoomMode('near')}
           selectedTarget={selectedTargetRef}
         />
       </aside>

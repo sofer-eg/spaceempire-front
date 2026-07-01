@@ -388,6 +388,7 @@ export function SectorCanvas(props: Props) {
         stationTypes={props.stationTypes}
         currentSectorID={props.currentSectorID}
         ownPlayerID={props.ownPlayerID}
+        controlShipID={props.controlledShipID}
         ownRace={props.ownRace}
         tickIntervalMs={props.tickIntervalMs}
         width={size.width}

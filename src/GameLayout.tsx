@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, Outlet } from 'react-router-dom';
+import { Link, Outlet, useNavigate } from 'react-router-dom';
 import {
   EntityKind,
   fetchCargo,
@@ -31,6 +31,7 @@ const WIKI_URL = import.meta.env.VITE_WIKI_URL ?? 'https://github.com/spaceempir
 
 export function GameLayout() {
   const { player, logout } = useAuth();
+  const navigate = useNavigate();
   const world = useWorldState();
   const galaxy = useGalaxy();
   const [players, setPlayers] = useState<PlayerSummary[]>([]);
@@ -53,6 +54,20 @@ export function GameLayout() {
   const [fleetOpen, setFleetOpen] = useState(false);
   const toggleFleet = useCallback(() => setFleetOpen((v) => !v), []);
   const closeFleet = useCallback(() => setFleetOpen(false), []);
+
+  // The full-center «ПИЛОТ» page (profile + clan + fleet + reputation) is
+  // hidden by default; the rail's "пилот" button toggles it. It replaces the
+  // sector map (SectorView reads pilotPageOpen from ctx), so opening it also
+  // routes to /sector — the page only lives there. Reputation used to sit in
+  // the sector's left column; it moved onto this page to declutter it.
+  const [pilotOpen, setPilotOpen] = useState(false);
+  const togglePilot = useCallback(() => {
+    // Navigate from the event handler (not inside the setState updater — that
+    // runs during render and triggers a "setState in render" router warning).
+    if (!pilotOpen) navigate('/sector');
+    setPilotOpen((v) => !v);
+  }, [pilotOpen, navigate]);
+  const closePilot = useCallback(() => setPilotOpen(false), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -218,6 +233,8 @@ export function GameLayout() {
     races,
     stationTypes,
     ownCargo,
+    pilotPageOpen: pilotOpen,
+    closePilotPage: closePilot,
   };
 
   const sectorName = useMemo<string | null>(() => {
@@ -291,6 +308,9 @@ export function GameLayout() {
             questBadge={questCount}
             fleetOpen={fleetOpen}
             onToggleFleet={toggleFleet}
+            pilotOpen={pilotOpen}
+            onTogglePilot={togglePilot}
+            onLeavePilot={closePilot}
           />
           <main className="sw-main">
             <Outlet context={ctx} />

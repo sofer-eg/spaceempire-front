@@ -38,6 +38,14 @@ export type GameOutletContext = {
   // when the player has no ship. The ship HUD reads used/capacity for the
   // ГРУЗ bar.
   ownCargo: CargoInventory | null;
+  // pilotPageOpen: the rail's «пилот» button toggles a full-center «ПИЛОТ»
+  // page (profile + clan + fleet + reputation) that replaces the sector map,
+  // mirroring the docked→StationView swap. State lives in GameLayout (the rail
+  // owns the toggle); SectorView reads it to pick what fills the map cell.
+  pilotPageOpen: boolean;
+  // closePilotPage returns the center to the map/station (the page's own
+  // «назад» button and the сектор/станция rail items call it).
+  closePilotPage: () => void;
 };
 
 export function useGameContext(): GameOutletContext {

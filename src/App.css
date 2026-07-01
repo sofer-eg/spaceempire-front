@@ -368,7 +368,20 @@ html, body, #root {
   height: 100%;
   min-height: 0;
 }
-.sw-sector-grid__ship { grid-area: ship; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+/* The ship column is bounded by the journal (the "ship" grid row ends at the
+   log's top). Its stacked panels (Корабль HUD + Бой + Курс) can be taller than
+   that — overflow-y keeps them reachable by scroll instead of spilling under
+   the journal footer. padding-right reserves a gutter so the scrollbar doesn't
+   overlap the panel borders. */
+.sw-sector-grid__ship {
+  grid-area: ship;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
 .sw-sector-grid__map  { grid-area: map; min-height: 0; min-width: 0; position: relative; }
 .sw-sector-grid__nav  { grid-area: nav; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
 .sw-sector-grid__log  { grid-area: log; min-height: 0; }
@@ -803,6 +816,33 @@ html, body, #root {
   gap: 12px;
 }
 .sw-station__error { color: var(--danger); }
+
+/* ---------- pilot page (full-center, replaces the sector map) ---------- */
+.sw-pilot {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.sw-pilot__body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px;
+}
+/* Dossier cards stacked as full-width blocks down the centre column. */
+.sw-pilot__grid {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.sw-pilot__card { min-width: 0; }
+.sw-pilot__callsign {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--ink-1, #eaf2ff);
+}
 
 .sw-market__section { margin-top: 10px; }
 .sw-market__section:first-of-type { margin-top: 2px; }

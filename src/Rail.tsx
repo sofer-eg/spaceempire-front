@@ -22,6 +22,13 @@ type Props = {
   // FleetPanel (10.14a) owned by GameLayout. fleetOpen drives the marker.
   fleetOpen: boolean;
   onToggleFleet: () => void;
+  // "пилот" is a toggle like the two above, but it swaps the sector map for a
+  // full-center «ПИЛОТ» page (owned by GameLayout via ctx.pilotPageOpen).
+  pilotOpen: boolean;
+  onTogglePilot: () => void;
+  // onLeavePilot closes the pilot page. The сектор / станция items call it so
+  // those buttons reliably return the centre to the map / station.
+  onLeavePilot: () => void;
 };
 
 type Item = {
@@ -36,7 +43,7 @@ type Item = {
   badge?: number;
 };
 
-export function Rail({ docked, questsOpen, onToggleQuests, questBadge, fleetOpen, onToggleFleet }: Props) {
+export function Rail({ docked, questsOpen, onToggleQuests, questBadge, fleetOpen, onToggleFleet, pilotOpen, onTogglePilot, onLeavePilot }: Props) {
   const navigate = useNavigate();
   const loc = useLocation();
   const onSector = loc.pathname.startsWith('/sector');
@@ -47,15 +54,22 @@ export function Rail({ docked, questsOpen, onToggleQuests, questBadge, fleetOpen
   const soon = (phase: string) => `Скоро — ${phase}`;
 
   const items: Item[] = [
-    { id: 'sector', label: 'сектор', icon: ICONS.sector, to: '/sector', enabled: true, active: onSector && !docked },
+    {
+      id: 'sector',
+      label: 'сектор',
+      icon: ICONS.sector,
+      onClick: () => { onLeavePilot(); navigate('/sector'); },
+      enabled: true,
+      active: onSector && !docked && !pilotOpen,
+    },
     { id: 'galaxy', label: 'галактика', icon: ICONS.galaxy, to: '/galaxy', enabled: true, active: onGalaxy },
     {
       id: 'station',
       label: 'станция',
       icon: ICONS.station,
-      to: '/sector',
+      onClick: () => { onLeavePilot(); navigate('/sector'); },
       enabled: docked,
-      active: onSector && docked,
+      active: onSector && docked && !pilotOpen,
       title: docked ? undefined : 'Доступно при стыковке',
     },
     {
@@ -82,7 +96,15 @@ export function Rail({ docked, questsOpen, onToggleQuests, questBadge, fleetOpen
     },
     { id: 'assets', label: 'активы', icon: ICONS.assets, enabled: false, active: false, title: soon('фаза 6') },
     { id: 'clan', label: 'клан', icon: ICONS.clan, to: '/clans', enabled: true, active: onClans },
-    { id: 'pilot', label: 'пилот', icon: ICONS.pilot, enabled: false, active: false, title: soon('фаза 6') },
+    {
+      id: 'pilot',
+      label: 'пилот',
+      icon: ICONS.pilot,
+      onClick: onTogglePilot,
+      enabled: true,
+      active: pilotOpen,
+      title: pilotOpen ? 'Скрыть профиль пилота' : 'Показать профиль пилота',
+    },
   ];
 
   return (

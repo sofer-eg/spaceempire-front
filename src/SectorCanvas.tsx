@@ -8,7 +8,6 @@ import {
   fitSquareToCanvas,
   worldToCanvas as wToC,
   canvasToWorld as cToW,
-  RADAR_BIG_MULTIPLIER,
   SATELLITE_REVEAL_RADIUS,
   type Viewport,
 } from './sectorViewport';
@@ -577,24 +576,15 @@ function drawRadarRing(
   const pr = Math.abs(edgeX - centerX);
   if (pr <= 1) return;
   ctx.save();
-  // Small radar — ships/missiles/drones/containers edge.
+  // Single radar ring (TASK-117) — the edge of what the server delivers:
+  // ships/drones/missiles/containers/laser-towers/satellites. Stations, gates
+  // and asteroids are always visible, so there is no second (big-radar) ring.
   ctx.strokeStyle = 'rgba(91, 206, 250, 0.4)';
   ctx.lineWidth = 1.2;
   ctx.setLineDash([3, 5]);
   ctx.beginPath();
   ctx.arc(centerX, centerY, pr, 0, Math.PI * 2);
   ctx.stroke();
-  // Big-object radar — stations/shipyards/TS/pirbases/towers/gates edge (L2).
-  const [bigEdgeX] = wToC(cx + own.radarRange * RADAR_BIG_MULTIPLIER, cy, vp, w, h);
-  const bpr = Math.abs(bigEdgeX - centerX);
-  if (bpr > pr + 1) {
-    ctx.strokeStyle = 'rgba(91, 206, 250, 0.16)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([2, 10]);
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, bpr, 0, Math.PI * 2);
-    ctx.stroke();
-  }
   ctx.restore();
 }
 

@@ -1,11 +1,5 @@
 import type { SectorStatics, WorldGate } from './api';
 
-// RADAR_BIG_MULTIPLIER mirrors the backend cfg.RadarBigMultiplier (phase 10.20
-// L2): large objects (statics, gates) are visible within RadarRange × this. The
-// authoritative visibility is the server's per-tick statics delta; the client
-// uses it only to draw the big-radar ring and to fade out far gates.
-export const RADAR_BIG_MULTIPLIER = 2.5;
-
 // SATELLITE_REVEAL_RADIUS mirrors the backend cfg.SatelliteRevealRadius (phase
 // 10.20 L5): a live navigation satellite reveals the whole sector to its owner
 // and allies. The client uses it only to draw the coverage ring around the

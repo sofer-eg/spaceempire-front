@@ -17,7 +17,7 @@ import type { HighlightRef } from '../TargetsPanel';
 import type { PickedObject } from '../ObjectActionsMenu';
 import type { SelectedTargetRef } from '../SectorCanvas';
 import { goodsName, shipDisplayName, staticTypeLabel, stationLetter, stationTypeName } from '../gameContext';
-import { RADAR_BIG_MULTIPLIER, worldToCanvas as wToC, type Viewport } from '../sectorViewport';
+import { worldToCanvas as wToC, type Viewport } from '../sectorViewport';
 import {
   ShapeDefs,
   StationGlyph,
@@ -196,30 +196,15 @@ export const ObjectLayer = forwardRef<ObjectLayerHandle, Props>(function ObjectL
       for (const s of p.statics.pirbases ?? []) if (s.sectorID === sid) place(`5:${s.id}`, s.x, s.y);
       for (const s of p.statics.laserTowers ?? []) if (s.sectorID === sid) place(`7:${s.id}`, s.x, s.y);
       for (const s of p.statics.satellites ?? []) if (s.sectorID === sid) place(`11:${s.id}`, s.x, s.y);
-      // Gate fade by big radar (phase 10.20a): resolve own ship's interpolated
-      // position; gates beyond radarRange × RADAR_BIG_MULTIPLIER are hidden.
-      // Falls back to showing all gates when the observer has no radar (spacesuit).
-      const ownShip = [...p.ships.values()].find(
-        (s) => s.playerID === p.ownPlayerID && s.sectorID === p.currentSectorID,
-      );
-      const bigR = ownShip?.radarRange ? ownShip.radarRange * RADAR_BIG_MULTIPLIER : null;
-      const owxInterp = ownShip ? ownShip.prevX + (ownShip.x - ownShip.prevX) * clamp01((now - ownShip.prevAt) / p.tickIntervalMs) : 0;
-      const owyInterp = ownShip ? ownShip.prevY + (ownShip.y - ownShip.prevY) * clamp01((now - ownShip.prevAt) / p.tickIntervalMs) : 0;
+      // Gates are always visible regardless of radar distance (TASK-117) — just
+      // position them. Laser towers and satellites are now radar-gated on the
+      // server, so it stops sending them out of range (no client fade needed).
       for (const g of p.gates) {
         const inA = g.sectorA === sid;
         if (!inA && g.sectorB !== sid) continue;
         const gx = inA ? g.posAX : g.posBX;
         const gy = inA ? g.posAY : g.posBY;
         place(`gate:${g.id}`, gx, gy);
-        const node = simpleNodes.current.get(`gate:${g.id}`);
-        if (node) {
-          if (bigR !== null) {
-            const dist = Math.hypot(gx - owxInterp, gy - owyInterp);
-            node.style.opacity = dist <= bigR ? '1' : '0';
-          } else {
-            node.style.opacity = ''; // no radar → clear inline style, show gate
-          }
-        }
       }
       for (const c of p.containers?.values() ?? []) place(`container:${c.id}`, c.x, c.y);
       for (const a of p.asteroids?.values() ?? []) place(`asteroid:${a.id}`, a.x, a.y);

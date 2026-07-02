@@ -6,6 +6,7 @@ import type { HighlightRef } from './TargetsPanel';
 import {
   computeMaxBounds,
   fitSquareToCanvas,
+  radarFitHalfSide,
   worldToCanvas as wToC,
   canvasToWorld as cToW,
   SATELLITE_REVEAL_RADIUS,
@@ -18,7 +19,7 @@ import { ObjectLayer, type ObjectLayerHandle } from './sector/ObjectLayer';
 
 type LoginMap = Map<number, string>;
 
-export type ZoomMode = 'max' | 'near';
+export type ZoomMode = 'max' | 'near' | 'radar';
 
 // SelectedTargetRef identifies the entity the player explicitly told their
 // ship to fly to (server-side ship.currentTargetRef). SectorView resolves
@@ -430,7 +431,10 @@ export function SectorCanvas(props: Props) {
 
 // computeViewport resolves the world rectangle to draw based on the current
 // zoom mode. In Near mode the camera follows the interpolated position of the
-// player's own ship; falls back to Max when the player has no ship here.
+// player's own ship; in Radar mode (TASK-122) it also follows the ship but
+// scales so the whole personal-radar circle fits with a margin. Both fall
+// back to Max when the player has no ship here (Radar also when the ship has
+// no class radar).
 function computeViewport(p: Props, canvasWidth: number, canvasHeight: number): Viewport {
   if (p.zoomMode === 'near') {
     const own = findOwnShip(p);
@@ -440,6 +444,18 @@ function computeViewport(p: Props, canvasWidth: number, canvasHeight: number): V
       const wx = own.prevX + (own.x - own.prevX) * t;
       const wy = own.prevY + (own.y - own.prevY) * t;
       const { halfX, halfY } = fitSquareToCanvas(p.nearZoomRadius, canvasWidth, canvasHeight);
+      return { centerX: wx, centerY: wy, halfX, halfY };
+    }
+  }
+  if (p.zoomMode === 'radar') {
+    const own = findOwnShip(p);
+    if (own && own.radarRange && own.radarRange > 0) {
+      const now = performance.now();
+      const t = Math.min(1, Math.max(0, (now - own.prevAt) / p.tickIntervalMs));
+      const wx = own.prevX + (own.x - own.prevX) * t;
+      const wy = own.prevY + (own.y - own.prevY) * t;
+      const halfSide = radarFitHalfSide(own.radarRange);
+      const { halfX, halfY } = fitSquareToCanvas(halfSide, canvasWidth, canvasHeight);
       return { centerX: wx, centerY: wy, halfX, halfY };
     }
   }

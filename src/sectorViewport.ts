@@ -25,6 +25,28 @@ const PADDING_MAX = 200;
 // half-side 0). 300 ≈ a SHIP_RADIUS-sized object is still readable.
 const MIN_HALF_MAX = 300;
 
+// RADAR_FIT_PADDING scales the radar radius into the fit-to-radar zoom
+// (TASK-122) half-side. A ring of radius R needs the viewport half-side ≥ R
+// just to graze the shorter canvas edge; ×1.1 leaves ~10% breathing room on
+// that axis so the dashed ring reads clearly instead of touching the border.
+// The longer canvas axis gets even more margin via fitSquareToCanvas.
+const RADAR_FIT_PADDING = 1.1;
+
+// radarFitHalfSide returns the world half-side for the fit-to-radar zoom
+// (TASK-122): the smallest square that wraps the player's personal radar
+// circle of the given radius with a ~10% margin, so the whole ring stays on
+// canvas even in dense sectors where the class radar (e.g. 3500 on an M5)
+// overflows the Max / Near views. Degenerate radii (≤0 or non-finite — e.g. a
+// spacesuit with no class radar) fall back to MIN_HALF_MAX; the caller
+// (computeViewport) also gates this mode out in that case, so the guard is
+// only a belt-and-braces floor.
+export function radarFitHalfSide(radarRange: number): number {
+  if (!Number.isFinite(radarRange) || radarRange <= 0) {
+    return MIN_HALF_MAX;
+  }
+  return Math.max(radarRange * RADAR_FIT_PADDING, MIN_HALF_MAX);
+}
+
 // computeMaxBounds returns the world-space square that just contains
 // every static AND gate of the given sector, padded by PADDING_MAX.
 // Gates are folded in via their near-side coords (posAX/Y when the gate's

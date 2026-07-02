@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "echo \"no tests yet\" && exit 0",
+    "test": "node --test \"src/**/*.test.ts\"",
     "preview": "vite preview",
     "e2e": "playwright test",
     "loadtest": "node e2e/ws-loadtest.mjs"

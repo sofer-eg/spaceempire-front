@@ -69,12 +69,23 @@ export function SectorView() {
 
   // Zoom toggle state lives in SectorView (not the canvas) so the panel
   // header chips can read it. Default 'max' shows the whole sector; Near
-  // is auto-disabled while the player has no ship in this sector — we
-  // also coerce the active mode back to 'max' so the canvas's
-  // ownShip-less fallback path matches what the chip reflects.
+  // is auto-disabled while the player has no ship in this sector, and Radar
+  // (TASK-122) additionally needs a class radar (radarRange>0 — a spacesuit
+  // has none). We coerce the active mode back to 'max' when its precondition
+  // is missing so the canvas's fallback path matches what the chip reflects.
   const [zoomMode, setZoomMode] = useState<ZoomMode>('max');
   const hasOwnShipHere = !riding && ownShip != null && ownShip.sectorID === ownSectorID;
-  const effectiveMode: ZoomMode = hasOwnShipHere ? zoomMode : 'max';
+  const hasRadar = hasOwnShipHere && (ownShip?.radarRange ?? 0) > 0;
+  const effectiveMode: ZoomMode =
+    zoomMode === 'near'
+      ? hasOwnShipHere
+        ? 'near'
+        : 'max'
+      : zoomMode === 'radar'
+        ? hasRadar
+          ? 'radar'
+          : 'max'
+        : 'max';
 
   // Hover-on-target highlight: TargetsPanel sets this on row mouse enter,
   // SectorCanvas paints the matching outline. State lives here (not in
@@ -178,6 +189,7 @@ export function SectorView() {
                   mode={effectiveMode}
                   onChange={setZoomMode}
                   nearDisabled={!hasOwnShipHere}
+                  radarDisabled={!hasRadar}
                 />
                 <span className="sw-chip dot good">SCAN 100%</span>
                 <span className="sw-chip">{contactsHere} контактов</span>
@@ -259,10 +271,12 @@ function ZoomToggle({
   mode,
   onChange,
   nearDisabled,
+  radarDisabled,
 }: {
   mode: ZoomMode;
   onChange: (m: ZoomMode) => void;
   nearDisabled: boolean;
+  radarDisabled: boolean;
 }) {
   return (
     <div className="sw-row" style={{ gap: 4 }}>
@@ -282,6 +296,16 @@ function ZoomToggle({
         title={nearDisabled ? 'Нет корабля в этом секторе' : undefined}
       >
         Возле корабля
+      </button>
+      <button
+        type="button"
+        className={`sw-chip sw-zoom-chip dot${mode === 'radar' ? ' active' : ''}`}
+        onClick={() => onChange('radar')}
+        disabled={radarDisabled}
+        style={radarDisabled ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+        title={radarDisabled ? 'Нет корабля с радаром в этом секторе' : undefined}
+      >
+        По радару
       </button>
     </div>
   );

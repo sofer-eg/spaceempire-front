@@ -18,6 +18,7 @@ import {
   MISSILE_BODY,
   TORPEDO_BODY,
   SATELLITE_BODY,
+  SPACESUIT_BODY,
   octagon,
   type ShipCategory,
 } from './shapeData';
@@ -139,16 +140,14 @@ export function AsteroidGlyph({ color }: { color: string }) {
   );
 }
 
-// Spacesuit — the weak pilot "ship" a player drops into (phase 10.1). A small
-// helmet/figure, drawn instead of a hull silhouette. Authored nose-up so it
-// still rotates with heading.
+// Spacesuit — the weak pilot "ship" a player drops into (phase 10.1). Drawn as
+// a small upright human figure (SPACESUIT_BODY) instead of a hull silhouette so
+// it reads as a person, not a scout. Colour is inherited from the parent
+// <g style={{color}}> in the overlay. Rendered OUTSIDE the heading group (see
+// ObjectLayer) so it stays upright — a pilot has no meaningful "course", and
+// a recognisable figure beats a spurious spinning heading.
 export function SpacesuitGlyph() {
-  return (
-    <g fill="currentColor" stroke="currentColor">
-      <circle cx={0} cy={-1} r={3} fillOpacity={0.25} strokeWidth={1} />
-      <path d="M0,-4 L0,-5.5" strokeWidth={1} />
-    </g>
-  );
+  return <g dangerouslySetInnerHTML={{ __html: SPACESUIT_BODY }} />;
 }
 
 // --- Contacts-panel ship icon ----------------------------------------------
@@ -162,6 +161,19 @@ export function ShipHullIcon({ category, color, size = 14 }: { category: ShipCat
   return (
     <svg width={size} height={size} viewBox={`${-e} ${-e} ${e * 2} ${e * 2}`} className="sw-hull-icon sw-target-marker" aria-hidden style={{ color }}>
       <g transform={HULL_NORM[category]} dangerouslySetInnerHTML={{ __html: HULL_BODY[category] }} />
+    </svg>
+  );
+}
+
+// SpacesuitIcon renders the EVA pilot figure into a size×size box for the
+// contacts panel — same SPACESUIT_BODY geometry as the map glyph, so a
+// spacesuit row and its map marker read as one object. The viewBox frames the
+// ~9-unit-tall figure with a little margin. Colour comes from the caller
+// (relation), matching ShipHullIcon.
+export function SpacesuitIcon({ color, size = 14 }: { color: string; size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="-5 -5 10 10" className="sw-hull-icon sw-target-marker" aria-hidden style={{ color }}>
+      <g dangerouslySetInnerHTML={{ __html: SPACESUIT_BODY }} />
     </svg>
   );
 }

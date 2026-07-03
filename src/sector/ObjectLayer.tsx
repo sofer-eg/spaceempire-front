@@ -262,8 +262,12 @@ export const ObjectLayer = forwardRef<ObjectLayerHandle, Props>(function ObjectL
           <path className="vel-head" d="M0,0 L2.2,4 L-2.2,4 Z" fill="currentColor" fillOpacity={0.7} transform="translate(0 0)" />
         </g>
         <g className="heading" pointerEvents="none">
-          {s.isSpacesuit ? <SpacesuitGlyph /> : <use href={`#hull-${cat}`} />}
+          {!s.isSpacesuit && <use href={`#hull-${cat}`} />}
         </g>
+        {/* Spacesuit sits OUTSIDE .heading so it keeps only the group's
+            translate (position), not the imperative heading rotation — a
+            person stays upright; a spinning/upside-down figure is unreadable. */}
+        {s.isSpacesuit && <SpacesuitGlyph />}
       </g>
     );
   };

@@ -1,7 +1,7 @@
 import { EntityKind } from './api';
 import type { TrackedShip } from './useWorldState';
 import type { PickedObject } from './ObjectActionsMenu';
-import { ShipHullIcon } from './sector/shapes';
+import { ShipHullIcon, SpacesuitIcon } from './sector/shapes';
 import { categoryForShip, relationColor, shipRelation } from './sector/shapeData';
 
 // ObjectMarker is the small inline SVG glyph next to each contact row in
@@ -25,6 +25,9 @@ export function ObjectMarker({ picked, ships, ownPlayerID, ownRace, size = 14 }:
     const ship = ships.get(picked.id);
     if (!ship) return null;
     const colour = relationColor(shipRelation(ship, ownPlayerID, ownRace));
+    // A spacesuit has no hull class — draw the pilot figure, not a ship
+    // silhouette, so it can't be mistaken for a scout (TASK-124).
+    if (ship.isSpacesuit) return <SpacesuitIcon color={colour} size={size} />;
     return <ShipHullIcon category={categoryForShip(ship)} color={colour} size={size} />;
   }
 

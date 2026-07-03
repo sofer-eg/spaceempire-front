@@ -96,6 +96,17 @@ export const SATELLITE_BODY = `<path d="M0,-3.1 L2.7,-1.55 L2.7,1.55 L0,3.1 L-2.
 // Torpedo — a heavy, blunt-nosed warhead, deliberately chunkier than the
 // missile so it reads as the slow siege weapon (ЧТЗ §5.1). Nose-up authoring.
 export const TORPEDO_BODY = `<g stroke="currentColor" stroke-linejoin="round"><path d="M0,-7 L2.2,-3 L2.2,4 L-2.2,4 L-2.2,-3 Z" fill="currentColor" fill-opacity="0.35" stroke-width="1"/><path d="M2.2,1.5 L4.6,5.4 L2.2,4 Z" fill="currentColor" fill-opacity="0.55" stroke-width="0.7"/><path d="M-2.2,1.5 L-4.6,5.4 L-2.2,4 Z" fill="currentColor" fill-opacity="0.55" stroke-width="0.7"/><circle cx="0" cy="-2.4" r="1.1" fill="currentColor" stroke="none"/></g>`;
+// SPACESUIT_BODY — the EVA pilot figure (head + torso + arms + legs), drawn
+// instead of a hull silhouette when a player is in open space (is_spacesuit).
+// Authored upright (head at -Y, feet at +Y), ~9px tall so it reads at the M5
+// tier size on the map (M5 hull ≈ 7.8px). Single source of truth for both the
+// radar glyph (SpacesuitGlyph) and the contacts-panel icon (SpacesuitIcon) —
+// like HULL_BODY for hulls. Uses currentColor so it keeps the relation tint.
+export const SPACESUIT_BODY =
+  '<circle cx="0" cy="-2.9" r="1.5" fill="currentColor" fill-opacity="0.85" stroke="currentColor" stroke-width="0.7"/>' +
+  '<path d="M-1.2,-1 Q0,-1.7 1.2,-1 L1,2 Q0,2.6 -1,2 Z" fill="currentColor" fill-opacity="0.3" stroke="currentColor" stroke-width="0.85" stroke-linejoin="round"/>' +
+  '<path d="M-1.1,-0.5 L-2.6,1.2 M1.1,-0.5 L2.6,1.2" fill="none" stroke="currentColor" stroke-width="0.95" stroke-linecap="round"/>' +
+  '<path d="M-0.6,2.2 L-1.3,4.1 M0.6,2.2 L1.3,4.1" fill="none" stroke="currentColor" stroke-width="0.95" stroke-linecap="round"/>';
 
 // fallbackBySpeed maps a missing hullCategory to a coarse category from the
 // ship's maxSpeed (the pre-10.13 heuristic): fast = scout, mid = fighter,

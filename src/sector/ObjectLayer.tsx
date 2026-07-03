@@ -224,7 +224,7 @@ export const ObjectLayer = forwardRef<ObjectLayerHandle, Props>(function ObjectL
   // shipNodes by id, so the rAF update() positions it exactly like the rest.
   const controlledShip = p.controlShipID ? shipList.find((s) => s.id === p.controlShipID) : undefined;
 
-  // renderShip builds one ship <g> (hit-circle + own-ring + shield arc +
+  // renderShip builds one ship <g> (hit-circle + shield arc +
   // velocity vector + hull). Shared by the main ship group and the lifted
   // controlled-ship node so both render identically (only the DOM position
   // differs, which decides z-order).
@@ -254,9 +254,6 @@ export const ObjectLayer = forwardRef<ObjectLayerHandle, Props>(function ObjectL
           onMouseEnter={(e) => { const [px, py] = evXY(e.clientX, e.clientY); p.onHover({ shipID: s.id, login, x: px, y: py }); }}
           onMouseLeave={() => p.onHover(null)}
         />
-        {own && (
-          <circle r={18} fill="none" stroke="currentColor" strokeWidth={1} strokeOpacity={0.5} strokeDasharray="2 3" pointerEvents="none" />
-        )}
         {hasShield && (
           <path d="M-7,-13 A 7 7 0 0 1 7,-13" fill="none" stroke="currentColor" strokeWidth={1.5} strokeOpacity={0.85} pointerEvents="none" />
         )}

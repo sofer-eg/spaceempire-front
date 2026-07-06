@@ -84,15 +84,16 @@ type Props = {
 
 // The navigation panel groups contacts into three tabs, mirroring the
 // original StarWind: ships, stations (stations/shipyards/trade-stations/
-// pirbases), and "other" (gates + asteroids + loot containers). Phase 10.9;
-// asteroids added in TASK-118. Rows within each tab are sorted deterministically
-// (group priority, then id) — see the `order`/`id` fields on Target.
+// pirbases), and "other" (gates + asteroids + satellites + laser towers +
+// loot containers). Phase 10.9; asteroids added in TASK-118; satellites and
+// laser towers added in TASK-121. Rows within each tab are sorted
+// deterministically (group priority, then id) — see `order`/`id` on Target.
 type TabId = 'ships' | 'stations' | 'other';
 
 const TABS: { id: TabId; title: string; noun: string; empty: string }[] = [
   { id: 'ships', title: 'Корабли', noun: 'кораблей', empty: 'Кораблей рядом нет.' },
   { id: 'stations', title: 'Станции', noun: 'станций', empty: 'Станций в секторе нет.' },
-  { id: 'other', title: 'Другие объекты (ворота, астероиды, контейнеры)', noun: 'объектов', empty: 'Других объектов нет.' },
+  { id: 'other', title: 'Другие объекты (ворота, астероиды, спутники, башни, контейнеры)', noun: 'объектов', empty: 'Других объектов нет.' },
 ];
 
 // NavTabIcon is the glyph shown on a tab button. Shapes echo the canvas /
@@ -136,7 +137,8 @@ type Target = {
   // id is the numeric entity id used as the stable secondary sort key inside a
   // group (TASK-118 FR-5). order is the group priority within the tab (lower =
   // higher up): ships → self 0 / others 1; stations → TradeStation 0 / Shipyard
-  // 1 / rest 2; other → gate 0 / asteroid 1 / container 2.
+  // 1 / rest 2; other → gate 0 / asteroid 1 / satellite 2 / laser tower 3 /
+  // container 4 (satellites + towers added TASK-121).
   id: number;
   order: number;
   // own marks the controlled ship's self row in the Ships tab: pinned first,
@@ -231,7 +233,7 @@ export function TargetsPanel({
       }
     }
     // Asteroids (TASK-118 FR-4): the same AOI set the map draws (world.asteroids),
-    // surfaced under the "Другое" tab between gates and containers. Labelled by
+    // surfaced under the "Другое" tab between gates and satellites. Labelled by
     // id (ore type / mass stay on the map glyph, gated by the ore scanner) so a
     // rock is reachable for a fly-to / «Бурить» from the panel.
     for (const a of asteroids?.values() ?? []) {
@@ -246,6 +248,45 @@ export function TargetsPanel({
           x: a.x,
           y: a.y,
           label: `Астероид #${a.id}`,
+        },
+      });
+    }
+    // Satellites (TASK-121): the same server-radar-gated static set the map
+    // draws (statics.satellites), surfaced under the "Другое" tab between
+    // asteroids and laser towers. Visibility is server-authoritative
+    // (TASK-117) — no client radar filter, so the panel matches the map.
+    // A satellite is not dockable; ObjectActionsMenu drops the dock item.
+    for (const sat of statics.satellites ?? []) {
+      out.push({
+        key: `satellite-${sat.id}`,
+        cat: 'other',
+        id: sat.id,
+        order: 2,
+        picked: {
+          kind: 'dock',
+          ref: { kind: EntityKind.Satellite, id: sat.id },
+          x: sat.x,
+          y: sat.y,
+          label: `${staticTypeLabel(EntityKind.Satellite, undefined, stationTypes)}${raceSuffix(sat.race)}`,
+        },
+      });
+    }
+    // Laser towers (TASK-121): the same server-radar-gated static set the map
+    // draws (statics.laserTowers), under the "Другое" tab after satellites.
+    // A tower is not dockable but is a valid weapon target — ObjectActionsMenu
+    // keeps its attack item (TASK-113) and drops the dock item.
+    for (const lt of statics.laserTowers ?? []) {
+      out.push({
+        key: `laser-tower-${lt.id}`,
+        cat: 'other',
+        id: lt.id,
+        order: 3,
+        picked: {
+          kind: 'dock',
+          ref: { kind: EntityKind.LaserTower, id: lt.id },
+          x: lt.x,
+          y: lt.y,
+          label: `${staticTypeLabel(EntityKind.LaserTower, undefined, stationTypes)}${raceSuffix(lt.race)}`,
         },
       });
     }
@@ -315,7 +356,7 @@ export function TargetsPanel({
         key: `container-${c.id}`,
         cat: 'other',
         id: c.id,
-        order: 2,
+        order: 4,
         picked: {
           kind: 'container',
           id: c.id,

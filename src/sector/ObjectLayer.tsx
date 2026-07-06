@@ -555,6 +555,8 @@ function staticList(p: Props, refKind: number): { id: number; sectorID: number; 
       return p.statics.pirbases;
     case EntityKind.Satellite:
       return p.statics.satellites;
+    case EntityKind.LaserTower:
+      return p.statics.laserTowers;
     default:
       return undefined;
   }

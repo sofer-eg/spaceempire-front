@@ -74,6 +74,32 @@ export function ObjectMarker({ picked, ships, ownPlayerID, ownRace, size = 14 }:
   if (picked.ref.kind === EntityKind.Pirbase) {
     return <NestedSquareMarker size={size} colour="var(--red)" />;
   }
+  if (picked.ref.kind === EntityKind.Satellite) {
+    // Beacon core + two solar panels — echoes the canvas SatelliteGlyph
+    // (#hull-satellite) so a row and its map marker read as one object.
+    // Violet matches the map tint (ObjectLayer raceTint fallback).
+    const c = 'var(--violet)';
+    return (
+      <svg width={size} height={size} viewBox="0 0 14 14" className="sw-target-marker" aria-hidden>
+        <path d="M7 4 L9 5.4 L9 8.6 L7 10 L5 8.6 L5 5.4 Z" fill="none" stroke={c} strokeWidth="1.1" strokeLinejoin="round" />
+        <rect x="1.4" y="4.8" width="2.4" height="4.4" fill="none" stroke={c} strokeWidth="1" />
+        <rect x="10.2" y="4.8" width="2.4" height="4.4" fill="none" stroke={c} strokeWidth="1" />
+        <path d="M3.8 7 L5 7 M9 7 L10.2 7" stroke={c} strokeWidth="1" />
+      </svg>
+    );
+  }
+  if (picked.ref.kind === EntityKind.LaserTower) {
+    // Antenna mast + emitter dot + widening crossbars — echoes the canvas
+    // LaserTowerGlyph so a row and its map marker read as one object. Danger
+    // red matches the map tint (ObjectLayer raceTint fallback).
+    const c = 'var(--danger)';
+    return (
+      <svg width={size} height={size} viewBox="0 0 14 14" className="sw-target-marker" aria-hidden>
+        <path d="M7 1.6 L7 12.6 M4.1 5 L9.9 5 M3 9.2 L11 9.2" fill="none" stroke={c} strokeWidth="1.2" strokeLinecap="round" />
+        <circle cx="7" cy="1.6" r="1.4" fill={c} />
+      </svg>
+    );
+  }
   const letter = picked.letter ?? letterFor(picked.ref.kind);
   if (letter == null) return null;
   const c = colourFor(picked.ref.kind);

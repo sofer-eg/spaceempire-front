@@ -266,6 +266,17 @@ function OutfitSection({ ownClass, equipment, installed, cash, busy, onInstall, 
   const installPrice = (e: Equipment, lvl: number) => e.price + lvl * e.pricePerLevel;
   const depMissing = (e: Equipment) =>
     e.dependance !== '' && e.dependance !== 'none' && !installedTypes.has(e.dependance);
+  // A row is blocked when its dependency is missing or it costs more than the
+  // player has. Mirrors the button's disabled state (minus the transient `busy`
+  // flag) and is evaluated at the same chosen level as the render below.
+  const isBlocked = (e: Equipment) => depMissing(e) || cash < installPrice(e, level(e.id));
+
+  // Float installable modules to the top so the player sees what they can fit
+  // right now (e.g. up_generator, dependance: none) instead of hunting past
+  // dependency/price-blocked rows. Numeric key 0 (enabled) / 1 (disabled) with
+  // the stable sort keeps each group in catalog order. `busy` is excluded: it's
+  // a global transient that would just jump the whole list during install.
+  const availableSorted = [...available].sort((a, b) => Number(isBlocked(a)) - Number(isBlocked(b)));
 
   return (
     <section className="sw-market__section">
@@ -320,7 +331,7 @@ function OutfitSection({ ownClass, equipment, installed, cash, busy, onInstall, 
             </tr>
           </thead>
           <tbody>
-            {available.map((e) => {
+            {availableSorted.map((e) => {
               const lvl = level(e.id);
               const price = installPrice(e, lvl);
               const dep = depMissing(e);

@@ -17,6 +17,7 @@ import { useGalaxy } from './useGalaxy';
 import { raceName, shipDisplayName, staticTypeLabel, stationLetter, stationTypeName } from './gameContext';
 import { ObjectActionsMenu, type PickedObject } from './ObjectActionsMenu';
 import { ObjectMarker } from './objectIcons';
+import { shipRelation } from './sector/shapeData';
 import { emitLog } from './eventBus';
 
 // HighlightRef points to a single row in the Targets panel so the sector
@@ -205,6 +206,10 @@ export function TargetsPanel({
           x: s.x,
           y: s.y,
           label: owner ? `${name} · ${owner}` : name,
+          // maxShield + relation drive ObjectActionsMenu's capture gate
+          // (10.3.9.5), matching the canvas pick in ObjectLayer.
+          maxShield: s.maxShield,
+          relation: shipRelation(s, ownPlayerID, ownShip?.race ?? 0),
         },
       });
     }
@@ -367,7 +372,7 @@ export function TargetsPanel({
       });
     }
     return out;
-  }, [ships, statics, containers, asteroids, races, stationTypes, currentSectorID, ownShipID, ownPlayerID, logins, galaxy]);
+  }, [ships, statics, containers, asteroids, races, stationTypes, currentSectorID, ownShipID, ownPlayerID, ownShip, logins, galaxy]);
 
   // visible is the subset of contacts for the active tab (phase 10.9),
   // deterministically ordered (TASK-118 FR-5): first by group priority

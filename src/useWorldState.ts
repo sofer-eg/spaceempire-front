@@ -13,6 +13,7 @@ import type {
   PoliceScanFrame,
   SectorStatics,
   Ship,
+  ShipCaptureFrame,
   Snapshot,
   StaticsMessage,
   Torpedo,
@@ -217,6 +218,12 @@ export type WorldState = {
   // changes. lastPoliceScan carries the latest event for that log line.
   policeScanSeq: number;
   lastPoliceScan: PoliceScanFrame | null;
+
+  // shipCaptureSeq increments on every ship_capture frame (phase 10.3.9.5);
+  // useShipCaptureLog emits a journal line when it changes. lastShipCapture
+  // carries the latest capture event (captor/success) for that line.
+  shipCaptureSeq: number;
+  lastShipCapture: ShipCaptureFrame | null;
 };
 
 // Defaults mirror cfg.Sector.* / spawn constants on the backend. Only used
@@ -259,6 +266,8 @@ export function useWorldState(): WorldState {
     staticCombat: new Map(),
     policeScanSeq: 0,
     lastPoliceScan: null,
+    shipCaptureSeq: 0,
+    lastShipCapture: null,
   });
 
   // shipsRef stores the live Map between snapshots so the WS callback can
@@ -336,6 +345,8 @@ export function useWorldState(): WorldState {
           staticCombat: staticCombatRef.current,
           policeScanSeq: 0,
           lastPoliceScan: null,
+          shipCaptureSeq: 0,
+          lastShipCapture: null,
         });
       };
 
@@ -385,6 +396,14 @@ export function useWorldState(): WorldState {
           // reputation panel refetches and usePoliceLog emits a journal line.
           const ev = msg as unknown as PoliceScanFrame;
           setState((s) => ({ ...s, policeScanSeq: s.policeScanSeq + 1, lastPoliceScan: ev }));
+          return;
+        }
+        if ((msg as { type?: string }).type === 'ship_capture') {
+          // Per-player capture outcome (10.3.9.5): bump the seq so
+          // useShipCaptureLog emits the "Корабль захвачен"/"Ваш корабль
+          // захвачен"/"Захват не удался" journal line for captor and old owner.
+          const ev = msg as unknown as ShipCaptureFrame;
+          setState((s) => ({ ...s, shipCaptureSeq: s.shipCaptureSeq + 1, lastShipCapture: ev }));
           return;
         }
         if (msg?.type !== 'snapshot') return;
@@ -554,6 +573,8 @@ export function useWorldState(): WorldState {
           asteroids: nextAsteroids,
           policeScanSeq: s.policeScanSeq,
           lastPoliceScan: s.lastPoliceScan,
+          shipCaptureSeq: s.shipCaptureSeq,
+          lastShipCapture: s.lastShipCapture,
           };
         });
       };

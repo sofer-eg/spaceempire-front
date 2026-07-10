@@ -748,6 +748,24 @@ export async function sendAttack(shipID: number, targetRef: EntityRef): Promise<
   }
 }
 
+// sendCapture attempts to seize a hostile ship with the attacker's up_capture
+// module (POST /api/cmd/capture, TASK-100.3.9.5). Body mirrors sendAttack
+// (attacker shipID + target EntityRef); the server resolves the energy cost and
+// gates on module/shield/range/relation. A 2xx means the roll was performed —
+// the win/lose journal line arrives asynchronously on the WS ship_capture frame,
+// so this resolves void like sendAttack and surfaces only the 4xx as an error.
+export async function sendCapture(shipID: number, targetRef: EntityRef): Promise<void> {
+  const res = await fetch('/api/cmd/capture', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ shipID, targetRef }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`POST /api/cmd/capture ${res.status}: ${body}`);
+  }
+}
+
 export async function sendCeaseFire(shipID: number): Promise<void> {
   const res = await fetch('/api/cmd/cease-fire', {
     method: 'POST',
@@ -1051,6 +1069,18 @@ export type PoliceScanFrame = {
   goodsType: number;
   quantity: number;
   wanted: boolean;
+};
+
+// ShipCaptureFrame is the per-player WS frame pushed after a capture roll
+// (TASK-100.3.9.5). Both participants receive one: the attacker gets captor=true
+// (success = the roll), the old owner gets captor=false, success=true. Drives
+// the journal line in useShipCaptureLog.
+export type ShipCaptureFrame = {
+  type: 'ship_capture';
+  shipId: number;
+  sectorId: number;
+  captor: boolean;
+  success: boolean;
 };
 
 // --- Cargo -----------------------------------------------------------------

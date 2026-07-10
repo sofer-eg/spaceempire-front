@@ -8,6 +8,7 @@ import {
   sendJump,
   sendLaunchDrone,
   sendLaunchMissile,
+  sendCapture,
   sendLaunchTorpedo,
   sendMine,
   sendMove,
@@ -37,7 +38,12 @@ const TORPEDO_CLASS_HOLY = 3;
 // distance gating and sendMove, EntityRef for sendDock, gate id for
 // sendJump.
 export type PickedObject =
-  | { kind: 'ship'; id: number; x: number; y: number; label: string; relation?: Relation }
+  // maxShield is the target ship's shield-generator ceiling (WS
+  // TrackedShip.maxShield). The capture affordance mirrors the server's
+  // "shield generator destroyed" gate on maxShield===0 — a permanently
+  // knocked-off up_shield, NOT a merely depleted current shield (phase
+  // 10.3.9.5); every ship pick supplies it.
+  | { kind: 'ship'; id: number; x: number; y: number; label: string; maxShield: number; relation?: Relation }
   | { kind: 'gate'; id: number; x: number; y: number; label: string }
   | { kind: 'dock'; ref: EntityRef; x: number; y: number; label: string; letter?: string }
   | { kind: 'container'; id: number; x: number; y: number; label: string }
@@ -145,6 +151,29 @@ export function ObjectActionsMenu({
   // Mining needs up_drill (phase 10.3.6). Mirrors the server's 422
   // ErrEquipmentRequired gate so the click never fails into the journal.
   const hasDrill = !!ownEquipment?.some((e) => e.type === 'up_drill');
+  // Capture needs up_capture (phase 10.3.9.5). Mirrors the server's 422
+  // ErrEquipmentRequired gate so the click never fails into the journal.
+  const hasCapture = !!ownEquipment?.some((e) => e.type === 'up_capture');
+  // The server gates capture on !shipsAreFriendly (damage-parity), NOT strictly
+  // hostile — a neutral ship is capturable too. Mirror that: only self/ally are
+  // friendly (uncapturable). relation is present on every ship pick; treat a
+  // missing one as non-friendly and let the server stay authoritative.
+  const captureTargetFriendly =
+    target.kind === 'ship' &&
+    (target.relation === 'self' || target.relation === 'ally');
+  // Shield-generator mirror of the server's ErrCaptureShielded gate: capture
+  // opens only once MaxShield≤0 (up_shield permanently knocked off). Current
+  // shield dips to 0 under ordinary fire while the generator regenerates, so
+  // gating on live shield would falsely enable the button mid-firefight — gate
+  // on maxShield. The server re-checks MaxShield>0 authoritatively.
+  const captureShieldUp = target.kind === 'ship' && target.maxShield > 0;
+  const captureTitle = !hasCapture
+    ? 'Нужен захватчик (up_capture)'
+    : captureTargetFriendly
+      ? 'Нельзя захватить союзный корабль'
+      : captureShieldUp
+        ? 'Сначала сбейте щит цели'
+        : undefined;
 
   const run = (action: Promise<unknown>) => {
     setPending(true);
@@ -189,6 +218,10 @@ export function ObjectActionsMenu({
   };
   const doCeaseFire = () => {
     run(sendCeaseFire(ownShipID));
+  };
+  const doCapture = () => {
+    if (target.kind !== 'ship') return;
+    run(sendCapture(ownShipID, { kind: EntityKind.Ship, id: target.id }));
   };
   const doLaunchMissile = () => {
     if (!weaponRef) return;
@@ -309,6 +342,18 @@ export function ObjectActionsMenu({
           title={!hasDroneControl ? 'Нужен контроль дронов (up_drone_control)' : undefined}
         >
           ⬡ Запустить дронов
+        </button>
+      )}
+      {target.kind === 'ship' && !isOwnShip && (
+        <button
+          type="button"
+          role="menuitem"
+          className="sw-menu__item"
+          onClick={doCapture}
+          disabled={baseDisabled || !hasCapture || captureTargetFriendly || captureShieldUp}
+          title={captureTitle}
+        >
+          ⚑ Захватить
         </button>
       )}
       {canTargetWeapon && (

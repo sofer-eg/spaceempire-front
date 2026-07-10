@@ -250,7 +250,7 @@ export const ObjectLayer = forwardRef<ObjectLayerHandle, Props>(function ObjectL
           r={HIT_R}
           fill="transparent"
           style={{ pointerEvents: 'auto', cursor: 'pointer' }}
-          onClick={(e) => p.onPick({ kind: 'ship', id: s.id, x: s.x, y: s.y, label: menuLabel, relation: rel }, ...evXY(e.clientX, e.clientY))}
+          onClick={(e) => p.onPick({ kind: 'ship', id: s.id, x: s.x, y: s.y, label: menuLabel, maxShield: s.maxShield, relation: rel }, ...evXY(e.clientX, e.clientY))}
           onMouseEnter={(e) => { const [px, py] = evXY(e.clientX, e.clientY); p.onHover({ shipID: s.id, login, x: px, y: py }); }}
           onMouseLeave={() => p.onHover(null)}
         />

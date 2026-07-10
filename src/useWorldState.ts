@@ -14,6 +14,7 @@ import type {
   SectorStatics,
   Ship,
   ShipCaptureFrame,
+  StationHackedFrame,
   Snapshot,
   StaticsMessage,
   Torpedo,
@@ -224,6 +225,12 @@ export type WorldState = {
   // carries the latest capture event (captor/success) for that line.
   shipCaptureSeq: number;
   lastShipCapture: ShipCaptureFrame | null;
+
+  // stationHackedSeq increments on every station_hacked frame (10.3.9.6);
+  // useStationHackedLog emits a journal line when it changes. lastStationHacked
+  // carries the latest raid event (goodsType/robbed) for that line.
+  stationHackedSeq: number;
+  lastStationHacked: StationHackedFrame | null;
 };
 
 // Defaults mirror cfg.Sector.* / spawn constants on the backend. Only used
@@ -268,6 +275,8 @@ export function useWorldState(): WorldState {
     lastPoliceScan: null,
     shipCaptureSeq: 0,
     lastShipCapture: null,
+    stationHackedSeq: 0,
+    lastStationHacked: null,
   });
 
   // shipsRef stores the live Map between snapshots so the WS callback can
@@ -347,6 +356,8 @@ export function useWorldState(): WorldState {
           lastPoliceScan: null,
           shipCaptureSeq: 0,
           lastShipCapture: null,
+          stationHackedSeq: 0,
+          lastStationHacked: null,
         });
       };
 
@@ -404,6 +415,14 @@ export function useWorldState(): WorldState {
           // захвачен"/"Захват не удался" journal line for captor and old owner.
           const ev = msg as unknown as ShipCaptureFrame;
           setState((s) => ({ ...s, shipCaptureSeq: s.shipCaptureSeq + 1, lastShipCapture: ev }));
+          return;
+        }
+        if ((msg as { type?: string }).type === 'station_hacked') {
+          // Per-player station raid outcome (10.3.9.6): bump the seq so
+          // useStationHackedLog emits the "Похищено N ед."/"Неудачная попытка
+          // взлома" journal line for the hacker.
+          const ev = msg as unknown as StationHackedFrame;
+          setState((s) => ({ ...s, stationHackedSeq: s.stationHackedSeq + 1, lastStationHacked: ev }));
           return;
         }
         if (msg?.type !== 'snapshot') return;
@@ -575,6 +594,8 @@ export function useWorldState(): WorldState {
           lastPoliceScan: s.lastPoliceScan,
           shipCaptureSeq: s.shipCaptureSeq,
           lastShipCapture: s.lastShipCapture,
+          stationHackedSeq: s.stationHackedSeq,
+          lastStationHacked: s.lastStationHacked,
           };
         });
       };

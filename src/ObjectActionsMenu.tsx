@@ -5,6 +5,7 @@ import {
   sendAttack,
   sendCeaseFire,
   sendDock,
+  sendHack,
   sendJump,
   sendLaunchDrone,
   sendLaunchMissile,
@@ -174,6 +175,15 @@ export function ObjectActionsMenu({
       : captureShieldUp
         ? 'Сначала сбейте щит цели'
         : undefined;
+  // Hack needs up_hack (phase 10.3.9.6). Mirrors the server's 422
+  // ErrEquipmentRequired gate so a click never fails into the journal. The
+  // button is only offered for a production or trade station target; the
+  // remaining gates (goods ≥30%, distance, race≠6, built) are server-authoritative
+  // — the client can't see the station's stock, so it defers to the 4xx→journal.
+  const hasHack = !!ownEquipment?.some((e) => e.type === 'up_hack');
+  const canHackTarget =
+    target.kind === 'dock' &&
+    (target.ref.kind === EntityKind.Station || target.ref.kind === EntityKind.TradeStation);
 
   const run = (action: Promise<unknown>) => {
     setPending(true);
@@ -222,6 +232,10 @@ export function ObjectActionsMenu({
   const doCapture = () => {
     if (target.kind !== 'ship') return;
     run(sendCapture(ownShipID, { kind: EntityKind.Ship, id: target.id }));
+  };
+  const doHack = () => {
+    if (target.kind !== 'dock') return;
+    run(sendHack(ownShipID, target.ref));
   };
   const doLaunchMissile = () => {
     if (!weaponRef) return;
@@ -286,6 +300,18 @@ export function ObjectActionsMenu({
             ⚓ Стыковка
           </button>
         )}
+      {canHackTarget && (
+        <button
+          type="button"
+          role="menuitem"
+          className="sw-menu__item"
+          onClick={doHack}
+          disabled={baseDisabled || !hasHack}
+          title={!hasHack ? 'Нужен взломщик (up_hack)' : undefined}
+        >
+          ⚿ Взломать
+        </button>
+      )}
       {target.kind === 'gate' && (
         <button
           type="button"

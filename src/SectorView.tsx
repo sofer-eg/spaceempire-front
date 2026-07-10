@@ -12,6 +12,7 @@ import { useGalaxy } from './useGalaxy';
 import { useCombatLog } from './useCombatLog';
 import { usePoliceLog } from './usePoliceLog';
 import { useShipCaptureLog } from './useShipCaptureLog';
+import { useStationHackedLog } from './useStationHackedLog';
 import { EntityKind, type WorldGate } from './api';
 
 const EMPTY_GATES: WorldGate[] = [];
@@ -55,6 +56,10 @@ export function SectorView() {
   // Ship-capture outcomes → combat journal (phase 10.3.9.5). Watches the
   // capture seq bumped by useWorldState; wording depends on captor/success.
   useShipCaptureLog(world.shipCaptureSeq, world.lastShipCapture);
+
+  // Station-hack outcomes → combat journal (phase 10.3.9.6). Watches the
+  // hack seq bumped by useWorldState; resolves the looted good's name.
+  useStationHackedLog(world.stationHackedSeq, world.lastStationHacked, goods);
 
   // Gate topology and sector-name lookup for SectorCanvas. TargetsPanel
   // already pulls the same useGalaxy() cache, so reading it again here is

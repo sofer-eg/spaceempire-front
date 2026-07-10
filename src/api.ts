@@ -766,6 +766,25 @@ export async function sendCapture(shipID: number, targetRef: EntityRef): Promise
   }
 }
 
+// sendHack raids a trade/production station with the attacker's up_hack module
+// (POST /api/cmd/hack, TASK-100.3.9.6). Body mirrors sendCapture (attacker
+// shipID + target station EntityRef); the server resolves the energy cost and
+// gates on module/range/goods≥30%/race≠6/built authoritatively. A 2xx means the
+// raid ran — the "Похищено N ед." / "Неудачная попытка взлома" journal line
+// arrives asynchronously on the WS station_hacked frame, so this resolves void
+// like sendCapture and surfaces only the 4xx as an error.
+export async function sendHack(shipID: number, targetRef: EntityRef): Promise<void> {
+  const res = await fetch('/api/cmd/hack', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ shipID, targetRef }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`POST /api/cmd/hack ${res.status}: ${body}`);
+  }
+}
+
 export async function sendCeaseFire(shipID: number): Promise<void> {
   const res = await fetch('/api/cmd/cease-fire', {
     method: 'POST',
@@ -1081,6 +1100,20 @@ export type ShipCaptureFrame = {
   sectorId: number;
   captor: boolean;
   success: boolean;
+};
+
+// StationHackedFrame is the per-player WS frame pushed to the hacker after a
+// station raid (TASK-100.3.9.6). robbed > 0 → "Похищено N ед."; robbed === 0 →
+// "Неудачная попытка взлома" (only the damage landed). goodsType names the
+// richest good the raid targeted. Drives the journal line in useStationHackedLog.
+export type StationHackedFrame = {
+  type: 'station_hacked';
+  shipId: number;
+  sectorId: number;
+  stationId: number;
+  race: number;
+  goodsType: number;
+  robbed: number;
 };
 
 // --- Cargo -----------------------------------------------------------------

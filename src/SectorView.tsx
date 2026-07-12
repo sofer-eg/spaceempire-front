@@ -8,6 +8,7 @@ import { CombatHUD } from './CombatHUD';
 import { EventLog } from './EventLog';
 import { StationView } from './station/StationView';
 import { PilotPage } from './PilotPage';
+import { ShipDetailView } from './ShipDetailView';
 import { useGalaxy } from './useGalaxy';
 import { useCombatLog } from './useCombatLog';
 import { usePoliceLog } from './usePoliceLog';
@@ -19,7 +20,7 @@ const EMPTY_GATES: WorldGate[] = [];
 const EMPTY_SECTOR_NAMES = new Map<number, string>();
 
 export function SectorView() {
-  const { ships, statics, ownPlayerID, ownShip, riding, logins, world, ownCargo, refreshPlayer, races, goods, stationTypes, pilotPageOpen, closePilotPage } =
+  const { ships, statics, ownPlayerID, ownShip, riding, logins, world, ownCargo, refreshPlayer, races, goods, stationTypes, pilotPageOpen, closePilotPage, shipPageOpen, closeShipPage } =
     useGameContext();
   // Stable race id → palette colour map for the canvas (phase 8.13). Built
   // once per races-catalog change so SectorCanvas's redraw deps stay stable.
@@ -186,7 +187,9 @@ export function SectorView() {
         )}
       </aside>
       <section className="sw-sector-grid__map">
-        {pilotPageOpen ? (
+        {shipPageOpen ? (
+          <ShipDetailView onClose={closeShipPage} />
+        ) : pilotPageOpen ? (
           <PilotPage onClose={closePilotPage} />
         ) : docked ? (
           <StationView />

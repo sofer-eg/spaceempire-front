@@ -1,12 +1,11 @@
 import { EntityKind, type Race, type Ship } from '../api';
 import { shipDisplayName } from '../gameContext';
 
-// FleetList is the presentational fleet roster shared by the floating FleetPanel
-// and the Pilot page's «Флот» card (TASK-127.1). It renders one row per ship —
-// name/class, human-readable location (sector name + docked marker), the active
-// marker, a «СКАФАНДР» chip, and the activate/sell actions. All data + mutations
-// come from props (see useFleet); this component keeps no state so both call
-// sites stay in sync from one source of truth.
+// FleetList is the presentational fleet roster the Pilot page's «Флот» card
+// renders (TASK-127.1). It renders one row per ship — name/class, human-readable
+// location (sector name + docked marker), the active marker, a «СКАФАНДР» chip,
+// and the activate/sell actions. All data + mutations come from props (see
+// useFleet); this component keeps no state.
 type Props = {
   ships: Ship[];
   loading: boolean;

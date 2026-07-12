@@ -14,7 +14,7 @@ import {
 } from '../api';
 import { useGameContext, usePlayer } from '../gameContext';
 import { emitLog } from '../eventBus';
-import { installRequirements } from './shipyardRequirements';
+import { equipName, installRequirements } from './shipyardRequirements';
 
 type Props = {
   shipyardID: number;
@@ -487,10 +487,4 @@ function pickPerType(rows: Equipment[]): Equipment[] {
 // used to tell whether the WS-reported fit matches a pending optimistic one.
 function equipSig(eq: InstalledEquipment[] | undefined): string {
   return (eq ?? []).map((m) => `${m.equipmentID}:${m.level}`).sort().join(',');
-}
-
-// equipName resolves an installed module's human label from the catalog,
-// falling back to its type key when the catalog row is missing.
-function equipName(catalog: Equipment[], m: InstalledEquipment): string {
-  return catalog.find((e) => e.id === m.equipmentID)?.description ?? m.type;
 }

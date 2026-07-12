@@ -1,5 +1,6 @@
 import { disembark, exitShip, sendUndock, setShipAccess, type CargoInventory, type Race } from './api';
 import { shipDisplayName } from './gameContext';
+import { fmtScalar, hullVariant } from './shipStats';
 import type { TrackedShip } from './useWorldState';
 
 type Props = {
@@ -196,8 +197,9 @@ export function PilotPanel({ ownShip, ownCargo, races, onExit, riding }: Props) 
 
 // Vital renders one labelled stat (value / max) above a fill bar. The bar
 // width is value/max clamped to [0,100]%. unknown=true (cargo not loaded)
-// shows "—" and an empty bar.
-function Vital({
+// shows "—" and an empty bar. Exported so the ship-detail screen (TASK-127.2)
+// draws the same vital bars as this left HUD.
+export function Vital({
   label,
   value,
   max,
@@ -228,23 +230,9 @@ function Vital({
   );
 }
 
-// hullVariant colours the hull bar by remaining fraction: green ≥50%,
-// amber 25–50%, red below. Shield/speed/cargo stay on the default accent.
-function hullVariant(hp: number, max: number): string {
-  if (max <= 0) return '';
-  const r = hp / max;
-  if (r >= 0.5) return 'good';
-  if (r >= 0.25) return 'warn';
-  return 'danger';
-}
-
 function fmt(n: number): string {
   const sign = n >= 0 ? '+' : '−';
   return `${sign}${Math.abs(n).toFixed(0).padStart(4, '0')}`;
-}
-
-function fmtScalar(n: number): string {
-  return n.toFixed(1);
 }
 
 // fmtCourse renders the ship's heading as degrees (0..360). The delta to

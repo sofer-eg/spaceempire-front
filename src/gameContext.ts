@@ -46,6 +46,14 @@ export type GameOutletContext = {
   // closePilotPage returns the center to the map/station (the page's own
   // «назад» button and the сектор/станция rail items call it).
   closePilotPage: () => void;
+  // shipPageOpen: the rail's «корабль» button toggles a full-center «ДЕТАЛИ
+  // КОРАБЛЯ» screen (vitals + characteristics + installed equipment) that
+  // replaces the sector map, mirroring pilotPageOpen (TASK-127.2). Ship and
+  // pilot pages are mutually exclusive — opening one closes the other.
+  shipPageOpen: boolean;
+  // closeShipPage returns the center to the map/station (the screen's own
+  // «назад» button and the сектор/станция rail items call it).
+  closeShipPage: () => void;
 };
 
 export function useGameContext(): GameOutletContext {

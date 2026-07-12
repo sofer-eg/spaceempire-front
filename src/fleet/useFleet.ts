@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { activateShip, fetchFleet, sellShip, type Ship } from '../api';
 
-// useFleet owns the shared fleet state that both the floating FleetPanel and the
-// Pilot page's «Флот» card render (TASK-127.1). It fetches every ship the player
+// useFleet owns the fleet state the Pilot page's «Флот» card renders (TASK-127.1;
+// the floating panel was retired in TASK-127.2). It fetches every ship the player
 // owns across sectors (GET /api/player/ships), polls while active, and exposes
-// the activate/sell mutations. Keeping the data logic here means the two views
-// share one implementation — only the chrome differs. onActivated runs after a
-// successful switch/sell so the layout refreshes PlayerSelf (ownShip / wallet).
+// the activate/sell mutations. Keeping the data logic here separates it from the
+// presentational FleetList. onActivated runs after a successful switch/sell so
+// the layout refreshes PlayerSelf (ownShip / wallet).
 const POLL_MS = 4000;
 
 export type FleetState = {

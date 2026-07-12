@@ -3,7 +3,7 @@
 // runtime) so it can be unit-tested with the Node built-in runner
 // (`npm run test`, i.e. `node --test`) and reused by both the render and the
 // button-disabled state in ShipyardView without duplicating the logic.
-import type { Equipment, Race } from '../api';
+import type { Equipment, InstalledEquipment, Race } from '../api';
 
 // InstallReqContext carries everything installRequirements needs beyond the
 // catalog and the module itself. repKnown distinguishes «standings loaded» from
@@ -59,6 +59,13 @@ export function installRequirements(
 // label via the first catalog row of that type, falling back to the raw key.
 export function depLabel(catalog: Equipment[], type: string): string {
   return catalog.find((e) => e.type === type)?.description ?? type;
+}
+
+// equipName resolves an installed module's human label from the catalog by its
+// equipmentID, falling back to its type key when the catalog row is missing.
+// Shared by the shipyard outfit list and the ship-detail screen (TASK-127.2).
+export function equipName(catalog: Equipment[], m: InstalledEquipment): string {
+  return catalog.find((e) => e.id === m.equipmentID)?.description ?? m.type;
 }
 
 // raceLabel returns the display name for a race id, or '' when neutral (0) /

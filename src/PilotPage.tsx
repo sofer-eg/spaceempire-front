@@ -36,9 +36,9 @@ export function PilotPage({ onClose }: Props) {
   const [clan, setClan] = useState<ClanDetail | null>(null);
   const [clanLoaded, setClanLoaded] = useState(false);
 
-  // The fleet roster reuses the shared FleetPanel data logic (TASK-127.1): while
-  // this page is mounted the hook polls GET /api/player/ships and drives the
-  // activate/sell actions, feeding the same FleetList the floating panel renders.
+  // The fleet roster reuses the shared fleet data logic (useFleet, TASK-127.1):
+  // while this page is mounted the hook polls GET /api/player/ships and drives
+  // the activate/sell actions, feeding the presentational FleetList.
   const fleet = useFleet(true, () => void refreshPlayer());
   const galaxy = useGalaxy();
   const resolveSectorName = useCallback(

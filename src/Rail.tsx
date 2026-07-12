@@ -28,10 +28,12 @@ type Props = {
   questsOpen: boolean;
   onToggleQuests: () => void;
   questBadge: number;
-  // "корабль" is a toggle like "задания": it opens/closes the floating
-  // FleetPanel (10.14a) owned by GameLayout. fleetOpen drives the marker.
-  fleetOpen: boolean;
-  onToggleFleet: () => void;
+  // "корабль" swaps the sector map for a full-center «ДЕТАЛИ КОРАБЛЯ» screen
+  // (TASK-127.2, owned by GameLayout via ctx.shipPageOpen). shipOpen drives the
+  // marker; onLeaveShip closes it from the сектор / станция items.
+  shipOpen: boolean;
+  onToggleShip: () => void;
+  onLeaveShip: () => void;
   // "пилот" is a toggle like the two above, but it swaps the sector map for a
   // full-center «ПИЛОТ» page (owned by GameLayout via ctx.pilotPageOpen).
   pilotOpen: boolean;
@@ -53,7 +55,7 @@ type Item = {
   badge?: number;
 };
 
-export function Rail({ docked, stationLabel, questsOpen, onToggleQuests, questBadge, fleetOpen, onToggleFleet, pilotOpen, onTogglePilot, onLeavePilot }: Props) {
+export function Rail({ docked, stationLabel, questsOpen, onToggleQuests, questBadge, shipOpen, onToggleShip, onLeaveShip, pilotOpen, onTogglePilot, onLeavePilot }: Props) {
   const navigate = useNavigate();
   const loc = useLocation();
   const onSector = loc.pathname.startsWith('/sector');
@@ -68,28 +70,28 @@ export function Rail({ docked, stationLabel, questsOpen, onToggleQuests, questBa
       id: 'sector',
       label: 'сектор',
       icon: ICONS.sector,
-      onClick: () => { onLeavePilot(); navigate('/sector'); },
+      onClick: () => { onLeavePilot(); onLeaveShip(); navigate('/sector'); },
       enabled: true,
-      active: onSector && !docked && !pilotOpen,
+      active: onSector && !docked && !pilotOpen && !shipOpen,
     },
     { id: 'galaxy', label: 'галактика', icon: ICONS.galaxy, to: '/galaxy', enabled: true, active: onGalaxy },
     {
       id: 'station',
       label: 'станция',
       icon: ICONS.station,
-      onClick: () => { onLeavePilot(); navigate('/sector'); },
+      onClick: () => { onLeavePilot(); onLeaveShip(); navigate('/sector'); },
       enabled: docked,
-      active: onSector && docked && !pilotOpen,
+      active: onSector && docked && !pilotOpen && !shipOpen,
       title: docked ? (stationLabel ? `Открыть — ${stationLabel}` : undefined) : 'Доступно при стыковке',
     },
     {
       id: 'ship',
       label: 'корабль',
       icon: ICONS.ship,
-      onClick: onToggleFleet,
+      onClick: onToggleShip,
       enabled: true,
-      active: fleetOpen,
-      title: fleetOpen ? 'Скрыть флот' : 'Показать флот',
+      active: shipOpen,
+      title: shipOpen ? 'Скрыть детали корабля' : 'Детали корабля',
     },
     { id: 'hangar', label: 'ангар', icon: ICONS.hangar, enabled: false, active: false, title: soon('фаза 4') },
     { id: 'trade', label: 'торг.', icon: ICONS.trade, enabled: false, active: false, title: soon('фаза 3+') },

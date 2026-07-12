@@ -22,7 +22,6 @@ import { useWorldState } from './useWorldState';
 import { useGalaxy } from './useGalaxy';
 import { Rail } from './Rail';
 import { QuestPanel } from './quest/QuestPanel';
-import { FleetPanel } from './fleet/FleetPanel';
 
 // WIKI_URL points to the player wiki (docs/wiki). Hosted statically (GitHub
 // Pages / Docusaurus) at deploy time; until then it links to the repo docs.
@@ -48,26 +47,34 @@ export function GameLayout() {
   const toggleQuests = useCallback(() => setQuestsOpen((v) => !v), []);
   const closeQuests = useCallback(() => setQuestsOpen(false), []);
 
-  // The fleet panel (10.14a) is hidden by default; the rail's "корабль" button
-  // toggles it. It lists the player's ships across sectors and switches the
-  // active one.
-  const [fleetOpen, setFleetOpen] = useState(false);
-  const toggleFleet = useCallback(() => setFleetOpen((v) => !v), []);
-  const closeFleet = useCallback(() => setFleetOpen(false), []);
-
-  // The full-center «ПИЛОТ» page (profile + clan + fleet + reputation) is
-  // hidden by default; the rail's "пилот" button toggles it. It replaces the
-  // sector map (SectorView reads pilotPageOpen from ctx), so opening it also
-  // routes to /sector — the page only lives there. Reputation used to sit in
-  // the sector's left column; it moved onto this page to declutter it.
+  // Two mutually-exclusive full-center screens replace the sector map: the
+  // «ПИЛОТ» page (profile + clan + fleet + reputation) and the «ДЕТАЛИ КОРАБЛЯ»
+  // screen (TASK-127.2; the fleet roster the ship button used to toggle moved
+  // onto the pilot page in TASK-127.1). Both are hidden by default and owned
+  // here — SectorView reads pilotPageOpen / shipPageOpen from ctx to pick what
+  // fills the map cell. Opening one routes to /sector (the screens live there
+  // only) and closes the other. Both state atoms are declared before the toggle
+  // callbacks so each toggle may close the other without a use-before-declare.
   const [pilotOpen, setPilotOpen] = useState(false);
+  const [shipOpen, setShipOpen] = useState(false);
   const togglePilot = useCallback(() => {
     // Navigate from the event handler (not inside the setState updater — that
     // runs during render and triggers a "setState in render" router warning).
-    if (!pilotOpen) navigate('/sector');
+    if (!pilotOpen) {
+      navigate('/sector');
+      setShipOpen(false); // ship and pilot pages are mutually exclusive
+    }
     setPilotOpen((v) => !v);
   }, [pilotOpen, navigate]);
   const closePilot = useCallback(() => setPilotOpen(false), []);
+  const toggleShip = useCallback(() => {
+    if (!shipOpen) {
+      navigate('/sector');
+      setPilotOpen(false); // ship and pilot pages are mutually exclusive
+    }
+    setShipOpen((v) => !v);
+  }, [shipOpen, navigate]);
+  const closeShip = useCallback(() => setShipOpen(false), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -240,19 +247,14 @@ export function GameLayout() {
     ownCargo,
     pilotPageOpen: pilotOpen,
     closePilotPage: closePilot,
+    shipPageOpen: shipOpen,
+    closeShipPage: closeShip,
   };
 
   const sectorName = useMemo<string | null>(() => {
     if (galaxy.status !== 'ready' || !ownShip) return null;
     return galaxy.world.sectors.find((s) => s.id === ownShip.sectorID)?.name ?? null;
   }, [galaxy, ownShip]);
-  const resolveSectorName = useCallback(
-    (id: number): string | null =>
-      galaxy.status === 'ready'
-        ? (galaxy.world.sectors.find((s) => s.id === id)?.name ?? null)
-        : null,
-    [galaxy],
-  );
   const sectorLabel = ownShip
     ? `SECTOR · #${ownShip.sectorID}${sectorName ? ` · «${sectorName}»` : ''}`
     : 'SECTOR · —';
@@ -312,8 +314,9 @@ export function GameLayout() {
             questsOpen={questsOpen}
             onToggleQuests={toggleQuests}
             questBadge={questCount}
-            fleetOpen={fleetOpen}
-            onToggleFleet={toggleFleet}
+            shipOpen={shipOpen}
+            onToggleShip={toggleShip}
+            onLeaveShip={closeShip}
             pilotOpen={pilotOpen}
             onTogglePilot={togglePilot}
             onLeavePilot={closePilot}
@@ -322,14 +325,6 @@ export function GameLayout() {
             <Outlet context={ctx} />
           </main>
           <QuestPanel open={questsOpen} onClose={closeQuests} onCountsChange={setQuestCount} />
-          <FleetPanel
-            open={fleetOpen}
-            onClose={closeFleet}
-            races={races}
-            activeShipID={ownShip?.id ?? null}
-            onActivated={() => { void refreshPlayer(); }}
-            sectorName={resolveSectorName}
-          />
         </div>
       </div>
     </div>

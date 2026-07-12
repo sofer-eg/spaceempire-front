@@ -529,6 +529,21 @@ export async function sendJump(shipID: number, gateID: number): Promise<void> {
   }
 }
 
+// sendJumpDrive fires the seamless up_jump_drive jump (TASK-100.3.7): the ship
+// is thrown into a random point near the centre of targetSectorID — the player
+// picks only the sector, not a position. Throws ApiError on a non-2xx so the
+// caller can pass it to jumpDriveErrorText for a Russian, human-readable line.
+export async function sendJumpDrive(shipID: number, targetSectorID: number): Promise<void> {
+  const res = await fetch('/api/cmd/jump-drive', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ shipID, targetSectorID }),
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await parseErrorBody(res));
+  }
+}
+
 // claimStation buys an unowned station for the configured price (phase 8.7).
 // On success the station becomes player-owned and starts owing rent.
 export async function claimStation(stationID: number): Promise<void> {
@@ -985,6 +1000,49 @@ async function parseErrorBody(res: Response): Promise<string> {
     return body.error ?? res.statusText;
   } catch {
     return res.statusText;
+  }
+}
+
+// jumpDriveErrorText turns a sendJumpDrive failure into a Russian, human-
+// readable line for the galaxy-map footer / Journal (TASK-129). It branches on
+// the HTTP status ApiError carries and — for the two statuses the backend
+// overloads — on a substring of its English sentinel text: the same 422 covers
+// both "no jump drive" and "shield generator damaged", and the same 400 covers
+// both "jump blocked in this sector" and "invalid target sector". The backend
+// does not distinguish these by status alone, so keying on the English wording
+// ("shield" / "blocked") is a deliberate, documented coupling to those
+// sentinels (see the error table in TASK-129). Non-ApiError inputs (a thrown
+// Error, a rejected non-Error value) fall back to String(err).
+export function jumpDriveErrorText(err: unknown): string {
+  if (!(err instanceof ApiError)) return String(err);
+  const msg = err.message.toLowerCase();
+  switch (err.status) {
+    case 404:
+      return 'Корабль не найден.';
+    case 403:
+      return 'Это не ваш корабль.';
+    case 409:
+      return 'Нельзя прыгнуть пристыкованным — сначала отстыкуйтесь.';
+    case 422:
+      // Overloaded status: "shield" sentinel → damaged/missing shield generator,
+      // otherwise the ship simply has no up_jump_drive fitted.
+      return msg.includes('shield')
+        ? 'Нужен исправный генератор щита.'
+        : 'На корабле нет прыжкового двигателя (up_jump_drive).';
+    case 429:
+      return 'Прыжковый двигатель ещё не готов — идёт перезарядка.';
+    case 400:
+      // Overloaded status: "blocked" sentinel → this sector forbids jumping out,
+      // otherwise the target sector is invalid (own sector / unknown / bad json).
+      return msg.includes('blocked')
+        ? 'Прыжок из этого сектора запрещён.'
+        : 'Недопустимый сектор назначения.';
+    case 503:
+      return 'Сектор занят, попробуйте ещё раз.';
+    case 504:
+      return 'Команда не успела выполниться, попробуйте ещё раз.';
+    default:
+      return err.message;
   }
 }
 

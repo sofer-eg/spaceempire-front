@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   EntityKind,
   isStaticTargetKind,
@@ -63,6 +64,13 @@ type Props = {
 export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat, stationTypes, ownCargo, ownSectorID, onCargoChanged }: Props) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
+
+  // Jump-drive gate (TASK-129): the «⚡ Прыжок» section renders only when the
+  // active ship carries up_jump_drive; the button itself is disabled without a
+  // working shield generator (maxShield<=0), which the backend also requires.
+  const hasJumpDrive = !!ownShip.equipment?.some((e) => e.type === 'up_jump_drive');
+  const shieldGenOk = ownShip.maxShield > 0;
 
   // The combat target is whatever the laser is firing at; falls back to the
   // navigation target when it is targetable (a ship OR a destructible static),
@@ -267,6 +275,30 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
               onClick={() => run(sendInstallSatellite(ownShip.id), true)}
             />
           </div>
+
+          {hasJumpDrive && (
+            <>
+              <div className="sw-div" />
+              <div className="sw-col" style={{ gap: 6 }}>
+                <div className="sw-row" style={{ justifyContent: 'space-between' }}>
+                  <span className="sw-hh">Прыжковый двигатель</span>
+                </div>
+                <button
+                  type="button"
+                  className="sw-btn ghost"
+                  disabled={!shieldGenOk}
+                  title={
+                    !shieldGenOk
+                      ? 'Нужен исправный генератор щита'
+                      : 'Выбрать сектор для прыжка на карте галактики'
+                  }
+                  onClick={() => navigate('/galaxy', { state: { jumpShipID: ownShip.id } })}
+                >
+                  ⚡ Прыжок
+                </button>
+              </div>
+            </>
+          )}
 
           {error && (
             <span className="sw-mono" style={{ fontSize: 10, color: 'var(--danger)' }}>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { sendSetCourse, type Race, type WorldSector } from './api';
+import { useNavigate } from 'react-router-dom';
+import { jumpDriveErrorText, sendJumpDrive, sendSetCourse, type Race, type WorldSector } from './api';
 import { raceColor, raceName } from './gameContext';
 import { useGalaxy } from './useGalaxy';
 
@@ -12,6 +13,11 @@ type Props = {
   // races is the palette from GET /api/races; each sector's box is tinted
   // by its controlling faction (WorldSector.race), 0 stays neutral.
   races: Race[];
+  // jumpMode (TASK-129): when set, a sector click fires the seamless
+  // up_jump_drive (sendJumpDrive) instead of plotting a course (sendSetCourse),
+  // and the header shows a «РЕЖИМ ПРЫЖКА» chip + «Отмена». GalaxyPage turns it on
+  // from CombatHUD's router-state. Defaults to the ordinary set-course map.
+  jumpMode?: boolean;
 };
 
 type GridPos = { gx: number; gy: number };
@@ -64,9 +70,13 @@ const NAME_CHAR_RATIO = 0.66;
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 
-export function GalaxyMap({ currentSectorID, ownShipID, races }: Props) {
+export function GalaxyMap({ currentSectorID, ownShipID, races, jumpMode = false }: Props) {
+  const navigate = useNavigate();
   const galaxy = useGalaxy();
   const [status, setStatus] = useState<SubmitStatus>({ kind: 'idle' });
+  // statusMode tracks which mode `status` belongs to, so a mode flip can drop a
+  // stale line (see the reset just below).
+  const [statusMode, setStatusMode] = useState(jumpMode);
   const [view, setView] = useState<View | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
@@ -132,6 +142,18 @@ export function GalaxyMap({ currentSectorID, ownShipID, races }: Props) {
     return () => clearTimeout(t);
   }, [flashSectorID]);
 
+  // Drop a stale submit status when the map flips between jump and set-course
+  // mode (TASK-129). The galaxy rail navigates to /galaxy without router-state,
+  // so leaving jump mode that way keeps GalaxyMap mounted; without this reset a
+  // jump status line (e.g. an error) would linger in the ordinary set-course
+  // footer until the next click. Adjusting state during render (React's
+  // documented "reset state when a prop changes" pattern) avoids a
+  // setState-in-effect.
+  if (statusMode !== jumpMode) {
+    setStatusMode(jumpMode);
+    setStatus({ kind: 'idle' });
+  }
+
   if (galaxy.status === 'loading') {
     return (
       <div className="sw-panel sw-galaxy">
@@ -174,7 +196,23 @@ export function GalaxyMap({ currentSectorID, ownShipID, races }: Props) {
   const onSectorClick = (target: WorldSector) => {
     if (draggedRef.current) return;
     if (ownShipID === 0 || target.id === currentSectorID) return;
+    // In jump mode, ignore a second click while a jump is already in flight so a
+    // double-click can't fire two POSTs — the second would resolve after the
+    // success navigate has unmounted us. Set-course keeps its existing behaviour.
+    if (jumpMode && status.kind === 'pending') return;
     setStatus({ kind: 'pending', sectorID: target.id });
+    if (jumpMode) {
+      // Seamless jump (TASK-129): the backend drops the ship at a random point
+      // near the sector centre, so we send only the sector. On success we return
+      // to /sector — the WS snapshot re-renders the new sector and EventLog logs
+      // the sector change, so no extra client log is needed here.
+      void sendJumpDrive(ownShipID, target.id)
+        .then(() => navigate('/sector'))
+        .catch((err: unknown) =>
+          setStatus({ kind: 'error', sectorID: target.id, message: jumpDriveErrorText(err) }),
+        );
+      return;
+    }
     const cx = (target.bounds.minX + target.bounds.maxX) / 2;
     const cy = (target.bounds.minY + target.bounds.maxY) / 2;
     void sendSetCourse(ownShipID, target.id, cx, cy)
@@ -255,8 +293,21 @@ export function GalaxyMap({ currentSectorID, ownShipID, races }: Props) {
   return (
     <div className="sw-panel sw-galaxy">
       <div className="sw-panel-head">
-        <span className="title">Карта галактики</span>
+        <span className="title">{jumpMode ? 'Карта галактики · прыжок' : 'Карта галактики'}</span>
         <div className="sw-row" style={{ gap: 8 }}>
+          {jumpMode && (
+            <>
+              <span className="sw-chip dot danger">РЕЖИМ ПРЫЖКА</span>
+              <button
+                type="button"
+                className="sw-btn ghost"
+                title="Выйти из режима прыжка"
+                onClick={() => navigate('/sector')}
+              >
+                ✕ Отмена
+              </button>
+            </>
+          )}
           <div className="sw-galaxy__search">
             <input
               className="sw-input"
@@ -446,7 +497,11 @@ export function GalaxyMap({ currentSectorID, ownShipID, races }: Props) {
         </div>
       </div>
       <div className="sw-galaxy__footer">
-        {status.kind === 'pending' && <span>Курс задаётся для сектора #{status.sectorID}…</span>}
+        {status.kind === 'pending' && (
+          <span>
+            {jumpMode ? `Прыжок в #${status.sectorID}…` : `Курс задаётся для сектора #${status.sectorID}…`}
+          </span>
+        )}
         {status.kind === 'ok' && (
           <span style={{ color: 'var(--good)' }}>
             Курс задан в #{status.sectorID}, {status.hops} прыжков
@@ -458,9 +513,14 @@ export function GalaxyMap({ currentSectorID, ownShipID, races }: Props) {
           </span>
         )}
         {status.kind === 'idle' && ownShipID === 0 && (
-          <span>Нет корабля — невозможно задать курс.</span>
+          <span>Нет корабля — невозможно {jumpMode ? 'прыгнуть' : 'задать курс'}.</span>
         )}
-        {status.kind === 'idle' && ownShipID !== 0 && (
+        {status.kind === 'idle' && ownShipID !== 0 && jumpMode && (
+          <span style={{ color: 'var(--danger)' }}>
+            Кликните на сектор, чтобы прыгнуть. Прыжок сбросит щит и запустит перезарядку.
+          </span>
+        )}
+        {status.kind === 'idle' && ownShipID !== 0 && !jumpMode && (
           <span>Кликните на сектор, чтобы задать курс. Колесо — зум, перетаскивание — сдвиг.</span>
         )}
       </div>

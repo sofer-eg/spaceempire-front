@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchFleet, type Ship } from './api';
 import { ReputationPanel } from './ReputationPanel';
 import { fetchMyClan, type ClanDetail } from './clans/clansApi';
+import { FleetList } from './fleet/FleetList';
+import { useFleet } from './fleet/useFleet';
 import { shipDisplayName, useGameContext } from './gameContext';
+import { useGalaxy } from './useGalaxy';
 
 // PilotPage is the full-center «ПИЛОТ» view: the pilot dossier that replaces
 // the sector map when the rail's «пилот» button is on (mirrors StationView
@@ -28,12 +30,22 @@ function roleLabel(role: ClanDetail['members'][number]['role']): string {
 }
 
 export function PilotPage({ onClose }: Props) {
-  const { player, races, world, ownShip, riding } = useGameContext();
+  const { player, races, world, ownShip, riding, refreshPlayer } = useGameContext();
   const docked = Boolean(ownShip?.docked) && !riding;
 
   const [clan, setClan] = useState<ClanDetail | null>(null);
   const [clanLoaded, setClanLoaded] = useState(false);
-  const [fleet, setFleet] = useState<Ship[] | null>(null);
+
+  // The fleet roster reuses the shared FleetPanel data logic (TASK-127.1): while
+  // this page is mounted the hook polls GET /api/player/ships and drives the
+  // activate/sell actions, feeding the same FleetList the floating panel renders.
+  const fleet = useFleet(true, () => void refreshPlayer());
+  const galaxy = useGalaxy();
+  const resolveSectorName = useCallback(
+    (id: number): string | null =>
+      galaxy.status === 'ready' ? (galaxy.world.sectors.find((s) => s.id === id)?.name ?? null) : null,
+    [galaxy],
+  );
 
   const load = useCallback(() => {
     void fetchMyClan()
@@ -43,12 +55,6 @@ export function PilotPage({ onClose }: Props) {
         setClan(null);
       })
       .finally(() => setClanLoaded(true));
-    void fetchFleet()
-      .then((list) => setFleet(list))
-      .catch((err: unknown) => {
-        console.error('fetchFleet', err);
-        setFleet([]);
-      });
   }, []);
 
   useEffect(() => {
@@ -56,7 +62,11 @@ export function PilotPage({ onClose }: Props) {
   }, [load]);
 
   const myRole = clan && player ? clan.members.find((m) => m.playerId === player.playerID)?.role : undefined;
-  const activeShip = ownShip && !docked ? ownShip : null;
+  // activeShipID marks the flown ship in the roster regardless of docked state
+  // (mirrors the floating panel: ownShip is the active ship, docked or not); the
+  // «Активный» summary reads the same ship so it stays consistent with the list.
+  const activeShipID = ownShip?.id ?? null;
+  const activeShip = ownShip;
 
   return (
     <div className="sw-panel sw-pilot">
@@ -148,28 +158,32 @@ export function PilotPage({ onClose }: Props) {
           <section className="sw-panel sw-pilot__card">
             <div className="sw-panel-head">
               <span className="title">Флот</span>
-              <span className="meta">{fleet ? `${fleet.length}` : ''}</span>
+              <span className="meta">{fleet.loading && fleet.ships.length === 0 ? '' : fleet.ships.length}</span>
             </div>
             <div className="sw-panel-body">
-              {fleet === null ? (
-                <span className="sw-mono" style={{ color: 'var(--ink-mute)', fontSize: 11 }}>
-                  Загрузка…
-                </span>
-              ) : (
-                <div className="sw-col" style={{ gap: 10 }}>
-                  <div className="sw-kv">
-                    <span className="k">Кораблей</span>
-                    <span className="v sw-mono">{fleet.length}</span>
-                    <span className="k">Активный</span>
-                    <span className="v sw-mono">
-                      {activeShip ? shipDisplayName(activeShip, races) : '—'}
-                    </span>
-                  </div>
-                  <span className="sw-mono" style={{ color: 'var(--ink-mute)', fontSize: 10 }}>
-                    Управление — в меню «Корабль».
+              <div className="sw-col" style={{ gap: 10 }}>
+                <div className="sw-kv">
+                  <span className="k">Кораблей</span>
+                  <span className="v sw-mono">{fleet.ships.length}</span>
+                  <span className="k">Активный</span>
+                  <span className="v sw-mono">
+                    {activeShip ? shipDisplayName(activeShip, races) : '—'}
                   </span>
                 </div>
-              )}
+                <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+                  <FleetList
+                    ships={fleet.ships}
+                    loading={fleet.loading}
+                    error={fleet.error}
+                    busy={fleet.busy}
+                    races={races}
+                    activeShipID={activeShipID}
+                    sectorName={resolveSectorName}
+                    onActivate={(id) => void fleet.onActivate(id)}
+                    onSell={(shipyardID, id) => void fleet.onSell(shipyardID, id)}
+                  />
+                </div>
+              </div>
             </div>
           </section>
 

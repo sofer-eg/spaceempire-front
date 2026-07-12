@@ -119,6 +119,19 @@ function resolveStation(
   }
 }
 
+// dockedStationLabel is the non-hook twin of useStation().label: the human
+// title of the static the ship is docked at ("Станция"/"Верфь"/…), or null
+// when in space. GameLayout needs it for the rail's «станция» tooltip, and the
+// rail renders outside <Outlet> so it can't call the useStation() hook.
+export function dockedStationLabel(
+  ownShip: TrackedShip | null,
+  statics: SectorStatics,
+  stationTypes: StationType[],
+): string | null {
+  if (!ownShip?.docked) return null;
+  return resolveStation(ownShip.docked, statics, stationTypes).label;
+}
+
 // goodsName / goodsSpace are tiny lookup helpers used by Market/Cargo/Auction
 // views. Falls back to "type N" / 0 when the catalog has not loaded yet or
 // the id is unknown (legacy data).

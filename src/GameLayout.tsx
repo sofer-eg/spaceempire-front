@@ -16,7 +16,7 @@ import {
   type StationType,
 } from './api';
 import { useAuth } from './auth/useAuth';
-import type { GameOutletContext } from './gameContext';
+import { dockedStationLabel, type GameOutletContext } from './gameContext';
 import type { TrackedShip } from './useWorldState';
 import { useWorldState } from './useWorldState';
 import { useGalaxy } from './useGalaxy';
@@ -195,6 +195,11 @@ export function GameLayout() {
     return candidate;
   }, [world.ships, player, self, ridingHost]);
 
+  // Human title of the static the ship is docked at (null in space / while
+  // riding). Resolved here — not in the rail — because the rail renders outside
+  // <Outlet> and can't call the useStation() hook. Feeds the «станция» tooltip.
+  const dockedLabel = dockedStationLabel(ownShip, world.statics, stationTypes);
+
   // Own-ship cargo for the ship HUD's ГРУЗ bar. Re-fetched when the ship
   // changes or refreshPlayer fires (after a buy/sell/cargo move). Cleared
   // when the player has no ship.
@@ -302,7 +307,8 @@ export function GameLayout() {
         </header>
         <div className="sw-shell__body">
           <Rail
-            docked={Boolean(ownShip?.docked)}
+            docked={Boolean(ownShip?.docked) && !riding}
+            stationLabel={dockedLabel}
             questsOpen={questsOpen}
             onToggleQuests={toggleQuests}
             questBadge={questCount}

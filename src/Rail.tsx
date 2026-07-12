@@ -9,8 +9,18 @@ import { useLocation, useNavigate } from 'react-router-dom';
 // Active state is computed manually (not via NavLink isActive) because
 // "станция" and "сектор" share the /sector route — when docked the centre
 // shows the station UI, so станция takes the active marker and сектор yields.
+//
+// "станция" is active whenever the ship is docked at ANY dockable static
+// (station / trade station / shipyard / pirbase): the centre swaps to
+// StationView for all of them, and this item is the control to return to it.
+// The tooltip names the actual object (stationLabel: «Верфь»/«Пиратская
+// база»/…) so the item never reads as a plain "station" when it isn't.
 type Props = {
   docked: boolean;
+  // stationLabel is the human title of the docked static («Станция»/«Верфь»/…),
+  // resolved in GameLayout (the rail renders outside <Outlet> and can't call
+  // the useStation() hook). Null when in space; feeds the «станция» tooltip.
+  stationLabel?: string | null;
   // "задания" is a toggle, not navigation: it opens/closes the floating
   // QuestPanel owned by GameLayout. questsOpen drives the active marker;
   // questBadge surfaces the active-quest count so the panel (and the
@@ -43,7 +53,7 @@ type Item = {
   badge?: number;
 };
 
-export function Rail({ docked, questsOpen, onToggleQuests, questBadge, fleetOpen, onToggleFleet, pilotOpen, onTogglePilot, onLeavePilot }: Props) {
+export function Rail({ docked, stationLabel, questsOpen, onToggleQuests, questBadge, fleetOpen, onToggleFleet, pilotOpen, onTogglePilot, onLeavePilot }: Props) {
   const navigate = useNavigate();
   const loc = useLocation();
   const onSector = loc.pathname.startsWith('/sector');
@@ -70,7 +80,7 @@ export function Rail({ docked, questsOpen, onToggleQuests, questBadge, fleetOpen
       onClick: () => { onLeavePilot(); navigate('/sector'); },
       enabled: docked,
       active: onSector && docked && !pilotOpen,
-      title: docked ? undefined : 'Доступно при стыковке',
+      title: docked ? (stationLabel ? `Открыть — ${stationLabel}` : undefined) : 'Доступно при стыковке',
     },
     {
       id: 'ship',

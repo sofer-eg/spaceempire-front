@@ -906,6 +906,37 @@ html, body, #root {
   color: var(--ink-mute);
 }
 
+/* Install requirements (TASK-100.3.28): an always-visible sub-row beneath a
+   blocked module in the «Доступно» table, listing what is missing (dependency
+   modules + reputation thresholds). Sits flush under its module row (no top
+   border) so the two read as one unit. */
+.sw-shipyard__reqrow td {
+  padding-top: 0;
+  padding-bottom: 8px;
+}
+.sw-shipyard__reqs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.sw-shipyard__reqs li {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--warn);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.sw-shipyard__reqs li::before {
+  content: '!';
+  flex: 0 0 auto;
+  color: var(--warn);
+  font-weight: 700;
+}
+
 .sw-table {
   width: 100%;
   border-collapse: collapse;

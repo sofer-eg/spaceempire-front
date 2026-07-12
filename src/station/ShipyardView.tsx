@@ -1,16 +1,20 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import {
   buyShip,
   fetchEquipment,
+  fetchRaceStandings,
   fetchShipClasses,
   installEquipment,
   uninstallEquipment,
   type Equipment,
   type InstalledEquipment,
+  type Race,
+  type RaceStandings,
   type ShipClass,
 } from '../api';
-import { usePlayer } from '../gameContext';
+import { useGameContext, usePlayer } from '../gameContext';
 import { emitLog } from '../eventBus';
+import { installRequirements } from './shipyardRequirements';
 
 type Props = {
   shipyardID: number;
@@ -23,8 +27,14 @@ type Props = {
 // section targets).
 export function ShipyardView({ shipyardID }: Props) {
   const { player, ownShip, setCash, refreshPlayer } = usePlayer();
+  const { statics, races } = useGameContext();
   const [classes, setClasses] = useState<ShipClass[]>([]);
   const [equipment, setEquipment] = useState<Equipment[]>([]);
+  // Player reputation for the predictive install gate (TASK-100.3.28). Null
+  // until loaded AND when the fetch failed — the two are indistinguishable
+  // here, so a null value means «standings unknown» and the reputation axes are
+  // NOT gated at all (see repKnown below); the server 422 stays the fallback.
+  const [standings, setStandings] = useState<RaceStandings | null>(null);
   const [loadStatus, setLoadStatus] = useState<'loading' | 'ok' | 'error'>('loading');
   const [loadError, setLoadError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -37,10 +47,18 @@ export function ShipyardView({ shipyardID }: Props) {
     let cancelled = false;
     void (async () => {
       try {
-        const [cls, eq] = await Promise.all([fetchShipClasses(), fetchEquipment()]);
+        // Standings are best-effort: a failure must not blank the whole verf
+        // screen, so it resolves to null — «unknown», which turns off the
+        // reputation gate entirely (repKnown=false) rather than gating on 0.
+        const [cls, eq, st] = await Promise.all([
+          fetchShipClasses(),
+          fetchEquipment(),
+          fetchRaceStandings().catch(() => null),
+        ]);
         if (cancelled) return;
         setClasses(cls);
         setEquipment(eq);
+        setStandings(st);
         setLoadStatus('ok');
       } catch (err) {
         if (cancelled) return;
@@ -74,6 +92,17 @@ export function ShipyardView({ shipyardID }: Props) {
   }
 
   const cash = player?.cash ?? 0;
+
+  // The shipyard's race gates race-locked modules: the server checks the
+  // player's standing with THIS race, so the predictive UI does the same.
+  // repKnown gates the whole reputation check: the fallback zeros below are only
+  // meaningful when standings actually loaded — when they didn't (null), the
+  // OutfitSection skips reputation entirely rather than gating on a fake 0.
+  const repKnown = standings !== null;
+  const shipyardRace = statics.shipyards?.find((s) => s.id === shipyardID)?.race ?? 0;
+  const warRate = standings?.warRate ?? 0;
+  const tradeRate = standings?.tradeRate ?? 0;
+  const raceStanding = standings?.items.find((s) => s.race === shipyardRace)?.standing ?? 0;
 
   // The active ship's class drives which equipment rows apply.
   const ownClass = useMemo(
@@ -213,6 +242,12 @@ export function ShipyardView({ shipyardID }: Props) {
         installed={installed}
         cash={cash}
         busy={busy}
+        races={races}
+        repKnown={repKnown}
+        shipyardRace={shipyardRace}
+        raceStanding={raceStanding}
+        warRate={warRate}
+        tradeRate={tradeRate}
         onInstall={onInstall}
         onUninstall={onUninstall}
       />
@@ -226,13 +261,38 @@ type OutfitProps = {
   installed: InstalledEquipment[];
   cash: number;
   busy: boolean;
+  races: Race[];
+  // Reputation context for the predictive install gate (TASK-100.3.28):
+  // the shipyard's race + the player's standing with it, plus aggregate
+  // war/trade ratings. These values are only trusted when repKnown is true;
+  // when false (standings failed/unloaded) they are ignored and the reputation
+  // axes are not gated at all.
+  repKnown: boolean;
+  shipyardRace: number;
+  raceStanding: number;
+  warRate: number;
+  tradeRate: number;
   onInstall: (eq: Equipment, level: number) => void;
   onUninstall: (m: InstalledEquipment) => void;
 };
 
 // OutfitSection renders the active ship's current fit and the modules it can
 // still install, filtered to its class and race.
-function OutfitSection({ ownClass, equipment, installed, cash, busy, onInstall, onUninstall }: OutfitProps) {
+function OutfitSection({
+  ownClass,
+  equipment,
+  installed,
+  cash,
+  busy,
+  races,
+  repKnown,
+  shipyardRace,
+  raceStanding,
+  warRate,
+  tradeRate,
+  onInstall,
+  onUninstall,
+}: OutfitProps) {
   // Per-row chosen level (defaults to 1) for modules with max_level > 1.
   const [levels, setLevels] = useState<Record<number, number>>({});
 
@@ -264,12 +324,26 @@ function OutfitSection({ ownClass, equipment, installed, cash, busy, onInstall, 
 
   const level = (id: number) => levels[id] ?? 1;
   const installPrice = (e: Equipment, lvl: number) => e.price + lvl * e.pricePerLevel;
-  const depMissing = (e: Equipment) =>
-    e.dependance !== '' && e.dependance !== 'none' && !installedTypes.has(e.dependance);
-  // A row is blocked when its dependency is missing or it costs more than the
-  // player has. Mirrors the button's disabled state (minus the transient `busy`
-  // flag) and is evaluated at the same chosen level as the render below.
-  const isBlocked = (e: Equipment) => depMissing(e) || cash < installPrice(e, level(e.id));
+  // missingReqs delegates to the shared pure gate (shipyardRequirements.ts) so
+  // the render and the button-disabled state use the exact same logic, and it
+  // mirrors the server gate (equipment_effects.go ResolveInstall) axis for
+  // axis. Reputation is only checked when repKnown; credit shortage is handled
+  // separately (button title) and is not a "requirement" line here.
+  const missingReqs = (e: Equipment): string[] =>
+    installRequirements(equipment, e, {
+      installedTypes,
+      repKnown,
+      races,
+      shipyardRace,
+      raceStanding,
+      warRate,
+      tradeRate,
+    });
+  // A row is blocked when it has an unmet requirement (dependency / reputation)
+  // or costs more than the player has. Mirrors the button's disabled state
+  // (minus the transient `busy` flag) at the same chosen level as the render.
+  const isBlocked = (e: Equipment) =>
+    missingReqs(e).length > 0 || cash < installPrice(e, level(e.id));
 
   // Float installable modules to the top so the player sees what they can fit
   // right now (e.g. up_generator, dependance: none) instead of hunting past
@@ -334,49 +408,58 @@ function OutfitSection({ ownClass, equipment, installed, cash, busy, onInstall, 
             {availableSorted.map((e) => {
               const lvl = level(e.id);
               const price = installPrice(e, lvl);
-              const dep = depMissing(e);
+              const reqs = missingReqs(e);
               const tooCheap = cash < price;
-              const disabledTitle = dep
-                ? `Сначала установите: ${depLabel(equipment, e.dependance)}`
-                : tooCheap
-                  ? 'Недостаточно кредитов'
-                  : undefined;
+              const disabled = busy || reqs.length > 0 || tooCheap;
               return (
-                <tr key={e.id}>
-                  <td>{e.description}</td>
-                  <td>
-                    {e.maxLevel > 1 ? (
-                      <select
-                        className="sw-input"
-                        style={{ width: 64 }}
-                        value={lvl}
-                        onChange={(ev) =>
-                          setLevels((p) => ({ ...p, [e.id]: Number(ev.target.value) }))
-                        }
+                <Fragment key={e.id}>
+                  <tr>
+                    <td>{e.description}</td>
+                    <td>
+                      {e.maxLevel > 1 ? (
+                        <select
+                          className="sw-input"
+                          style={{ width: 64 }}
+                          value={lvl}
+                          onChange={(ev) =>
+                            setLevels((p) => ({ ...p, [e.id]: Number(ev.target.value) }))
+                          }
+                        >
+                          {Array.from({ length: e.maxLevel }, (_, i) => i + 1).map((n) => (
+                            <option key={n} value={n}>
+                              {n}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="sw-mono">1</span>
+                      )}
+                    </td>
+                    <td className="sw-mono">{price.toLocaleString('ru-RU')}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="sw-btn"
+                        disabled={disabled}
+                        title={tooCheap && reqs.length === 0 ? 'Недостаточно кредитов' : undefined}
+                        onClick={() => onInstall(e, lvl)}
                       >
-                        {Array.from({ length: e.maxLevel }, (_, i) => i + 1).map((n) => (
-                          <option key={n} value={n}>
-                            {n}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className="sw-mono">1</span>
-                    )}
-                  </td>
-                  <td className="sw-mono">{price.toLocaleString('ru-RU')}</td>
-                  <td>
-                    <button
-                      type="button"
-                      className="sw-btn"
-                      disabled={busy || dep || tooCheap}
-                      title={disabledTitle}
-                      onClick={() => onInstall(e, lvl)}
-                    >
-                      Установить
-                    </button>
-                  </td>
-                </tr>
+                        Установить
+                      </button>
+                    </td>
+                  </tr>
+                  {reqs.length > 0 && (
+                    <tr className="sw-shipyard__reqrow">
+                      <td colSpan={4}>
+                        <ul className="sw-shipyard__reqs">
+                          {reqs.map((r) => (
+                            <li key={r}>{r}</li>
+                          ))}
+                        </ul>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               );
             })}
           </tbody>
@@ -410,10 +493,4 @@ function equipSig(eq: InstalledEquipment[] | undefined): string {
 // falling back to its type key when the catalog row is missing.
 function equipName(catalog: Equipment[], m: InstalledEquipment): string {
   return catalog.find((e) => e.id === m.equipmentID)?.description ?? m.type;
-}
-
-// depLabel resolves a dependency type key (e.g. up_accumulator) to a human
-// label via the first catalog row of that type.
-function depLabel(catalog: Equipment[], type: string): string {
-  return catalog.find((e) => e.type === type)?.description ?? type;
 }

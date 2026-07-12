@@ -1547,6 +1547,13 @@ export type Equipment = {
   dependance: string;
   energyUseType: string;
   energyUsage: number;
+  // Reputation gates (TASK-100.3.27): install is blocked when the player's
+  // war/trade rating or their standing with the shipyard's race is below the
+  // respective threshold. 0 means the axis does not gate. Consumed by the
+  // shipyard to predictively disable «Установить» (TASK-100.3.28).
+  minWarRate: number;
+  minTradeRate: number;
+  minRaceRate: number;
 };
 
 export async function fetchEquipment(): Promise<Equipment[]> {

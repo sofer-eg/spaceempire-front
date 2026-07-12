@@ -1128,13 +1128,22 @@ export type RaceStanding = {
 export type RaceStandings = {
   items: RaceStanding[];
   wantedThreshold: number;
+  // Aggregate war/trade ratings of the current player (TASK-132). Consumed by
+  // the shipyard to predictively gate installs on those axes; always present.
+  warRate: number;
+  tradeRate: number;
 };
 
 export async function fetchRaceStandings(): Promise<RaceStandings> {
   const res = await fetch('/api/my/race-standings');
   await requireOk(res, 'GET /api/my/race-standings');
   const body = (await res.json()) as RaceStandings;
-  return { items: body.items ?? [], wantedThreshold: body.wantedThreshold };
+  return {
+    items: body.items ?? [],
+    wantedThreshold: body.wantedThreshold,
+    warRate: body.warRate ?? 0,
+    tradeRate: body.tradeRate ?? 0,
+  };
 }
 
 // PoliceScanFrame is the per-player WS frame pushed when a race's police

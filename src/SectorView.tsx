@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useGameContext } from './gameContext';
 import { SectorCanvas, type SelectedTargetRef, type ZoomMode } from './SectorCanvas';
 import { SetCoursePanel } from './SetCoursePanel';
@@ -158,9 +158,58 @@ export function SectorView() {
     if (s.sectorID === ownSectorID) contactsHere++;
   }
 
+  // Narrow-viewport panel state (TASK-133). Below the 1024px breakpoint the ship
+  // HUD, navigation and journal collapse into off-canvas panels driven by the
+  // toolbar; above it the toolbar/scrim are display:none and the asides render
+  // as ordinary grid columns, so this state has no visual effect there. A single
+  // openPanel makes the three panels mutually exclusive — opening one closes any
+  // other, so a side drawer and the journal sheet can never overlap.
+  const [openPanel, setOpenPanel] = useState<'ship' | 'nav' | 'log' | null>(null);
+  // Escape closes whichever panel is open (listener attached only while one is).
+  useEffect(() => {
+    if (openPanel === null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpenPanel(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [openPanel]);
+
   return (
     <div className="sw-sector-grid">
-      <aside className="sw-sector-grid__ship">
+      <div className="sw-sector-toolbar" role="toolbar" aria-label="Панели HUD">
+        <button
+          type="button"
+          className="sw-btn"
+          data-active={openPanel === 'ship'}
+          aria-pressed={openPanel === 'ship'}
+          aria-label="Показать панель корабля"
+          onClick={() => setOpenPanel((p) => (p === 'ship' ? null : 'ship'))}
+        >
+          Корабль
+        </button>
+        <button
+          type="button"
+          className="sw-btn"
+          data-active={openPanel === 'nav'}
+          aria-pressed={openPanel === 'nav'}
+          aria-label="Показать панель навигации"
+          onClick={() => setOpenPanel((p) => (p === 'nav' ? null : 'nav'))}
+        >
+          Навигация
+        </button>
+        <button
+          type="button"
+          className="sw-btn"
+          data-active={openPanel === 'log'}
+          aria-pressed={openPanel === 'log'}
+          aria-label="Показать журнал событий"
+          onClick={() => setOpenPanel((p) => (p === 'log' ? null : 'log'))}
+        >
+          Журнал
+        </button>
+      </div>
+      <aside className={`sw-sector-grid__ship${openPanel === 'ship' ? ' is-open' : ''}`}>
         <PilotPanel
           ownShip={ownShip}
           ownCargo={ownCargo}
@@ -253,7 +302,7 @@ export function SectorView() {
           </div>
         )}
       </section>
-      <aside className="sw-sector-grid__nav">
+      <aside className={`sw-sector-grid__nav${openPanel === 'nav' ? ' is-open' : ''}`}>
         <TargetsPanel
           ships={ships}
           statics={statics}
@@ -273,9 +322,14 @@ export function SectorView() {
           selectedTarget={selectedTargetRef}
         />
       </aside>
-      <footer className="sw-sector-grid__log">
+      <footer className={`sw-sector-grid__log${openPanel === 'log' ? ' is-open' : ''}`}>
         <EventLog tick={world.tick} connection={world.connection} ownShip={ownShip} contacts={contactsHere} />
       </footer>
+      <div
+        className={`sw-drawer-scrim${openPanel !== null ? ' is-open' : ''}`}
+        aria-hidden="true"
+        onClick={() => setOpenPanel(null)}
+      />
     </div>
   );
 }

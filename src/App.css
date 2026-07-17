@@ -367,6 +367,8 @@ html, body, #root {
   gap: 10px;
   height: 100%;
   min-height: 0;
+  /* anchor for the off-canvas drawers used on narrow viewports (TASK-133) */
+  position: relative;
 }
 /* The ship column is bounded by the journal (the "ship" grid row ends at the
    log's top). Its stacked panels (Корабль HUD + Бой + Курс) can be taller than
@@ -385,6 +387,123 @@ html, body, #root {
 .sw-sector-grid__map  { grid-area: map; min-height: 0; min-width: 0; position: relative; }
 .sw-sector-grid__nav  { grid-area: nav; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
 .sw-sector-grid__log  { grid-area: log; min-height: 0; }
+
+/* ---------- adaptive HUD layout (TASK-133) ---------- */
+/* Three regimes, gap-free across the whole width range:
+     - >= 1150px          base desktop grid (320|1fr|380), no media query;
+     - 1024 - 1149.98px   3-column band with tightened sides (240|1fr|280) so
+                          the centre cell stays >= ~360px wide;
+     - <= 1023.98px       side asides collapse into off-canvas drawers.
+   The .98px pairing (max-width:1023.98 <-> min-width:1024, and
+   max-width:1149.98 <-> min-width:1150) is the Bootstrap technique: it leaves
+   no whole-pixel hole that a fractional viewport (browser zoom / fractional
+   DPR / split-screen) could fall through into the desktop grid while the
+   toolbar is hidden.
+   The toggle toolbar and drawer scrim exist only in the drawer regime; this
+   base rule keeps them display:none, so the React panel state (openPanel) has
+   no visual effect on the two 3-column layouts. */
+.sw-sector-toolbar { display: none; }
+.sw-drawer-scrim { display: none; }
+
+/* 1024 - 1149.98px: keep the 3-column HUD but tighten the side columns and gaps
+   so the central cell (map / StationView / ShipDetailView / PilotPage) keeps a
+   workable width instead of being crushed by the desktop 320+380 sides.
+   Chrome outside the grid consumes shell-padding 20 + rail 64 + body-gap 10 +
+   two grid-gaps 16 + sides 240+280 = 630px, so centre = viewport - 630:
+   ~394px at 1024 and ~519px at 1149.98 -- >= ~360px across the whole band. */
+@media (min-width: 1024px) and (max-width: 1149.98px) {
+  .sw-sector-grid {
+    grid-template-columns: 240px 1fr 280px;
+    grid-template-rows: 1fr 160px;
+    gap: 8px;
+  }
+}
+
+/* <= 1023.98px (down to ~768px: narrow desktop / tablet-landscape / split-screen):
+   the side asides collapse into off-canvas drawers over a full-width map. A
+   toolbar row of toggles drives them via React state; a scrim catches an
+   outside tap to close. The journal becomes a bottom sheet. */
+@media (max-width: 1023.98px) {
+  .sw-sector-grid {
+    --sw-toolbar-h: 42px;
+    grid-template-columns: 1fr;
+    grid-template-rows: var(--sw-toolbar-h) 1fr;
+    grid-template-areas: "toolbar" "map";
+    gap: 8px;
+    /* clip the off-canvas drawers to the grid box so a closed drawer can't
+       bleed over the rail on the left / spill past the viewport on the right
+       (which would also inflate document scrollWidth — AC #3). */
+    overflow: hidden;
+  }
+
+  .sw-sector-toolbar {
+    grid-area: toolbar;
+    display: flex;
+    align-items: stretch;
+    gap: 6px;
+    z-index: 40; /* above the drawers so a re-tap on a toggle always closes it */
+  }
+  .sw-sector-toolbar .sw-btn {
+    flex: 1 1 0;
+    justify-content: center;
+    padding: 6px 8px;
+    letter-spacing: 0.1em;
+  }
+
+  /* scrim: dims the map and catches an outside tap; below the drawers and the
+     toolbar, above the map canvas. Stays under QuestPanel (z-index 50). */
+  .sw-drawer-scrim.is-open {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 25;
+    background: rgba(3, 8, 16, 0.5);
+  }
+
+  /* shared drawer chrome for the two side asides — solid panel background so
+     the map does not bleed through the gaps between the stacked sub-panels. */
+  .sw-sector-grid__ship,
+  .sw-sector-grid__nav {
+    position: absolute;
+    top: calc(var(--sw-toolbar-h) + 8px);
+    bottom: 0;
+    width: min(320px, 82%);
+    z-index: 30;
+    background: linear-gradient(180deg, var(--bg-2), var(--bg-1));
+    border: 1px solid var(--line);
+    padding: 10px;
+    overflow-y: auto;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55);
+    transition: transform 0.2s ease;
+  }
+  .sw-sector-grid__ship {
+    left: 0;
+    transform: translateX(calc(-100% - 12px));
+  }
+  .sw-sector-grid__nav {
+    right: 0;
+    transform: translateX(calc(100% + 12px));
+  }
+  .sw-sector-grid__ship.is-open,
+  .sw-sector-grid__nav.is-open {
+    transform: translateX(0);
+  }
+
+  /* journal: bottom sheet, off-canvas until toggled. */
+  .sw-sector-grid__log {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: min(45%, 240px);
+    z-index: 30;
+    transform: translateY(calc(100% + 12px));
+    transition: transform 0.2s ease;
+  }
+  .sw-sector-grid__log.is-open {
+    transform: translateY(0);
+  }
+}
 
 /* GalaxyPage fills the main area. */
 .sw-galaxy-page { height: 100%; position: relative; }

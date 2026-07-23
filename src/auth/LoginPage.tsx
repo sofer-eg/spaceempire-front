@@ -58,7 +58,7 @@ export function LoginPage() {
       <form className="sw-login-card sw-panel" onSubmit={onSubmit}>
         <div className="sw-panel-head">
           <span className="title">{mode === 'login' ? 'Вход' : 'Регистрация'}</span>
-          <span className="meta">STAR · WIND</span>
+          <span className="meta">SPACE · EMPIRE</span>
         </div>
         <div className="sw-panel-body">
           <div className="sw-form">

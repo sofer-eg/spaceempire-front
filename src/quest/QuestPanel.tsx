@@ -78,13 +78,13 @@ export function QuestPanel({ open, onClose, onCountsChange }: Props) {
     saveDismissed(next);
   };
 
-  const onAccept = async (questId: string) => {
-    setBusy(questId);
+  const onAccept = async (offerId: string) => {
+    setBusy(offerId);
     try {
-      await acceptQuest(questId);
+      await acceptQuest(offerId);
       poll();
     } catch {
-      /* prerequisite not met / already accepted — surfaced by the list refresh */
+      /* offer expired / already accepted — surfaced by the list refresh */
     } finally {
       setBusy('');
     }
@@ -102,9 +102,11 @@ export function QuestPanel({ open, onClose, onCountsChange }: Props) {
     }
   };
 
-  const activeIDs = new Set(active.map((q) => q.questId));
   const visible = active.filter((q) => !((q.done || q.failed) && dismissed[q.questId]));
-  const available = offerable.filter((o) => !activeIDs.has(o.questId) && !dismissed[o.questId]);
+  // Personal offers (TASK-89, FR-10): the endpoint already returns only this
+  // player's un-accepted, un-expired offers, so no active-id filtering is
+  // needed — an accepted offer simply drops out of the next poll.
+  const available = offerable;
 
   // Active (non-terminal) quest count → rail badge. Reported even while closed.
   const activeCount = visible.filter((q) => !(q.done || q.failed)).length;
@@ -210,21 +212,34 @@ export function QuestPanel({ open, onClose, onCountsChange }: Props) {
               paddingTop: 8,
             }}
           >
-            <span style={{ color: 'var(--muted, #7a8a99)', fontSize: 12 }}>Доступные задания</span>
-            {available.map((o) => (
-              <div key={o.questId} className="sw-row" style={{ gap: 6, alignItems: 'center' }}>
-                <span>{o.title}</span>
-                <div className="sw-spacer" />
-                <button
-                  type="button"
-                  className="sw-btn"
-                  disabled={busy === o.questId}
-                  onClick={() => void onAccept(o.questId)}
-                >
-                  Взять
-                </button>
-              </div>
-            ))}
+            <span style={{ color: 'var(--muted, #7a8a99)', fontSize: 12 }}>Предложения</span>
+            {available.map((o) => {
+              const ttl = deadlineLabel(o.expiresUnix);
+              return (
+                <div key={o.offerId} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div className="sw-row" style={{ gap: 6, alignItems: 'baseline' }}>
+                    <span style={{ fontWeight: 600 }}>{o.title}</span>
+                    <div className="sw-spacer" />
+                    {ttl && <span className="sw-chip">{ttl}</span>}
+                  </div>
+                  <span style={{ color: 'var(--muted, #7a8a99)' }}>{o.desc}</span>
+                  <div className="sw-row" style={{ gap: 8, alignItems: 'baseline' }}>
+                    {o.rewardCash > 0 && (
+                      <span style={{ color: 'var(--good, #4ec9a8)' }}>+{o.rewardCash} кр</span>
+                    )}
+                    <div className="sw-spacer" />
+                    <button
+                      type="button"
+                      className="sw-btn"
+                      disabled={busy === o.offerId}
+                      onClick={() => void onAccept(o.offerId)}
+                    >
+                      Принять
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

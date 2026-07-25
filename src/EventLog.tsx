@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { ConnectionState, TrackedShip } from './useWorldState';
-import { subscribeLog, type LogCategory, type LogKind } from './eventBus';
+import { subscribeLog, type LogAction, type LogCategory, type LogKind } from './eventBus';
+import { acceptQuest } from './api';
 
 type Props = {
   tick: number;
@@ -15,6 +16,7 @@ type Entry = {
   category: LogCategory;
   kind: LogKind;
   message: string;
+  action?: LogAction;
 };
 
 const MAX_ENTRIES = 40;
@@ -28,13 +30,14 @@ function reducer(state: Entry[], action: Action): Entry[] {
   }
 }
 
-type Tab = 'all' | 'sector' | 'combat' | 'trade';
+type Tab = 'all' | 'sector' | 'combat' | 'trade' | 'quest';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'all', label: 'Всё' },
   { id: 'sector', label: 'Сектор' },
   { id: 'combat', label: 'Бой' },
   { id: 'trade', label: 'Сделки' },
+  { id: 'quest', label: 'Квесты' },
 ];
 
 export function EventLog({ tick, connection, ownShip, contacts }: Props) {
@@ -42,6 +45,11 @@ export function EventLog({ tick, connection, ownShip, contacts }: Props) {
   // so we collect events here and dispatch them once per effect run.
   const [entries, dispatch] = useReducer(reducer, []);
   const [tab, setTab] = useState<Tab>('all');
+  // accept-from-journal state (TASK-89, AC-1): the offer id currently being
+  // accepted (button shows a spinner-ish disabled state) and the set of offers
+  // already accepted (button turns into a «принято ✓» chip).
+  const [acceptingOffer, setAcceptingOffer] = useState<string>('');
+  const [acceptedOffers, setAcceptedOffers] = useState<Set<string>>(new Set());
   const lastTickRef = useRef<number>(-1);
   const lastConnRef = useRef<ConnectionState | null>(null);
   const lastSectorRef = useRef<number>(0);
@@ -62,10 +70,28 @@ export function EventLog({ tick, connection, ownShip, contacts }: Props) {
     return subscribeLog((e) => {
       dispatch({
         type: 'push',
-        entries: [{ id: ++seqRef.current, time: now(), category: e.category, kind: e.kind, message: e.message }],
+        entries: [
+          { id: ++seqRef.current, time: now(), category: e.category, kind: e.kind, message: e.message, action: e.action },
+        ],
       });
     });
   }, []);
+
+  // Accept a quest offer straight from its journal line (TASK-89, AC-1). On
+  // success the button collapses to a «принято» chip; a failure (offer expired /
+  // already taken) re-enables it so the player can retry — the panel's poll
+  // surfaces the real state either way.
+  const acceptOffer = async (offerId: string) => {
+    setAcceptingOffer(offerId);
+    try {
+      await acceptQuest(offerId);
+      setAcceptedOffers((prev) => new Set(prev).add(offerId));
+    } catch {
+      /* expired / already accepted — leave the button for a retry */
+    } finally {
+      setAcceptingOffer('');
+    }
+  };
 
   // Append system/sector events when interesting world state changes.
   useEffect(() => {
@@ -141,6 +167,22 @@ export function EventLog({ tick, connection, ownShip, contacts }: Props) {
             <div key={e.id} className={`row ${e.kind}`}>
               <span className="t">{e.time}</span>
               <span className="m">{e.message}</span>
+              {e.action?.kind === 'quest_offer' &&
+                (acceptedOffers.has(e.action.offerId) ? (
+                  <span className="sw-chip dot good" style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                    принято
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="sw-btn"
+                    style={{ marginLeft: 'auto', flexShrink: 0, padding: '1px 8px', fontSize: 11 }}
+                    disabled={acceptingOffer === e.action.offerId}
+                    onClick={() => void acceptOffer(e.action!.offerId)}
+                  >
+                    Принять
+                  </button>
+                ))}
             </div>
           ))}
         </div>

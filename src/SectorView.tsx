@@ -14,6 +14,7 @@ import { useCombatLog } from './useCombatLog';
 import { usePoliceLog } from './usePoliceLog';
 import { useShipCaptureLog } from './useShipCaptureLog';
 import { useStationHackedLog } from './useStationHackedLog';
+import { useQuestOfferLog } from './useQuestOfferLog';
 import { EntityKind, type WorldGate } from './api';
 
 const EMPTY_GATES: WorldGate[] = [];
@@ -61,6 +62,10 @@ export function SectorView() {
   // Station-hack outcomes → combat journal (phase 10.3.9.6). Watches the
   // hack seq bumped by useWorldState; resolves the looted good's name.
   useStationHackedLog(world.stationHackedSeq, world.lastStationHacked, goods);
+
+  // Personal quest offers → quest journal (TASK-89). Watches the quest-offer
+  // seq bumped by useWorldState; the journal line carries an inline «Принять».
+  useQuestOfferLog(world.questOfferSeq, world.lastQuestOffer);
 
   // Gate topology and sector-name lookup for SectorCanvas. TargetsPanel
   // already pulls the same useGalaxy() cache, so reading it again here is

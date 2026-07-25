@@ -11,6 +11,7 @@ import type {
   Missile,
   MissileImpact,
   PoliceScanFrame,
+  QuestOfferFrame,
   SectorStatics,
   Ship,
   ShipCaptureFrame,
@@ -231,6 +232,12 @@ export type WorldState = {
   // carries the latest raid event (goodsType/robbed) for that line.
   stationHackedSeq: number;
   lastStationHacked: StationHackedFrame | null;
+
+  // questOfferSeq increments on every quest_offer frame (TASK-89); useQuestOfferLog
+  // emits a journal line (with an inline «Принять» button) when it changes.
+  // lastQuestOffer carries the latest personal offer for that line.
+  questOfferSeq: number;
+  lastQuestOffer: QuestOfferFrame | null;
 };
 
 // Defaults mirror cfg.Sector.* / spawn constants on the backend. Only used
@@ -277,6 +284,8 @@ export function useWorldState(): WorldState {
     lastShipCapture: null,
     stationHackedSeq: 0,
     lastStationHacked: null,
+    questOfferSeq: 0,
+    lastQuestOffer: null,
   });
 
   // shipsRef stores the live Map between snapshots so the WS callback can
@@ -358,6 +367,8 @@ export function useWorldState(): WorldState {
           lastShipCapture: null,
           stationHackedSeq: 0,
           lastStationHacked: null,
+          questOfferSeq: 0,
+          lastQuestOffer: null,
         });
       };
 
@@ -423,6 +434,13 @@ export function useWorldState(): WorldState {
           // взлома" journal line for the hacker.
           const ev = msg as unknown as StationHackedFrame;
           setState((s) => ({ ...s, stationHackedSeq: s.stationHackedSeq + 1, lastStationHacked: ev }));
+          return;
+        }
+        if ((msg as { type?: string }).type === 'quest_offer') {
+          // Per-player quest offer (TASK-89): bump the seq so useQuestOfferLog
+          // emits the «Новое задание …» journal line with its «Принять» button.
+          const ev = msg as unknown as QuestOfferFrame;
+          setState((s) => ({ ...s, questOfferSeq: s.questOfferSeq + 1, lastQuestOffer: ev }));
           return;
         }
         if (msg?.type !== 'snapshot') return;
@@ -596,6 +614,8 @@ export function useWorldState(): WorldState {
           lastShipCapture: s.lastShipCapture,
           stationHackedSeq: s.stationHackedSeq,
           lastStationHacked: s.lastStationHacked,
+          questOfferSeq: s.questOfferSeq,
+          lastQuestOffer: s.lastQuestOffer,
           };
         });
       };

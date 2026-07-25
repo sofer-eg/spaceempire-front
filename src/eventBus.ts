@@ -5,14 +5,20 @@
 // views call emitLog() and EventLog subscribes. Kept deliberately tiny — no
 // React, no external dep; a Set of listeners.
 
-export type LogCategory = 'system' | 'sector' | 'trade' | 'combat';
+export type LogCategory = 'system' | 'sector' | 'trade' | 'combat' | 'quest';
 export type LogKind = 'info' | 'good' | 'warn' | 'danger';
+
+// LogAction is an optional interactive affordance carried by a log entry. So
+// far the only kind is a quest offer's inline «Принять» button (TASK-89, AC-1:
+// «принимается прямо из журнала») — EventLog renders it and calls acceptQuest.
+export type LogAction = { kind: 'quest_offer'; offerId: string };
 
 // LogEvent is what producers emit; EventLog timestamps and ids it on receipt.
 export type LogEvent = {
   category: LogCategory;
   kind: LogKind;
   message: string;
+  action?: LogAction;
 };
 
 type Listener = (e: LogEvent) => void;

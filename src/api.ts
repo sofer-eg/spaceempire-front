@@ -1169,6 +1169,21 @@ export type ShipCaptureFrame = {
   success: boolean;
 };
 
+// QuestOfferFrame is the per-player WS frame pushed when the pacer generates a
+// personal quest offer (TASK-89, FR-10) — «доска объявлений» on a dock
+// (source='dock') or an «перехваченный сигнал» on a sector jump (source='space').
+// offerId is the "proc:<n>" accept handle. Drives the journal line (with an
+// inline «Принять» button) in useQuestOfferLog; the panel adds it to «Предложения».
+export type QuestOfferFrame = {
+  type: 'quest_offer';
+  offerId: string;
+  title: string;
+  desc: string;
+  source: string;
+  expiresUnix: number;
+  rewardCash: number;
+};
+
 // StationHackedFrame is the per-player WS frame pushed to the hacker after a
 // station raid (TASK-100.3.9.6). robbed > 0 → "Похищено N ед."; robbed === 0 →
 // "Неудачная попытка взлома" (only the damage landed). goodsType names the
@@ -1456,11 +1471,19 @@ export async function fetchActiveQuests(): Promise<ActiveQuest[]> {
   return ((await res.json()) as ActiveQuest[]) ?? [];
 }
 
-// OfferableQuest is a quest the player can accept (GET /api/quests/offerable).
+// OfferableQuest is one personal, un-accepted quest offer (TASK-89, FR-10).
+// GET /api/quests/offerable now returns only the player's own pending offers —
+// the old static catalogue shape ({questId,title,totalSteps}) is gone. offerId
+// is the "proc:<n>" accept handle (see acceptQuest); source is 'dock' (station
+// bulletin board) or 'space' (intercepted signal); expiresUnix is the offer's
+// TTL deadline; rewardCash is the scaled payout.
 export type OfferableQuest = {
-  questId: string;
+  offerId: string;
   title: string;
-  totalSteps: number;
+  desc: string;
+  source: string;
+  expiresUnix: number;
+  rewardCash: number;
 };
 
 export async function fetchOfferableQuests(): Promise<OfferableQuest[]> {
@@ -1469,9 +1492,12 @@ export async function fetchOfferableQuests(): Promise<OfferableQuest[]> {
   return ((await res.json()) as OfferableQuest[]) ?? [];
 }
 
-export async function acceptQuest(questId: string): Promise<void> {
-  const res = await fetch(`/api/quests/${encodeURIComponent(questId)}/accept`, { method: 'POST' });
-  await requireOk(res, `POST /api/quests/${questId}/accept`);
+// acceptQuest materialises a personal offer into an active quest. offerId is the
+// "proc:<n>" handle — it contains a colon, so it MUST be percent-encoded into the
+// path (encodeURIComponent). 404 on a foreign/unknown/expired offer.
+export async function acceptQuest(offerId: string): Promise<void> {
+  const res = await fetch(`/api/quests/${encodeURIComponent(offerId)}/accept`, { method: 'POST' });
+  await requireOk(res, `POST /api/quests/${offerId}/accept`);
 }
 
 export async function abandonQuest(questId: string): Promise<void> {

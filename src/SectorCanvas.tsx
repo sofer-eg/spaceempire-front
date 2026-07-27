@@ -236,7 +236,17 @@ export function SectorCanvas(props: Props) {
 
       // Single source of the frame: one viewport drives both the canvas
       // (background / grid / boundary / effects) and the SVG ObjectLayer
-      // (ships / statics / gates / projectiles), so the two never desync.
+      // (ships / statics / gates / projectiles), so world -> screen is computed
+      // once and both layers agree on it.
+      // They still differ by a sub-pixel scale factor when the cell width is
+      // fractional, which it now is between 1024 and 1212px (the fluid HUD
+      // columns, TASK-138): the observer floors the box, the SVG is laid out at
+      // that floored px size, but the canvas element is `width: 100%` and gets
+      // stretched back over the fractional box. Drift is under one CSS pixel at
+      // the far edge and drops to zero on integer cells (>= 1212px). Sizing the
+      // canvas in explicit floored px instead would align them exactly, at the
+      // price of leaving that sub-pixel strip of .sw-map-wrap background
+      // uncovered at the right/bottom edge.
       const vp = computeViewport(p, w, h);
 
       drawBackground(ctx, w, h);

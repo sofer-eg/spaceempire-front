@@ -358,10 +358,15 @@ html, body, #root {
 }
 .sw-main { min-height: 0; min-width: 0; position: relative; }
 
-/* SectorView internal grid (inside .sw-main): ship | map | nav, log spans. */
+/* SectorView internal grid (inside .sw-main): ship | map | nav, log spans.
+   The side columns are fluid, not fixed — see «adaptive HUD layout» below for
+   where the clamp() coefficients come from. */
 .sw-sector-grid {
   display: grid;
-  grid-template-columns: 320px 1fr 380px;
+  grid-template-columns:
+    clamp(240px, calc(43.0851% - 162.05px), 320px)
+    1fr
+    clamp(280px, calc(53.7234% - 221.20px), 380px);
   grid-template-rows: 1fr 180px;
   grid-template-areas: "ship map nav" "log log log";
   gap: 10px;
@@ -388,32 +393,108 @@ html, body, #root {
 .sw-sector-grid__nav  { grid-area: nav; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
 .sw-sector-grid__log  { grid-area: log; min-height: 0; }
 
-/* ---------- adaptive HUD layout (TASK-133) ---------- */
-/* Three regimes, gap-free across the whole width range:
-     - >= 1150px          base desktop grid (320|1fr|380), no media query;
-     - 1024 - 1149.98px   3-column band with tightened sides (240|1fr|280) so
-                          the centre cell stays >= ~360px wide;
-     - <= 1023.98px       side asides collapse into off-canvas drawers.
-   The .98px pairing (max-width:1023.98 <-> min-width:1024, and
-   max-width:1149.98 <-> min-width:1150) is the Bootstrap technique: it leaves
-   no whole-pixel hole that a fractional viewport (browser zoom / fractional
-   DPR / split-screen) could fall through into the desktop grid while the
+/* ---------- adaptive HUD layout (TASK-133, TASK-138) ---------- */
+/* Two regimes:
+     - >= 1024px       3-column HUD with FLUID side columns (the clamp()s in
+                       .sw-sector-grid above), no upper breakpoint;
+     - <= 1023.98px    side asides collapse into off-canvas drawers.
+   The 1024 / 1023.98 pairing is the Bootstrap technique: it leaves no
+   whole-pixel hole that a fractional viewport (browser zoom / fractional DPR /
+   split-screen) could fall through into the 3-column layout while the drawer
    toolbar is hidden.
+
+   Why the sides are fluid, and why the ramp is in %. The grid container
+   (.sw-sector-grid == .sw-main) is exactly `viewport - 92` wide: shell padding
+   20 + rail 62 + body gap 10. It carries no padding of its own, so a % inside
+   grid-template-columns resolves against that number directly. Percent and not
+   vw because % is measured against the box these columns actually divide: if
+   the chrome OUTSIDE the grid changes (rail width, shell padding, another body
+   column), the ramp still hits 240/280 at its low end and 320/380 at its high
+   end, while vw-derived coefficients would silently drift by that change. (The
+   scrollbar argument does not apply: html, body and #root are overflow:hidden,
+   so the document never has one.)
+
+   Both sides ramp between the two fixed values they replace, over viewport
+   1024 -> 1212, i.e. container 932 -> 1120, 188px of travel:
+     ship   240px -> 320px,  slope  80/188 = 42.553%
+     nav    280px -> 380px,  slope 100/188 = 53.191%
+   The coefficients below are half a pixel steeper than that at both ends
+   (43.0851% / 53.7234%), so the preferred value computes to 239.5/279.5 at
+   container 932 and 320.5/380.5 at container 1120 and the CLAMP BOUNDS are what
+   render there: 240/280 at 1024 and 320/380 from 1212 up are exact, not
+   "within a rounding error" of a preferred value that lands on the bound. The
+   cost of that margin is that the real ramp runs over container 933-1119
+   (viewport 1025-1211) instead of 932-1120.
+
+   Centre cell = container - sides - 2 gaps. The two slopes sum to 96.81% < 1,
+   so the centre only ever grows. Measured: 396px @1024, 401px @1149, 397px
+   @1150 (that -4px step is the gap 8->10 switch below, not a column jump),
+   398px @1180, 399px @1204, 400px @1212, and exactly `viewport - 812` from 1212
+   up -- 468px @1280, 628px @1440, 1108px @1920, identical to the old fixed
+   grid. Global minimum 396px at 1024px, the width TASK-134 sized the compact
+   market table against (min-content 390px).
+
+   Why the ramp ends at 1212 and not earlier. It has to end where the centre is
+   already >= 396 with the sides at full width (viewport - 812 >= 396 =>
+   >= 1208) AND where the two slopes still sum to < 1 (=> > 1204). Neither bound
+   binds, though: the centre at 1150 is `519 - 22932/D` where D is the ramp's
+   travel in container px (viewport_end - 1024), so 1208 gives 394.4, 1210 gives
+   395.7 and 1211 is the first end that clears 396 (396.4). 1212 is one pixel
+   past that, kept as slack. Changing it means redoing that calculation, not
+   just swapping a number -- and note the formula tracks the half-pixel
+   coefficients actually used above, not the plain 80/188 + 100/188 ramp, which
+   lands ~0.3px higher at the same end.
+
+   Known, deliberate residue over 1150-1202. The three columns share
+   `viewport - 112` there; at 1150 that is 1038px, while the side panels' own
+   content wants 313px (min-content of .sw-sector-grid__ship undocked, set by
+   the «Автопилот» sector select; 412px docked, see below) + ~344-362px (nav,
+   the width at which TargetsPanel's «⋯» buttons stop being cut -- it moves with
+   the longest ship name in the list) = 675px and up, which would leave the
+   centre 363px or less, under its 390px floor. The two demands are
+   arithmetically incompatible, so the centre wins and the sides stay short:
+   measured, the ship column is under its min-content over 1150-1193 (the
+   «Автопилот» select loses up to 19.2px of its right edge, arrow included), and
+   the nav column can be under the «⋯» threshold up to ~1178 when ship names run
+   long. Nothing becomes unreachable -- the ship column is a scroll container
+   with a styled bar (see the ::-webkit-scrollbar rules near the bottom of this
+   file). Making the side panels narrow-capable is TASK-139 and is the only
+   thing that removes this residue.
+   Two more thresholds in that column, for whoever picks TASK-139 up. Docked,
+   the ship column's content is 412px wide, i.e. it never fits even at the full
+   320px -- the «Вход открыт/закрыт» row starts at x=271 inside the column, so a
+   column under 271px puts it out of reach entirely. This ramp is at 293px at
+   1150 and crosses 271px at viewport 1098, where the two-step layout it
+   replaces only got there at 1150; the row is still only 22.8px wide on screen
+   at 1150 (49.0px with the old fixed 320px column), which is why it is still a
+   bug -- just not a new one, and not an unreachable one.
+
+   This replaces a fixed 320|1fr|380 base plus a 240|1fr|280 band that ended at
+   1149.98px: that pair made the centre NARROWER at 1150px (338px) than at
+   1024px (396px), so the compact market table overflowed again through the
+   whole 1150-1203px hole (TASK-138).
+
    The toggle toolbar and drawer scrim exist only in the drawer regime; this
    base rule keeps them display:none, so the React panel state (openPanel) has
-   no visual effect on the two 3-column layouts. */
+   no visual effect on the 3-column layout. */
 .sw-sector-toolbar { display: none; }
 .sw-drawer-scrim { display: none; }
 
-/* 1024 - 1149.98px: keep the 3-column HUD but tighten the side columns and gaps
-   so the central cell (map / StationView / ShipDetailView / PilotPage) keeps a
-   workable width instead of being crushed by the desktop 320+380 sides.
-   Chrome outside the grid consumes shell-padding 20 + rail 64 + body-gap 10 +
-   two grid-gaps 16 + sides 240+280 = 630px, so centre = viewport - 630:
-   ~394px at 1024 and ~519px at 1149.98 -- >= ~360px across the whole band. */
+/* 1024 - 1149.98px: same fluid 3-column HUD, tighter density. Only the gaps and
+   the journal row shrink here -- the columns are deliberately NOT redeclared,
+   because the clamp()s above already taper them to 240/280 at the bottom of
+   this band, and a fixed override would reintroduce the 1150px cliff. The
+   vertical trim (journal 180 -> 160, gap 10 -> 8) targets the short screens
+   that come with these widths.
+   The .98 here is no longer half of a breakpoint pair -- nothing starts at
+   1150 any more, so it is not the Bootstrap technique. It is just "strictly
+   below 1150": a round `max-width: 1149px` would drop the fractional widths
+   (1149.5 at 150% zoom, fractional DPR) out of the band. That is worth avoiding
+   precisely because falling out of it is not cosmetic -- it costs 2px of gap
+   AND 20px of journal row (160 -> 180), which shortens the side columns by the
+   same 20px. The columns themselves do not move: they are fluid either way. */
 @media (min-width: 1024px) and (max-width: 1149.98px) {
   .sw-sector-grid {
-    grid-template-columns: 240px 1fr 280px;
     grid-template-rows: 1fr 160px;
     gap: 8px;
   }
@@ -916,11 +997,15 @@ html, body, #root {
 /* container-type makes .sw-station a query container so its own tables can react
    to the CARD width instead of the viewport width (TASK-134). That distinction is
    the whole point: the HUD centre cell is narrowest on desktop (1024px -> 396px,
-   1280px -> 468px, 1440px -> 628px) because the 320+380 side columns eat the
-   width, while the <=1023px drawer regime gives StationView the full width
-   (900px -> 808px) and 1920px gives it 1108px. A media query would compact
-   exactly the wrong ends. This is THE reference for those card widths -- the
-   @container block further down cites them instead of repeating them.
+   1280px -> 468px, 1440px -> 628px) because the side columns eat the width, while
+   the <=1023px drawer regime gives StationView the full width (900px -> 808px)
+   and 1920px gives it 1108px. A media query would compact exactly the wrong ends.
+   From 1212px up the sides are the full 320+380 and the cell is exactly
+   `viewport - 812`; below that they ramp down with the viewport (TASK-138), which
+   holds the cell between 396 and 401px over the whole 1024-1212 range instead of
+   letting it collapse -- so 396px is the floor everywhere, not just at 1024.
+   This is THE reference for those card widths -- the @container block further
+   down cites them instead of repeating them.
    inline-size (not `size`) keeps the block axis content-driven, so the flex
    column below still stretches to height:100%.
    Containment side effects to keep in mind when adding UI in here: a query
@@ -1197,29 +1282,42 @@ html, body, #root {
   margin: 0;
 }
 
-/* Visible, non-overlay scrollbar for the table scroll containers. The platform
-   default over this dark theme gives close to zero affordance -- the original bug
-   report read as "the content is cut off", not "the content is scrollable"
-   (TASK-134 AC #2). Styling ::-webkit-scrollbar is what asks Blink for a CLASSIC
-   scrollbar (one that occupies layout space and is painted unconditionally)
-   instead of a fading overlay bar. Deliberately NOT combined with
-   scrollbar-width/scrollbar-color in the same rule: once those standard
-   properties are set, Blink ignores the ::-webkit- pseudo-elements and reverts to
-   the overlay bar. Firefox, which has no ::-webkit-scrollbar, gets the same intent
-   through the @supports branch instead.
+/* Visible, non-overlay scrollbar for the scroll containers that can clip content
+   horizontally. The platform default over this dark theme gives close to zero
+   affordance -- the original bug report read as "the content is cut off", not
+   "the content is scrollable" (TASK-134 AC #2). Styling ::-webkit-scrollbar is
+   what asks Blink for a CLASSIC scrollbar (one that occupies layout space and is
+   painted unconditionally) instead of a fading overlay bar. Deliberately NOT
+   combined with scrollbar-width/scrollbar-color in the same rule: once those
+   standard properties are set, Blink ignores the ::-webkit- pseudo-elements and
+   reverts to the overlay bar. Firefox, which has no ::-webkit-scrollbar, gets the
+   same intent through the @supports branch instead.
+   .sw-sector-grid__ship is in the list for exactly the same reason, not for its
+   vertical overflow: `overflow-y: auto` makes overflow-x compute to auto too, so
+   between 1150 and 1193 -- where the fluid column is under its 313px min-content
+   (TASK-138) -- the «Автопилот» select scrolls rather than being cut, and the bar
+   is what says so. Side effect worth knowing: this also swaps that column's
+   default 15px platform bar for the 9px one, which hands 6px back to the panels
+   at every width.
    Caveat for whoever verifies this: headless Chromium forces overlay scrollbars
    regardless (an unstyled overflow:auto div also measures
    offsetHeight - clientHeight == 0 there), so the classic bar cannot be observed
-   from the Playwright harness -- only the scrolling itself can. */
-.sw-table-scroll::-webkit-scrollbar { width: 9px; height: 9px; }
-.sw-table-scroll::-webkit-scrollbar-track {
+   from the Playwright harness -- only the scrolling itself (scrollWidth >
+   clientWidth) can. */
+.sw-table-scroll::-webkit-scrollbar,
+.sw-sector-grid__ship::-webkit-scrollbar { width: 9px; height: 9px; }
+.sw-table-scroll::-webkit-scrollbar-track,
+.sw-sector-grid__ship::-webkit-scrollbar-track {
   background: rgba(91, 206, 250, 0.08);
   border-top: 1px solid var(--line);
 }
-.sw-table-scroll::-webkit-scrollbar-thumb { background: rgba(91, 206, 250, 0.55); }
-.sw-table-scroll::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+.sw-table-scroll::-webkit-scrollbar-thumb,
+.sw-sector-grid__ship::-webkit-scrollbar-thumb { background: rgba(91, 206, 250, 0.55); }
+.sw-table-scroll::-webkit-scrollbar-thumb:hover,
+.sw-sector-grid__ship::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 @supports not selector(::-webkit-scrollbar) {
-  .sw-table-scroll {
+  .sw-table-scroll,
+  .sw-sector-grid__ship {
     scrollbar-width: thin;
     scrollbar-color: rgba(91, 206, 250, 0.55) rgba(91, 206, 250, 0.08);
   }

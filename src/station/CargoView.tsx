@@ -136,50 +136,54 @@ function CargoColumn({ title, inv, action, busy, onMove, goods }: ColumnProps) {
       {inv.items.length === 0 ? (
         <div className="sw-station__empty">Пусто.</div>
       ) : (
-        <table className="sw-table">
-          <thead>
-            <tr>
-              <th>Товар</th>
-              <th>Кол-во</th>
-              <th>Перенос</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {inv.items.map((it: CargoItem) => (
-              <tr key={it.typeID}>
-                <td>
-                  {goodsName(goods, it.typeID)}
-                  <span className="sw-chip" style={{ marginLeft: 6 }}>
-                    {goodsSpace(goods, it.typeID)} м³
-                  </span>
-                </td>
-                <td className="sw-mono">{it.quantity}</td>
-                <td>
-                  <input
-                    type="number"
-                    min={1}
-                    max={it.quantity}
-                    value={Math.min(qty(it.typeID), it.quantity)}
-                    onChange={(e) => setQty(it.typeID, Number(e.target.value))}
-                    className="sw-input"
-                    style={{ width: 70 }}
-                  />
-                </td>
-                <td>
-                  <button
-                    type="button"
-                    className="sw-btn"
-                    disabled={busy}
-                    onClick={() => onMove(it.typeID, Math.min(qty(it.typeID), it.quantity))}
-                  >
-                    {label}
-                  </button>
-                </td>
+        // sw-table-scroll: residual overflow scrolls inside the card. On a narrow
+        // card .sw-cargo also stops splitting it in half, so each hold table gets
+        // the full width instead of ~228px (TASK-134).
+        <div className="sw-table-scroll">
+          <table className="sw-table">
+            <thead>
+              <tr>
+                <th>Товар</th>
+                <th>Кол-во</th>
+                <th>Перенос</th>
+                <th />
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {inv.items.map((it: CargoItem) => (
+                <tr key={it.typeID}>
+                  <td>
+                    {goodsName(goods, it.typeID)}
+                    <span className="sw-chip" style={{ marginLeft: 6 }}>
+                      {goodsSpace(goods, it.typeID)} м³
+                    </span>
+                  </td>
+                  <td className="sw-mono">{it.quantity}</td>
+                  <td>
+                    <input
+                      type="number"
+                      min={1}
+                      max={it.quantity}
+                      value={Math.min(qty(it.typeID), it.quantity)}
+                      onChange={(e) => setQty(it.typeID, Number(e.target.value))}
+                      className="sw-input qty"
+                    />
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      className="sw-btn"
+                      disabled={busy}
+                      onClick={() => onMove(it.typeID, Math.min(qty(it.typeID), it.quantity))}
+                    >
+                      {label}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

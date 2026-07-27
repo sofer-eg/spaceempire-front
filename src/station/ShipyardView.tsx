@@ -200,40 +200,49 @@ export function ShipyardView({ shipyardID }: Props) {
           <span>Покупка корабля</span>
           <span className="sw-chip">кредиты · {cash.toLocaleString('ru-RU')}</span>
         </div>
-        <table className="sw-table">
-          <thead>
-            <tr>
-              <th>Класс</th>
-              <th>Модель</th>
-              <th>Корпус</th>
-              <th>Щит</th>
-              <th>Цена</th>
-              <th>Действие</th>
-            </tr>
-          </thead>
-          <tbody>
-            {buyList.map((c) => (
-              <tr key={c.id}>
-                <td>{c.categoryLabel}</td>
-                <td>{c.name}</td>
-                <td className="sw-mono">{c.hull.toLocaleString('ru-RU')}</td>
-                <td className="sw-mono">{c.shield.toLocaleString('ru-RU')}</td>
-                <td className="sw-mono">{c.basePrice.toLocaleString('ru-RU')}</td>
-                <td>
-                  <button
-                    type="button"
-                    className="sw-btn"
-                    disabled={busy || cash < c.basePrice}
-                    title={cash < c.basePrice ? 'Недостаточно кредитов' : undefined}
-                    onClick={() => void onBuy(c)}
-                  >
-                    Купить
-                  </button>
-                </td>
+        {/* sw-table-scroll + sw-table__secondary: on a narrow HUD centre cell the
+            hull/shield columns fold away and any residual overflow scrolls inside
+            the card, so «Цена» and «Купить» are never clipped (TASK-134). */}
+        <div className="sw-table-scroll">
+          <table className="sw-table">
+            <thead>
+              <tr>
+                <th>Класс</th>
+                <th>Модель</th>
+                <th className="sw-table__secondary">Корпус</th>
+                <th className="sw-table__secondary">Щит</th>
+                <th>Цена</th>
+                <th>Действие</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {buyList.map((c) => (
+                <tr key={c.id}>
+                  <td>{c.categoryLabel}</td>
+                  <td>{c.name}</td>
+                  <td className="sw-mono sw-table__secondary">{c.hull.toLocaleString('ru-RU')}</td>
+                  <td className="sw-mono sw-table__secondary">{c.shield.toLocaleString('ru-RU')}</td>
+                  <td className="sw-mono">{c.basePrice.toLocaleString('ru-RU')}</td>
+                  <td>
+                    <button
+                      type="button"
+                      className="sw-btn"
+                      disabled={busy || cash < c.basePrice}
+                      title={
+                        cash < c.basePrice
+                          ? 'Недостаточно кредитов'
+                          : `Корпус ${c.hull.toLocaleString('ru-RU')} · щит ${c.shield.toLocaleString('ru-RU')}`
+                      }
+                      onClick={() => void onBuy(c)}
+                    >
+                      Купить
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <OutfitSection
@@ -362,108 +371,112 @@ function OutfitSection({
       {installed.length === 0 ? (
         <div className="sw-station__empty">Оборудование не установлено.</div>
       ) : (
-        <table className="sw-table">
-          <thead>
-            <tr>
-              <th>Модуль</th>
-              <th>Уровень</th>
-              <th>Действие</th>
-            </tr>
-          </thead>
-          <tbody>
-            {installed.map((m) => (
-              <tr key={m.equipmentID}>
-                <td>{equipName(equipment, m)}</td>
-                <td className="sw-mono">{m.level}</td>
-                <td>
-                  <button
-                    type="button"
-                    className="sw-btn ghost"
-                    disabled={busy}
-                    onClick={() => onUninstall(m)}
-                  >
-                    Снять
-                  </button>
-                </td>
+        <div className="sw-table-scroll">
+          <table className="sw-table">
+            <thead>
+              <tr>
+                <th>Модуль</th>
+                <th>Уровень</th>
+                <th>Действие</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {installed.map((m) => (
+                <tr key={m.equipmentID}>
+                  <td>{equipName(equipment, m)}</td>
+                  <td className="sw-mono">{m.level}</td>
+                  <td>
+                    <button
+                      type="button"
+                      className="sw-btn ghost"
+                      disabled={busy}
+                      onClick={() => onUninstall(m)}
+                    >
+                      Снять
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       <div className="sw-shipyard__subtitle">Доступно</div>
       {available.length === 0 ? (
         <div className="sw-station__empty">Нет доступных модулей для этого класса.</div>
       ) : (
-        <table className="sw-table">
-          <thead>
-            <tr>
-              <th>Модуль</th>
-              <th>Уровень</th>
-              <th>Цена</th>
-              <th>Действие</th>
-            </tr>
-          </thead>
-          <tbody>
-            {availableSorted.map((e) => {
-              const lvl = level(e.id);
-              const price = installPrice(e, lvl);
-              const reqs = missingReqs(e);
-              const tooCheap = cash < price;
-              const disabled = busy || reqs.length > 0 || tooCheap;
-              return (
-                <Fragment key={e.id}>
-                  <tr>
-                    <td>{e.description}</td>
-                    <td>
-                      {e.maxLevel > 1 ? (
-                        <select
-                          className="sw-input"
-                          style={{ width: 64 }}
-                          value={lvl}
-                          onChange={(ev) =>
-                            setLevels((p) => ({ ...p, [e.id]: Number(ev.target.value) }))
-                          }
+        <div className="sw-table-scroll">
+          <table className="sw-table">
+            <thead>
+              <tr>
+                <th>Модуль</th>
+                <th>Уровень</th>
+                <th>Цена</th>
+                <th>Действие</th>
+              </tr>
+            </thead>
+            <tbody>
+              {availableSorted.map((e) => {
+                const lvl = level(e.id);
+                const price = installPrice(e, lvl);
+                const reqs = missingReqs(e);
+                const tooCheap = cash < price;
+                const disabled = busy || reqs.length > 0 || tooCheap;
+                return (
+                  <Fragment key={e.id}>
+                    <tr>
+                      <td>{e.description}</td>
+                      <td>
+                        {e.maxLevel > 1 ? (
+                          <select
+                            className="sw-input"
+                            style={{ width: 64 }}
+                            value={lvl}
+                            onChange={(ev) =>
+                              setLevels((p) => ({ ...p, [e.id]: Number(ev.target.value) }))
+                            }
+                          >
+                            {Array.from({ length: e.maxLevel }, (_, i) => i + 1).map((n) => (
+                              <option key={n} value={n}>
+                                {n}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="sw-mono">1</span>
+                        )}
+                      </td>
+                      <td className="sw-mono">{price.toLocaleString('ru-RU')}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="sw-btn"
+                          disabled={disabled}
+                          title={tooCheap && reqs.length === 0 ? 'Недостаточно кредитов' : undefined}
+                          onClick={() => onInstall(e, lvl)}
                         >
-                          {Array.from({ length: e.maxLevel }, (_, i) => i + 1).map((n) => (
-                            <option key={n} value={n}>
-                              {n}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className="sw-mono">1</span>
-                      )}
-                    </td>
-                    <td className="sw-mono">{price.toLocaleString('ru-RU')}</td>
-                    <td>
-                      <button
-                        type="button"
-                        className="sw-btn"
-                        disabled={disabled}
-                        title={tooCheap && reqs.length === 0 ? 'Недостаточно кредитов' : undefined}
-                        onClick={() => onInstall(e, lvl)}
-                      >
-                        Установить
-                      </button>
-                    </td>
-                  </tr>
-                  {reqs.length > 0 && (
-                    <tr className="sw-shipyard__reqrow">
-                      <td colSpan={4}>
-                        <ul className="sw-shipyard__reqs">
-                          {reqs.map((r) => (
-                            <li key={r}>{r}</li>
-                          ))}
-                        </ul>
+                          Установить
+                        </button>
                       </td>
                     </tr>
-                  )}
-                </Fragment>
-              );
-            })}
-          </tbody>
-        </table>
+                    {reqs.length > 0 && (
+                      <tr className="sw-shipyard__reqrow">
+                        <td colSpan={4}>
+                          <ul className="sw-shipyard__reqs">
+                            {reqs.map((r) => (
+                              <li key={r}>{r}</li>
+                            ))}
+                          </ul>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   );

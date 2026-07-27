@@ -257,7 +257,10 @@ export function MarketView({ station, shipID, reloadSignal }: Props) {
         <td>{goodsName(goods, it.typeID)}</td>
         <td className="sw-mono">{it.sellPrice ?? '—'}</td>
         <td className="sw-mono">{it.buyPrice ?? '—'}</td>
-        <td className="sw-mono">
+        {/* Stock is secondary info: it folds away on a narrow card so «Кол-во»
+            and the buy/sell buttons stay on screen (TASK-134). The ↑ buttons'
+            titles still report what the station has. */}
+        <td className="sw-mono sw-table__secondary">
           {it.stock}/{it.maxStock}
         </td>
         <td>
@@ -266,14 +269,16 @@ export function MarketView({ station, shipID, reloadSignal }: Props) {
             min={1}
             value={qty(it.typeID)}
             onChange={(e) => setQty(it.typeID, Number(e.target.value))}
-            className="sw-input"
-            style={{ width: 70 }}
+            className="sw-input qty"
           />
         </td>
         <td>
-          <div className="sw-row" style={{ gap: 6 }}>
+          {/* Each action ships together with its «↑ максимум» helper inside a
+              sw-table__pair, so that on a narrow card the cluster wraps between
+              the pairs and never between a button and its helper (TASK-134). */}
+          <div className="sw-table__actions">
             {showBuy && (
-              <>
+              <span className="sw-table__pair">
                 <button
                   type="button"
                   className="sw-btn ghost"
@@ -292,10 +297,10 @@ export function MarketView({ station, shipID, reloadSignal }: Props) {
                 >
                   Купить
                 </button>
-              </>
+              </span>
             )}
             {showSell && (
-              <>
+              <span className="sw-table__pair">
                 <button
                   type="button"
                   className="sw-btn"
@@ -314,7 +319,7 @@ export function MarketView({ station, shipID, reloadSignal }: Props) {
                 >
                   ↑
                 </button>
-              </>
+              </span>
             )}
           </div>
         </td>
@@ -323,19 +328,23 @@ export function MarketView({ station, shipID, reloadSignal }: Props) {
   };
 
   const renderTable = (list: MarketEntry[], mode: 'buy' | 'sell' | 'both') => (
-    <table className="sw-table">
-      <thead>
-        <tr>
-          <th>Товар</th>
-          <th>Покупка</th>
-          <th>Продажа</th>
-          <th>Запас</th>
-          <th>Кол-во</th>
-          <th>Действие</th>
-        </tr>
-      </thead>
-      <tbody>{list.map((it) => renderRow(it, mode))}</tbody>
-    </table>
+    // sw-table-scroll: residual overflow scrolls inside the card instead of being
+    // clipped at the HUD centre-cell edge (TASK-134).
+    <div className="sw-table-scroll">
+      <table className="sw-table">
+        <thead>
+          <tr>
+            <th>Товар</th>
+            <th>Покупка</th>
+            <th>Продажа</th>
+            <th className="sw-table__secondary">Запас</th>
+            <th>Кол-во</th>
+            <th>Действие</th>
+          </tr>
+        </thead>
+        <tbody>{list.map((it) => renderRow(it, mode))}</tbody>
+      </table>
+    </div>
   );
 
   // The production countdown sits to the right of the «Продукция» heading.

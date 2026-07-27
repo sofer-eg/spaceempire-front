@@ -913,15 +913,30 @@ html, body, #root {
 }
 
 /* ---------- station view (phase 3.8) ---------- */
+/* container-type makes .sw-station a query container so its own tables can react
+   to the CARD width instead of the viewport width (TASK-134). That distinction is
+   the whole point: the HUD centre cell is narrowest on desktop (1024px -> 396px,
+   1280px -> 468px, 1440px -> 628px) because the 320+380 side columns eat the
+   width, while the <=1023px drawer regime gives StationView the full width
+   (900px -> 808px). A media query would compact exactly the wrong ends.
+   inline-size (not `size`) keeps the block axis content-driven, so the flex
+   column below still stretches to height:100%. */
 .sw-station {
   height: 100%;
   display: flex;
   flex-direction: column;
   min-height: 0;
+  container-type: inline-size;
+  container-name: station;
 }
+/* The tab row wraps onto a second line rather than overflowing: it is not a
+   scroll container (scrollLeft stayed 0), so anything past the card edge used to
+   be clipped and unreachable by any means -- «Ангар» and «Обновить» were simply
+   gone at 1024/1280 (TASK-134 AC #3). The existing gap doubles as the row gap. */
 .sw-station__tabs {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--line);
@@ -1113,6 +1128,105 @@ html, body, #root {
   text-transform: uppercase;
   font-size: 11px;
   color: var(--ink);
+}
+
+/* ---------- narrow-card StationView tables (TASK-134) ---------- */
+/* The HUD centre cell is only 396-628px wide on desktop (see .sw-station above),
+   while the widest StationView table -- the trade-station market
+   Товар|Покупка|Продажа|Запас|Кол-во|Действие -- has a 754px min-content width.
+   The right-hand columns («Кол-во» input, «Купить», «Продать») were therefore
+   clipped at the cell edge and unreachable, i.e. a docked player could not trade
+   at all on a plain 1280px desktop. Two mechanisms fix that, in this order:
+     1. compaction (the @container block below) shrinks the table until the
+        price / quantity / action columns fit with NO horizontal scroll;
+     2. .sw-table-scroll catches whatever still does not fit, as a visible
+        horizontal scrollbar INSIDE the card. */
+
+/* Wrapper around each wide table. Scrolling per table (rather than relying on
+   .sw-station__body) keeps the two axes independent: rows scroll vertically with
+   the rest of the card, columns scroll horizontally only in the table that is
+   actually too wide. */
+.sw-table-scroll { overflow-x: auto; }
+
+/* Row-action cluster inside a table cell -- same layout as .sw-row, but named so
+   the container query below can let it wrap into a 2x2 block instead of one long
+   275px strip. .sw-table__pair groups one action with its «↑ максимум» helper so
+   that a wrap never separates the two. */
+.sw-table__actions { display: flex; align-items: center; gap: 6px; }
+.sw-table__pair { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Quantity input. A class rather than an inline style="width:70" so the compact
+   mode can actually narrow it (an inline style would need !important). */
+.sw-input.qty { width: 70px; }
+
+/* Visible, non-overlay scrollbar for the table scroll containers. The platform
+   default over this dark theme gives close to zero affordance -- the original bug
+   report read as "the content is cut off", not "the content is scrollable"
+   (TASK-134 AC #2). Styling ::-webkit-scrollbar is what asks Blink for a CLASSIC
+   scrollbar (one that occupies layout space and is painted unconditionally)
+   instead of a fading overlay bar. Deliberately NOT combined with
+   scrollbar-width/scrollbar-color in the same rule: once those standard
+   properties are set, Blink ignores the ::-webkit- pseudo-elements and reverts to
+   the overlay bar. Firefox, which has no ::-webkit-scrollbar, gets the same intent
+   through the @supports branch instead.
+   Caveat for whoever verifies this: headless Chromium forces overlay scrollbars
+   regardless (an unstyled overflow:auto div also measures
+   offsetHeight - clientHeight == 0 there), so the classic bar cannot be observed
+   from the Playwright harness -- only the scrolling itself can. */
+.sw-table-scroll::-webkit-scrollbar { width: 9px; height: 9px; }
+.sw-table-scroll::-webkit-scrollbar-track {
+  background: rgba(91, 206, 250, 0.08);
+  border-top: 1px solid var(--line);
+}
+.sw-table-scroll::-webkit-scrollbar-thumb { background: rgba(91, 206, 250, 0.55); }
+.sw-table-scroll::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+@supports not selector(::-webkit-scrollbar) {
+  .sw-table-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(91, 206, 250, 0.55) rgba(91, 206, 250, 0.08);
+  }
+}
+
+/* 759.98px is derived from the content, not from a device: it sits just above the
+   754px market table, so a card wide enough to show every column untouched
+   (drawer regime 808px+, 1920px desktop 1108px) is left alone, and every card
+   that would clip something (628px at 1440px, 521/468/396px at 1149/1280/1024px)
+   is compacted. The .98 keeps a fractional container width from landing in a
+   whole-pixel hole, matching the media-query convention above. */
+@container station (max-width: 759.98px) {
+  /* Secondary INFORMATION folds away -- «Запас» on the market, «Корпус»/«Щит» on
+     the shipyard buy list. Never an action: every button keeps its word label.
+     Stock stays reachable through the ↑ max-buy / max-sell button titles. */
+  .sw-table__secondary { display: none; }
+
+  /* Tighten the grid itself: 12px side padding is a third of a narrow column. */
+  .sw-table { font-size: 11px; }
+  .sw-table th,
+  .sw-table td { padding: 5px 6px; }
+  .sw-table th { font-size: 9px; letter-spacing: 0.04em; }
+
+  /* Buttons in table rows lose padding and display tracking (0.18em -> 0.06em is
+     ~30% of the width of an uppercase label). */
+  .sw-table .sw-btn {
+    padding: 5px 7px;
+    letter-spacing: 0.06em;
+    gap: 4px;
+  }
+  /* The action cluster folds onto a second line. Wrapping is greedy, so the unit
+     that wraps has to be the ↑+action PAIR, not the individual button: with four
+     loose buttons the market's ↑ / Купить / Продать / ↑ quartet missed a
+     two-per-line fit by ~1px and collapsed to four lines (a 127px tall row, four
+     goods per screen), while a 2-track grid instead sums both tracks' widest
+     button and made the table 34px too wide again. Pairs give 2x2 at the price of
+     the widest single pair. */
+  .sw-table__actions { flex-wrap: wrap; gap: 4px; }
+  .sw-table__pair { gap: 4px; }
+
+  .sw-input.qty { width: 46px; }
+
+  /* Ship hold and station hold stack instead of halving an already narrow card
+     (1fr 1fr left each CargoView table ~228px, clipping «→ Загрузить»). */
+  .sw-cargo { grid-template-columns: 1fr; }
 }
 
 .sw-auction__create {

@@ -26,6 +26,7 @@ import {
   PirbaseGlyph,
   GateGlyph,
   LaserTowerGlyph,
+  JammerGlyph,
   SatelliteGlyph,
   ContainerGlyph,
   AsteroidGlyph,
@@ -196,6 +197,7 @@ export const ObjectLayer = forwardRef<ObjectLayerHandle, Props>(function ObjectL
       for (const s of p.statics.pirbases ?? []) if (s.sectorID === sid) place(`5:${s.id}`, s.x, s.y);
       for (const s of p.statics.laserTowers ?? []) if (s.sectorID === sid) place(`7:${s.id}`, s.x, s.y);
       for (const s of p.statics.satellites ?? []) if (s.sectorID === sid) place(`11:${s.id}`, s.x, s.y);
+      for (const s of p.statics.jammers ?? []) if (s.sectorID === sid) place(`13:${s.id}`, s.x, s.y);
       // Gates are always visible regardless of radar distance (TASK-117) — just
       // position them. Laser towers and satellites are now radar-gated on the
       // server, so it stops sending them out of range (no client fade needed).
@@ -355,6 +357,20 @@ export const ObjectLayer = forwardRef<ObjectLayerHandle, Props>(function ObjectL
             <circle className="hit" r={HIT_R} fill="transparent" style={{ pointerEvents: 'auto', cursor: 'pointer' }}
               onClick={(e) => p.onPick(dockPick(EntityKind.Satellite, s.id, s.x, s.y, undefined, p.stationTypes), ...evXY(e.clientX, e.clientY))} />
             <SatelliteGlyph color={tint} />
+            {shieldBar(combat)}
+          </g>
+        );
+      })}
+      {(p.statics.jammers ?? []).filter((s) => s.sectorID === sid).map((s) => {
+        const tint = raceTint(p, s.race, 'var(--amber)');
+        const combat = p.staticCombat.get(`${EntityKind.Jammer}:${s.id}`);
+        return (
+          <g key={`jam-${s.id}`} ref={simpleRef(simpleNodes, `13:${s.id}`)}>
+            {/* A jammer is a weapon target (it is the only way to lift the
+                no-jump zone) — make its glyph pickable. */}
+            <circle className="hit" r={HIT_R} fill="transparent" style={{ pointerEvents: 'auto', cursor: 'pointer' }}
+              onClick={(e) => p.onPick(dockPick(EntityKind.Jammer, s.id, s.x, s.y, undefined, p.stationTypes), ...evXY(e.clientX, e.clientY))} />
+            <JammerGlyph color={tint} />
             {shieldBar(combat)}
           </g>
         );
@@ -555,6 +571,8 @@ function staticList(p: Props, refKind: number): { id: number; sectorID: number; 
       return p.statics.pirbases;
     case EntityKind.Satellite:
       return p.statics.satellites;
+    case EntityKind.Jammer:
+      return p.statics.jammers;
     case EntityKind.LaserTower:
       return p.statics.laserTowers;
     default:

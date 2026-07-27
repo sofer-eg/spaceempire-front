@@ -30,6 +30,26 @@ test('jumpDriveErrorText maps each backend status to a Russian line', () => {
   );
 });
 
+// TASK-131: 409 is overloaded by the backend — ErrShipDocked ("ship is docked")
+// and ErrJumpBlockedByAntijump ("jump blocked by antijump field", raised both by
+// a powered up_antijump ship and by a deployed hyper-interference generator).
+// Reported live: a jammed jump used to tell the player they were docked.
+test('jumpDriveErrorText disambiguates the two 409 branches by sentinel text', () => {
+  assert.equal(
+    jumpDriveErrorText(new ApiError(409, 'jump blocked by antijump field')),
+    'Гипер-помехи глушат прыжок: рядом генератор гипер-помех или корабль с полем подавления.',
+  );
+  // Case-insensitive substring match.
+  assert.equal(
+    jumpDriveErrorText(new ApiError(409, 'Jump blocked by ANTIJUMP field')),
+    'Гипер-помехи глушат прыжок: рядом генератор гипер-помех или корабль с полем подавления.',
+  );
+  assert.equal(
+    jumpDriveErrorText(new ApiError(409, 'ship is docked')),
+    'Нельзя прыгнуть пристыкованным — сначала отстыкуйтесь.',
+  );
+});
+
 test('jumpDriveErrorText disambiguates the two 422 branches by sentinel text', () => {
   assert.equal(
     jumpDriveErrorText(new ApiError(422, 'shield generator damaged or missing')),

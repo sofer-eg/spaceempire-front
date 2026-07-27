@@ -94,7 +94,7 @@ type TabId = 'ships' | 'stations' | 'other';
 const TABS: { id: TabId; title: string; noun: string; empty: string }[] = [
   { id: 'ships', title: 'Корабли', noun: 'кораблей', empty: 'Кораблей рядом нет.' },
   { id: 'stations', title: 'Станции', noun: 'станций', empty: 'Станций в секторе нет.' },
-  { id: 'other', title: 'Другие объекты (ворота, астероиды, спутники, башни, контейнеры)', noun: 'объектов', empty: 'Других объектов нет.' },
+  { id: 'other', title: 'Другие объекты (ворота, астероиды, спутники, генераторы помех, башни, контейнеры)', noun: 'объектов', empty: 'Других объектов нет.' },
 ];
 
 // NavTabIcon is the glyph shown on a tab button. Shapes echo the canvas /
@@ -138,8 +138,9 @@ type Target = {
   // id is the numeric entity id used as the stable secondary sort key inside a
   // group (TASK-118 FR-5). order is the group priority within the tab (lower =
   // higher up): ships → self 0 / others 1; stations → TradeStation 0 / Shipyard
-  // 1 / rest 2; other → gate 0 / asteroid 1 / satellite 2 / laser tower 3 /
-  // container 4 (satellites + towers added TASK-121).
+  // 1 / rest 2; other → gate 0 / asteroid 1 / satellite 2 / jammer 3 / laser
+  // tower 4 / container 5 (satellites + towers added TASK-121, jammers
+  // TASK-131).
   id: number;
   order: number;
   // own marks the controlled ship's self row in the Ships tab: pinned first,
@@ -276,6 +277,25 @@ export function TargetsPanel({
         },
       });
     }
+    // Hyper-interference generators (TASK-131): same server-radar-gated static
+    // set the map draws (statics.jammers), under the "Другое" tab after
+    // satellites. Not dockable but a valid weapon target — shooting one down is
+    // the only way to lift its no-jump zone.
+    for (const jam of statics.jammers ?? []) {
+      out.push({
+        key: `jammer-${jam.id}`,
+        cat: 'other',
+        id: jam.id,
+        order: 3,
+        picked: {
+          kind: 'dock',
+          ref: { kind: EntityKind.Jammer, id: jam.id },
+          x: jam.x,
+          y: jam.y,
+          label: `${staticTypeLabel(EntityKind.Jammer, undefined, stationTypes)}${raceSuffix(jam.race)}`,
+        },
+      });
+    }
     // Laser towers (TASK-121): the same server-radar-gated static set the map
     // draws (statics.laserTowers), under the "Другое" tab after satellites.
     // A tower is not dockable but is a valid weapon target — ObjectActionsMenu
@@ -285,7 +305,7 @@ export function TargetsPanel({
         key: `laser-tower-${lt.id}`,
         cat: 'other',
         id: lt.id,
-        order: 3,
+        order: 4,
         picked: {
           kind: 'dock',
           ref: { kind: EntityKind.LaserTower, id: lt.id },
@@ -361,7 +381,7 @@ export function TargetsPanel({
         key: `container-${c.id}`,
         cat: 'other',
         id: c.id,
-        order: 4,
+        order: 5,
         picked: {
           kind: 'container',
           id: c.id,

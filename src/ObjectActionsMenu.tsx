@@ -107,13 +107,14 @@ export function ObjectActionsMenu({
   const dist = ownShip
     ? Math.hypot(ownShip.x - target.x, ownShip.y - target.y)
     : Number.POSITIVE_INFINITY;
-  // A laser tower is a weapon target (TASK-113) but not dockable — exclude it
-  // from the dock affordance like the satellite, so we never offer a "Стыковка"
-  // the server would reject.
+  // A laser tower (TASK-113) and a hyper-interference generator (TASK-131) are
+  // weapon targets but not dockable — exclude them from the dock affordance
+  // like the satellite, so we never offer a "Стыковка" the server would reject.
   const canDock =
     target.kind === 'dock' &&
     target.ref.kind !== EntityKind.Satellite &&
     target.ref.kind !== EntityKind.LaserTower &&
+    target.ref.kind !== EntityKind.Jammer &&
     dist <= dockRange;
   const canJump = target.kind === 'gate' && dist <= gateRange;
   const isOwnShip = target.kind === 'ship' && target.id === ownShipID;
@@ -288,7 +289,8 @@ export function ObjectActionsMenu({
       </button>
       {target.kind === 'dock' &&
         target.ref.kind !== EntityKind.Satellite &&
-        target.ref.kind !== EntityKind.LaserTower && (
+        target.ref.kind !== EntityKind.LaserTower &&
+        target.ref.kind !== EntityKind.Jammer && (
           <button
             type="button"
             role="menuitem"

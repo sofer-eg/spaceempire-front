@@ -118,6 +118,20 @@ export function SatelliteGlyph({ color }: { color: string }) {
   );
 }
 
+// JammerGlyph renders a player-deployed hyper-interference generator
+// (TASK-131): an emitter core with two pairs of broken arcs radiating either
+// side, reading as a jamming field. Static — no heading, like the laser tower.
+export function JammerGlyph({ color }: { color: string }) {
+  return (
+    <g style={{ color }}>
+      <circle cx={0} cy={0} r={3} fill="currentColor" fillOpacity={0.25} stroke="currentColor" strokeWidth={1.2} />
+      <path d="M-5.5,-4 A7,7 0 0,0 -5.5,4 M5.5,-4 A7,7 0 0,1 5.5,4" fill="none" stroke="currentColor" strokeWidth={1.2} strokeLinecap="round" />
+      <path d="M-8.5,-6.5 A11,11 0 0,0 -8.5,6.5 M8.5,-6.5 A11,11 0 0,1 8.5,6.5" fill="none" stroke="currentColor" strokeWidth={1} strokeOpacity={0.7} strokeLinecap="round" />
+      <path d="M0,-9 L0,-5 M0,5 L0,9" fill="none" stroke="currentColor" strokeWidth={1.2} strokeLinecap="round" />
+    </g>
+  );
+}
+
 export function ContainerGlyph({ color }: { color: string }) {
   return (
     <g style={{ color }}>

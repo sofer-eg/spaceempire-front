@@ -23,14 +23,15 @@ export const EntityKind = {
   Drone: 6,
   LaserTower: 7,
   Satellite: 11,
+  Jammer: 13,
 } as const;
 
 // isStaticTargetKind mirrors the server's sector.IsStaticTargetKind (TASK-113
 // FR-01): the destructible statics a weapon may lock onto besides ships —
-// stations, shipyards, trade stations, pirbases, laser towers, satellites.
-// Gates/containers/asteroids are NOT weapon targets (gates excluded until
-// TASK-110). One source of truth for the weapon-button gates so the UI never
-// offers a target the server would reject with ErrInvalidAttackTarget.
+// stations, shipyards, trade stations, pirbases, laser towers, satellites,
+// jammers. Gates/containers/asteroids are NOT weapon targets (gates excluded
+// until TASK-110). One source of truth for the weapon-button gates so the UI
+// never offers a target the server would reject with ErrInvalidAttackTarget.
 export function isStaticTargetKind(kind: number): boolean {
   return (
     kind === EntityKind.Station ||
@@ -38,7 +39,8 @@ export function isStaticTargetKind(kind: number): boolean {
     kind === EntityKind.TradeStation ||
     kind === EntityKind.Pirbase ||
     kind === EntityKind.LaserTower ||
-    kind === EntityKind.Satellite
+    kind === EntityKind.Satellite ||
+    kind === EntityKind.Jammer
   );
 }
 
@@ -426,6 +428,21 @@ export type Satellite = {
   built: boolean;
 };
 
+// Jammer is a player-deployed hyper-interference generator (TASK-131): a
+// destructible static that blocks the seamless jump drive of every ship within
+// its zone while alive. Deployed via sendInstallJammer.
+export type Jammer = {
+  id: number;
+  ownerID?: number;
+  sectorID: number;
+  x: number;
+  y: number;
+  hp: number;
+  shield: number;
+  race: number;
+  built: boolean;
+};
+
 export type SectorStatics = {
   stations?: Station[];
   shipyards?: Shipyard[];
@@ -433,6 +450,7 @@ export type SectorStatics = {
   pirbases?: Pirbase[];
   laserTowers?: LaserTower[];
   satellites?: Satellite[];
+  jammers?: Jammer[];
 };
 
 export type StaticsMessage = {
@@ -926,6 +944,25 @@ export async function sendInstallSatellite(
   return { satelliteID: body.satelliteID };
 }
 
+// sendInstallJammer deploys one hyper-interference generator from shipID's
+// cargo at the ship's current position (TASK-131). The server consumes 1× goods
+// id 27 and persists the generator; throws ApiError on a non-2xx (e.g. 400 no
+// generator in cargo, 400 ship docked).
+export async function sendInstallJammer(
+  shipID: number,
+): Promise<{ jammerID: number }> {
+  const res = await fetch('/api/cmd/install-jammer', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ shipID }),
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await parseErrorBody(res));
+  }
+  const body = (await res.json()) as { ok: boolean; jammerID: number };
+  return { jammerID: body.jammerID };
+}
+
 // sendMine arms sustained ore mining on shipID against the given asteroid, or
 // stops it when asteroidID is 0 (phase 10.3.6). The server only sets the
 // intent; the per-tick drilling, drill gate (up_drill), range check and energy
@@ -1005,10 +1042,12 @@ async function parseErrorBody(res: Response): Promise<string> {
 
 // jumpDriveErrorText turns a sendJumpDrive failure into a Russian, human-
 // readable line for the galaxy-map footer / Journal (TASK-129). It branches on
-// the HTTP status ApiError carries and — for the two statuses the backend
+// the HTTP status ApiError carries and — for the three statuses the backend
 // overloads — on a substring of its English sentinel text: the same 422 covers
-// both "no jump drive" and "shield generator damaged", and the same 400 covers
-// both "jump blocked in this sector" and "invalid target sector". The backend
+// both "no jump drive" and "shield generator damaged", the same 400 covers
+// both "jump blocked in this sector" and "invalid target sector", and the same
+// 409 covers both "ship is docked" and "jump blocked by antijump field"
+// (TASK-131 — before that the jammed case read as "you are docked"). The backend
 // does not distinguish these by status alone, so keying on the English wording
 // ("shield" / "blocked") is a deliberate, documented coupling to those
 // sentinels (see the error table in TASK-129). Non-ApiError inputs (a thrown
@@ -1022,7 +1061,12 @@ export function jumpDriveErrorText(err: unknown): string {
     case 403:
       return 'Это не ваш корабль.';
     case 409:
-      return 'Нельзя прыгнуть пристыкованным — сначала отстыкуйтесь.';
+      // Overloaded status: "antijump" sentinel → hyper-interference jams the
+      // jump (a powered up_antijump ship, TASK-100.3.8, or a deployed
+      // «Генератор гипер-помех», TASK-131), otherwise the ship is docked.
+      return msg.includes('antijump')
+        ? 'Гипер-помехи глушат прыжок: рядом генератор гипер-помех или корабль с полем подавления.'
+        : 'Нельзя прыгнуть пристыкованным — сначала отстыкуйтесь.';
     case 422:
       // Overloaded status: "shield" sentinel → damaged/missing shield generator,
       // otherwise the ship simply has no up_jump_drive fitted.

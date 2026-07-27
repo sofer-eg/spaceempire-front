@@ -38,6 +38,7 @@ function removeStaticsByRefs(statics: SectorStatics, refs: EntityRef[]): SectorS
     pirbases: statics.pirbases?.filter(gone(5)),
     laserTowers: statics.laserTowers?.filter(gone(7)),
     satellites: statics.satellites?.filter(gone(11)),
+    jammers: statics.jammers?.filter(gone(13)),
   };
 }
 
@@ -58,6 +59,7 @@ function mergeStatics(base: SectorStatics, added: SectorStatics): SectorStatics 
     pirbases: merge(base.pirbases, added.pirbases),
     laserTowers: merge(base.laserTowers, added.laserTowers),
     satellites: merge(base.satellites, added.satellites),
+    jammers: merge(base.jammers, added.jammers),
   };
 }
 
@@ -71,7 +73,8 @@ function staticsEmpty(s: SectorStatics | undefined): boolean {
       s.tradeStations?.length ||
       s.pirbases?.length ||
       s.laserTowers?.length ||
-      s.satellites?.length
+      s.satellites?.length ||
+      s.jammers?.length
     )
   );
 }

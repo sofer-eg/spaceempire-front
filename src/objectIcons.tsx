@@ -88,6 +88,19 @@ export function ObjectMarker({ picked, ships, ownPlayerID, ownRace, size = 14 }:
       </svg>
     );
   }
+  if (picked.ref.kind === EntityKind.Jammer) {
+    // Emitter core + radiating interference arcs — echoes the canvas
+    // JammerGlyph so a row and its map marker read as one object. Amber
+    // matches the map tint (ObjectLayer raceTint fallback).
+    const c = 'var(--amber)';
+    return (
+      <svg width={size} height={size} viewBox="0 0 14 14" className="sw-target-marker" aria-hidden>
+        <circle cx="7" cy="7" r="2" fill="none" stroke={c} strokeWidth="1.2" />
+        <path d="M4.2 4.2 A4 4 0 0 0 4.2 9.8 M9.8 4.2 A4 4 0 0 1 9.8 9.8" fill="none" stroke={c} strokeWidth="1.1" strokeLinecap="round" />
+        <path d="M7 1.4 L7 3.4 M7 10.6 L7 12.6" stroke={c} strokeWidth="1.1" strokeLinecap="round" />
+      </svg>
+    );
+  }
   if (picked.ref.kind === EntityKind.LaserTower) {
     // Antenna mast + emitter dot + widening crossbars — echoes the canvas
     // LaserTowerGlyph so a row and its map marker read as one object. Danger

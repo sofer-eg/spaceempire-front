@@ -269,6 +269,8 @@ export function staticTypeLabel(
       return 'Навигационный спутник';
     case EntityKind.LaserTower:
       return 'Лазерная башня';
+    case EntityKind.Jammer:
+      return 'Генератор гипер-помех';
     default:
       return 'Объект';
   }

@@ -4,6 +4,7 @@ import {
   EntityKind,
   isStaticTargetKind,
   sendCeaseFire,
+  sendInstallJammer,
   sendInstallSatellite,
   sendLaunchDrone,
   sendLaunchMissile,
@@ -26,6 +27,9 @@ const DRONE_GOODS = 51;
 // Satellite goods id consumed by one install (phase 10.15). Mirrors
 // api.SatelliteGoodsType.
 const SATELLITE_GOODS = 26;
+// Hyper-interference generator goods id consumed by one install (TASK-131).
+// Mirrors api.JammerGoodsType.
+const JAMMER_GOODS = 27;
 // Torpedo ammunition goods (migration 0042) backing the two torpedo classes.
 // Mirror api.TorpedoFirestormGoodsType (gt23, class 2) and
 // api.TorpedoHolyGoodsType (gt24, class 3). Phase 10.3.5.
@@ -93,6 +97,7 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
   const missiles = cargoCount(ownCargo, MISSILE_GOODS);
   const drones = cargoCount(ownCargo, DRONE_GOODS);
   const satellites = cargoCount(ownCargo, SATELLITE_GOODS);
+  const jammers = cargoCount(ownCargo, JAMMER_GOODS);
   // Torpedo ammunition per class (phase 10.3.5) + the launcher gate. Without
   // up_torpedo_launcher the server rejects the launch with 422, so both class
   // buttons stay disabled; with the module each is gated on its own hold count.
@@ -274,6 +279,18 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
               title={satellites === 0 ? 'Нет спутников в трюме' : 'Развернуть навигационный спутник здесь'}
               onClick={() => run(sendInstallSatellite(ownShip.id), true)}
             />
+            <WeaponButton
+              glyph="≋"
+              label="Установить генератор помех"
+              count={jammers}
+              disabled={pending || jammers === 0}
+              title={
+                jammers === 0
+                  ? 'Нет генераторов гипер-помех в трюме'
+                  : 'Развернуть генератор гипер-помех здесь: блокирует прыжковый двигатель всех кораблей рядом, включая ваш'
+              }
+              onClick={() => run(sendInstallJammer(ownShip.id), true)}
+            />
           </div>
 
           {hasJumpDrive && (
@@ -407,6 +424,8 @@ function findStatic(ref: EntityRef, statics: SectorStatics): { type?: number; ra
       return byId(statics.laserTowers);
     case EntityKind.Satellite:
       return byId(statics.satellites);
+    case EntityKind.Jammer:
+      return byId(statics.jammers);
     default:
       return undefined;
   }

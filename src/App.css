@@ -176,10 +176,6 @@ html, body, #root {
 }
 /* the longest label takes a whole row of its own */
 .sw-panel-actions__wide { grid-column: 1 / -1; }
-/* the ghost variant would otherwise win over .sw-btn[data-active="true"] on
-   border-color (same specificity, declared later), leaving the «вход открыт»
-   state with only brighter text — restore the accent frame here. */
-.sw-panel-actions .sw-btn[data-active="true"] { border-color: var(--accent); }
 
 /* ---------- buttons ---------- */
 .sw-btn {
@@ -206,14 +202,16 @@ html, body, #root {
   opacity: 0.4;
   cursor: not-allowed;
 }
+.sw-btn.ghost {
+  background: transparent;
+  border-color: rgba(91, 206, 250, 0.1);
+}
+/* after .ghost on purpose: both are 0-2-0, so the later rule wins on
+   border-color and an active ghost button keeps its accent frame. */
 .sw-btn[data-active="true"] {
   border-color: var(--accent);
   color: var(--accent-hot);
   box-shadow: inset 0 0 16px rgba(91, 206, 250, 0.15);
-}
-.sw-btn.ghost {
-  background: transparent;
-  border-color: rgba(91, 206, 250, 0.1);
 }
 .sw-btn.danger:hover {
   border-color: var(--danger);
@@ -474,27 +472,28 @@ html, body, #root {
 
    Known, deliberate residue over 1150-1202. The three columns share
    `viewport - 112` there; at 1150 that is 1038px, while the side panels' own
-   content wants 313px (min-content of .sw-sector-grid__ship undocked, set by
-   the «Автопилот» sector select; 412px docked, see below) + ~344-362px (nav,
-   the width at which TargetsPanel's «⋯» buttons stop being cut -- it moves with
-   the longest ship name in the list) = 675px and up, which would leave the
-   centre 363px or less, under its 390px floor. The two demands are
-   arithmetically incompatible, so the centre wins and the sides stay short:
-   measured, the ship column is under its min-content over 1150-1193 (the
+   content wants 313px (.sw-sector-grid__ship undocked -- the width at which its
+   «Автопилот» sector select stops being clipped, re-measured 313 on the current
+   HEAD) + ~344-362px (nav, the width at which TargetsPanel's «⋯» buttons stop
+   being cut -- it moves with the longest ship name in the list) = 675px and up,
+   which would leave the centre 363px or less, under its 390px floor. The two
+   demands are arithmetically incompatible, so the centre wins and the sides
+   stay short: measured, the ship column is under that 313px over 1150-1193 (the
    «Автопилот» select loses up to 19.2px of its right edge, arrow included), and
    the nav column can be under the «⋯» threshold up to ~1178 when ship names run
    long. Nothing becomes unreachable -- the ship column is a scroll container
    with a styled bar (see the ::-webkit-scrollbar rules near the bottom of this
    file). Making the side panels narrow-capable is TASK-139 and is the only
    thing that removes this residue.
-   Two more thresholds in that column, for whoever picks TASK-139 up. Docked,
-   the ship column's content is 412px wide, i.e. it never fits even at the full
-   320px -- the «Вход открыт/закрыт» row starts at x=271 inside the column, so a
-   column under 271px puts it out of reach entirely. This ramp is at 293px at
-   1150 and crosses 271px at viewport 1098, where the two-step layout it
-   replaces only got there at 1150; the row is still only 22.8px wide on screen
-   at 1150 (49.0px with the old fixed 320px column), which is why it is still a
-   bug -- just not a new one, and not an unreachable one.
+   Docked, that column no longer contributes to it. It wanted 412px before
+   TASK-126, when a single nowrap .sw-row held the id, the ПРИСТЫКОВАН chip and
+   all three actions -- 175.5px of that hung outside the 240px column. The
+   wrapping .sw-panel-actions grid brought the column down to min-content 143px
+   (the panel itself 139px + the 4px scrollbar gutter), and docked it is the
+   only panel in the ship area: CombatHUD and SetCoursePanel render on !docked
+   only (SectorView). Re-measured on the current HEAD, nothing in it is clipped
+   docked at 1024 / 1150 / 1212 / 1280. So the ship-column half of this residue
+   is now the undocked «Автопилот» select and nothing else.
 
    This replaces a fixed 320|1fr|380 base plus a 240|1fr|280 band that ended at
    1149.98px: that pair made the centre NARROWER at 1150px (338px) than at

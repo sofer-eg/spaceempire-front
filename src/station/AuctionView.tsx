@@ -315,7 +315,10 @@ function CreateLotForm({ source, shipCargo, onCreated }: CreateProps) {
   return (
     <form onSubmit={(e) => void onSubmit(e)} className="sw-form sw-auction__create">
       <span className="title">Создать лот</span>
-      <label>
+      {/* sw-auction__goods: this label takes the whole form row -- an option is a
+          full goods name plus its quantity, far wider than the ~150-216px the
+          auto-fit tracks hand out (TASK-134). */}
+      <label className="sw-auction__goods">
         Товар
         <select
           value={effectiveTypeID ?? ''}

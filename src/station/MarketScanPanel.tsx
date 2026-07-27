@@ -123,7 +123,8 @@ export function MarketScanPanel({ reloadSignal }: Props) {
         {TIER.high.dot} высокая&nbsp;&nbsp;{TIER.medium.dot} средняя&nbsp;&nbsp;{TIER.low.dot} низкая
       </div>
       {/* sw-table-scroll: this matrix has one column per tradeable station in the
-          sector (22 in sector 1 => ~2.9k px), so it can never be compacted to
+          sector (22 in sector 1 => 3279px of min-content in full mode, ~2835px
+          painted once compaction shrinks its font and padding), so it can never
           fit the HUD centre cell. Without its own scroll container the overflow
           fell to .sw-station__body and scrolling to a far station dragged the
           docked station's own market off screen (TASK-134 AC #3). */}

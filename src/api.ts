@@ -44,6 +44,21 @@ export function isStaticTargetKind(kind: number): boolean {
   );
 }
 
+// isDockableStaticKind reports whether a 'dock'-category target is one a ship
+// can actually dock at. Satellites (10.15), laser towers (TASK-113) and
+// hyper-interference generators (TASK-131) ride the same static path but take
+// no ship — the server's lookupStatic does not resolve them. One source of
+// truth so the navigation panel's ⚓ affordance and the object menu's
+// «Стыковка» item can never disagree (they did for jammers, which are deployed
+// at distance 0 and so were always inside the dock range).
+export function isDockableStaticKind(kind: number): boolean {
+  return (
+    kind !== EntityKind.Satellite &&
+    kind !== EntityKind.LaserTower &&
+    kind !== EntityKind.Jammer
+  );
+}
+
 export type Ship = {
   id: number;
   playerID: number;

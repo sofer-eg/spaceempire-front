@@ -6,6 +6,7 @@ import {
   type Asteroid,
   type Container,
   type EntityRef,
+  isDockableStaticKind,
   type InstalledEquipment,
   type Race,
   type SectorStatics,
@@ -474,7 +475,15 @@ export function TargetsPanel({
           )}
           {visible.map((t) => {
             const dist = distTo(t.picked);
-            const canDock = t.picked.kind === 'dock' && dist <= dockRange;
+            // Same dockability test as ObjectActionsMenu: a satellite, a laser
+            // tower or a hyper-interference generator is a 'dock'-category
+            // object that takes no ship, so it must not carry the ⚓ prefix
+            // promising a docking the menu then refuses. A generator is
+            // deployed at distance 0, which made the mismatch permanent.
+            const canDock =
+              t.picked.kind === 'dock' &&
+              isDockableStaticKind(t.picked.ref.kind) &&
+              dist <= dockRange;
             const labelPrefix = canDock ? '⚓ ' : '';
             return (
               <TargetRow

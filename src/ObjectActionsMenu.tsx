@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   EntityKind,
+  isDockableStaticKind,
   isStaticTargetKind,
   sendAttack,
   sendCeaseFire,
@@ -107,14 +108,13 @@ export function ObjectActionsMenu({
   const dist = ownShip
     ? Math.hypot(ownShip.x - target.x, ownShip.y - target.y)
     : Number.POSITIVE_INFINITY;
-  // A laser tower (TASK-113) and a hyper-interference generator (TASK-131) are
-  // weapon targets but not dockable — exclude them from the dock affordance
-  // like the satellite, so we never offer a "Стыковка" the server would reject.
+  // A satellite, a laser tower (TASK-113) and a hyper-interference generator
+  // (TASK-131) are weapon targets but not dockable — isDockableStaticKind keeps
+  // that list in one place so we never offer a "Стыковка" the server would
+  // reject, and TargetsPanel's ⚓ prefix stays in step with this menu.
   const canDock =
     target.kind === 'dock' &&
-    target.ref.kind !== EntityKind.Satellite &&
-    target.ref.kind !== EntityKind.LaserTower &&
-    target.ref.kind !== EntityKind.Jammer &&
+    isDockableStaticKind(target.ref.kind) &&
     dist <= dockRange;
   const canJump = target.kind === 'gate' && dist <= gateRange;
   const isOwnShip = target.kind === 'ship' && target.id === ownShipID;
@@ -287,21 +287,18 @@ export function ObjectActionsMenu({
       >
         Лететь
       </button>
-      {target.kind === 'dock' &&
-        target.ref.kind !== EntityKind.Satellite &&
-        target.ref.kind !== EntityKind.LaserTower &&
-        target.ref.kind !== EntityKind.Jammer && (
-          <button
-            type="button"
-            role="menuitem"
-            className="sw-menu__item"
-            onClick={doDock}
-            disabled={baseDisabled || !canDock}
-            title={!canDock ? 'Слишком далеко для стыковки' : undefined}
-          >
-            ⚓ Стыковка
-          </button>
-        )}
+      {target.kind === 'dock' && isDockableStaticKind(target.ref.kind) && (
+        <button
+          type="button"
+          role="menuitem"
+          className="sw-menu__item"
+          onClick={doDock}
+          disabled={baseDisabled || !canDock}
+          title={!canDock ? 'Слишком далеко для стыковки' : undefined}
+        >
+          ⚓ Стыковка
+        </button>
+      )}
       {canHackTarget && (
         <button
           type="button"

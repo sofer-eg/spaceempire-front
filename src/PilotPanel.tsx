@@ -45,7 +45,15 @@ export function PilotPanel({ ownShip, ownCargo, races, onExit, riding }: Props) 
           </span>
         ) : (
           <div className="sw-col" style={{ gap: 12 }}>
-            <div className="sw-row" style={{ justifyContent: 'flex-end', gap: 6 }}>
+            {/* Status chips: location (docked/in space) first, then stealth,
+                then the mode marker. ON-LINE was dropped in TASK-126 — it was
+                a literal that always lit up and ate room on a 240px panel. */}
+            <div className="sw-panel-status">
+              {ownShip.docked ? (
+                <span className="sw-chip dot warn">ПРИСТЫКОВАН</span>
+              ) : (
+                <span className="sw-chip dot good">В КОСМОСЕ</span>
+              )}
               {ownShip.isHidden &&
                 (ownShip.attackTarget ? (
                   <span className="sw-chip dot warn" title="Стелс снят — корабль ведёт огонь">
@@ -56,86 +64,76 @@ export function PilotPanel({ ownShip, ownCargo, races, onExit, riding }: Props) 
                     СТЕЛС
                   </span>
                 ))}
-              {riding ? (
-                <span className="sw-chip dot warn">ПАССАЖИР</span>
-              ) : ownShip.isSpacesuit ? (
-                <span className="sw-chip dot danger">СКАФАНДР</span>
-              ) : (
-                <span className="sw-chip dot good">ON-LINE</span>
-              )}
+              {riding && <span className="sw-chip dot warn">ПАССАЖИР</span>}
+              {!riding && ownShip.isSpacesuit && <span className="sw-chip dot danger">СКАФАНДР</span>}
             </div>
-            <div className="sw-row" style={{ justifyContent: 'space-between', gap: 8 }}>
-              <span className="sw-mono" style={{ fontSize: 10, color: 'var(--ink-mute)', letterSpacing: '0.06em' }}>
-                #{ownShip.id} · сектор #{ownShip.sectorID}
-              </span>
-              <span className="sw-row" style={{ gap: 6 }}>
-                {riding && (
+            <span className="sw-mono" style={{ fontSize: 10, color: 'var(--ink-mute)', letterSpacing: '0.06em' }}>
+              #{ownShip.id} · сектор #{ownShip.sectorID}
+            </span>
+            {/* Actions: 2-column grid so every button stays inside the panel on
+                the narrowest (240px) ship column; the longest label takes a
+                whole row of its own (TASK-126). */}
+            <div className="sw-panel-actions">
+              {riding && (
+                <button
+                  type="button"
+                  className="sw-btn sw-panel-actions__wide"
+                  title="Сойти с корабля в скафандре"
+                  onClick={() => {
+                    void disembark()
+                      .then(onExit)
+                      .catch((err: unknown) => console.error('disembark', err));
+                  }}
+                >
+                  Высадиться
+                </button>
+              )}
+              {!riding && ownShip.docked && (
+                <button
+                  type="button"
+                  className="sw-btn ghost"
+                  onClick={() => {
+                    void sendUndock(ownShip.id).catch((err: unknown) =>
+                      console.error('sendUndock', err),
+                    );
+                  }}
+                >
+                  Отстыковаться
+                </button>
+              )}
+              {!riding && !ownShip.isSpacesuit && (
+                <>
                   <button
                     type="button"
-                    className="sw-btn"
-                    style={{ padding: '3px 8px', fontSize: 9 }}
-                    title="Сойти с корабля в скафандре"
+                    className="sw-btn ghost"
+                    data-active={ownShip.isOpen}
+                    title={
+                      ownShip.isOpen
+                        ? 'Вход разрешён другим игрокам — нажмите, чтобы закрыть'
+                        : 'Вход закрыт — нажмите, чтобы разрешить другим садиться пассажиром'
+                    }
                     onClick={() => {
-                      void disembark()
-                        .then(onExit)
-                        .catch((err: unknown) => console.error('disembark', err));
+                      void setShipAccess(ownShip.id, !ownShip.isOpen).catch((err: unknown) =>
+                        console.error('setShipAccess', err),
+                      );
                     }}
                   >
-                    Высадиться
+                    {ownShip.isOpen ? 'Вход открыт' : 'Вход закрыт'}
                   </button>
-                )}
-                {!riding && ownShip.docked && (
-                  <>
-                    <span className="sw-chip dot warn">ПРИСТЫКОВАН</span>
-                    <button
-                      type="button"
-                      className="sw-btn ghost"
-                      style={{ padding: '3px 8px', fontSize: 9 }}
-                      onClick={() => {
-                        void sendUndock(ownShip.id).catch((err: unknown) =>
-                          console.error('sendUndock', err),
-                        );
-                      }}
-                    >
-                      Расстыковка
-                    </button>
-                  </>
-                )}
-                {!riding && !ownShip.isSpacesuit && (
-                  <>
-                    <button
-                      type="button"
-                      className={`sw-btn ghost${ownShip.isOpen ? ' active' : ''}`}
-                      style={{ padding: '3px 8px', fontSize: 9 }}
-                      title={
-                        ownShip.isOpen
-                          ? 'Вход разрешён другим игрокам — нажмите, чтобы закрыть'
-                          : 'Вход закрыт — нажмите, чтобы разрешить другим садиться пассажиром'
-                      }
-                      onClick={() => {
-                        void setShipAccess(ownShip.id, !ownShip.isOpen).catch((err: unknown) =>
-                          console.error('setShipAccess', err),
-                        );
-                      }}
-                    >
-                      {ownShip.isOpen ? 'Вход открыт' : 'Вход закрыт'}
-                    </button>
-                    <button
-                      type="button"
-                      className="sw-btn ghost"
-                      style={{ padding: '3px 8px', fontSize: 9 }}
-                      title="Выйти в скафандре (на станции — в ангар, в космосе — наружу)"
-                      onClick={() => {
-                        void exitShip(ownShip.id)
-                          .then(onExit)
-                          .catch((err: unknown) => console.error('exitShip', err));
-                      }}
-                    >
-                      Покинуть корабль
-                    </button>
-                  </>
-                )}
-              </span>
+                  <button
+                    type="button"
+                    className="sw-btn ghost sw-panel-actions__wide"
+                    title="Выйти в скафандре (на станции — в ангар, в космосе — наружу)"
+                    onClick={() => {
+                      void exitShip(ownShip.id)
+                        .then(onExit)
+                        .catch((err: unknown) => console.error('exitShip', err));
+                    }}
+                  >
+                    Покинуть корабль
+                  </button>
+                </>
+              )}
             </div>
 
             {/* Hull/shield denominators come from the ship itself (per-ship

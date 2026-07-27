@@ -154,6 +154,33 @@ html, body, #root {
 }
 .sw-panel-body { padding: 10px 12px; }
 
+/* PilotPanel header (TASK-126). Status chips wrap: location + stealth + mode
+   never fit one line on the narrowest (240px) ship column. */
+.sw-panel-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+/* Actions grid: two equal columns (falls back to one when the panel is
+   narrower than two buttons), so «Покинуть корабль» stays inside the panel
+   instead of being pushed past its right edge as in a single .sw-row. */
+.sw-panel-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 6px;
+}
+/* no action available (spacesuit in space) — do not leave an empty .sw-col gap */
+.sw-panel-actions:empty { display: none; }
+.sw-panel-actions .sw-btn {
+  justify-content: center;
+  text-align: center;
+  padding: 4px 6px;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+/* the longest label takes a whole row of its own */
+.sw-panel-actions__wide { grid-column: 1 / -1; }
+/* the ghost variant would otherwise win over .sw-btn[data-active="true"] on
+   border-color (same specificity, declared later), leaving the «вход открыт»
+   state with only brighter text — restore the accent frame here. */
+.sw-panel-actions .sw-btn[data-active="true"] { border-color: var(--accent); }
+
 /* ---------- buttons ---------- */
 .sw-btn {
   appearance: none;

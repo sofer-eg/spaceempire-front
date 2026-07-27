@@ -122,26 +122,33 @@ export function MarketScanPanel({ reloadSignal }: Props) {
       <div className="sw-mscan__legend">
         {TIER.high.dot} высокая&nbsp;&nbsp;{TIER.medium.dot} средняя&nbsp;&nbsp;{TIER.low.dot} низкая
       </div>
-      <table className="sw-table sw-mscan__table">
-        <thead>
-          <tr>
-            <th>Товар</th>
-            {byStation.map(({ station, label }) => (
-              <th key={`${station.owner.kind}:${station.owner.id}`}>{label}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {goodIDs.map((typeID) => (
-            <tr key={typeID}>
-              <td>{goodsName(goods, typeID)}</td>
-              {byStation.map(({ station, map }) => (
-                <td key={`${station.owner.kind}:${station.owner.id}`}>{renderCell(map.get(typeID))}</td>
+      {/* sw-table-scroll: this matrix has one column per tradeable station in the
+          sector (22 in sector 1 => ~2.9k px), so it can never be compacted to
+          fit the HUD centre cell. Without its own scroll container the overflow
+          fell to .sw-station__body and scrolling to a far station dragged the
+          docked station's own market off screen (TASK-134 AC #3). */}
+      <div className="sw-table-scroll">
+        <table className="sw-table sw-mscan__table">
+          <thead>
+            <tr>
+              <th>Товар</th>
+              {byStation.map(({ station, label }) => (
+                <th key={`${station.owner.kind}:${station.owner.id}`}>{label}</th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {goodIDs.map((typeID) => (
+              <tr key={typeID}>
+                <td>{goodsName(goods, typeID)}</td>
+                {byStation.map(({ station, map }) => (
+                  <td key={`${station.owner.kind}:${station.owner.id}`}>{renderCell(map.get(typeID))}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }

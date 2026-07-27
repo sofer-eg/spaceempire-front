@@ -166,7 +166,7 @@ function CargoColumn({ title, inv, action, busy, onMove, goods }: ColumnProps) {
                       max={it.quantity}
                       value={Math.min(qty(it.typeID), it.quantity)}
                       onChange={(e) => setQty(it.typeID, Number(e.target.value))}
-                      className="sw-input qty"
+                      className="sw-input sw-qty"
                     />
                   </td>
                   <td>

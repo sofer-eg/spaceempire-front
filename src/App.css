@@ -918,9 +918,17 @@ html, body, #root {
    the whole point: the HUD centre cell is narrowest on desktop (1024px -> 396px,
    1280px -> 468px, 1440px -> 628px) because the 320+380 side columns eat the
    width, while the <=1023px drawer regime gives StationView the full width
-   (900px -> 808px). A media query would compact exactly the wrong ends.
+   (900px -> 808px) and 1920px gives it 1108px. A media query would compact
+   exactly the wrong ends. This is THE reference for those card widths -- the
+   @container block further down cites them instead of repeating them.
    inline-size (not `size`) keeps the block axis content-driven, so the flex
-   column below still stretches to height:100%. */
+   column below still stretches to height:100%.
+   Containment side effects to keep in mind when adding UI in here: a query
+   container is a containing block for `position: fixed` descendants and forms
+   its own stacking context, so a fixed/sticky popover mounted inside
+   StationView would anchor to this card rather than to the viewport and could
+   no longer paint over its siblings. Nothing inside uses fixed/sticky today
+   (checked: tabs, tables, forms are all in flow), but the next popover will. */
 .sw-station {
   height: 100%;
   display: flex;
@@ -1131,16 +1139,20 @@ html, body, #root {
 }
 
 /* ---------- narrow-card StationView tables (TASK-134) ---------- */
-/* The HUD centre cell is only 396-628px wide on desktop (see .sw-station above),
-   while the widest StationView table -- the trade-station market
-   Товар|Покупка|Продажа|Запас|Кол-во|Действие -- has a 754px min-content width.
-   The right-hand columns («Кол-во» input, «Купить», «Продать») were therefore
-   clipped at the cell edge and unreachable, i.e. a docked player could not trade
-   at all on a plain 1280px desktop. Two mechanisms fix that, in this order:
+/* On the desktop card widths listed at .sw-station above, no StationView table
+   fits untouched: the widest one (the trade-station market
+   Товар|Покупка|Продажа|Запас|Кол-во|Действие) needs 754px of min-content, the
+   auction lot list 601px, the trade_up sector scanner ~3.3k. The right-hand
+   columns («Кол-во» input, «Купить», «Продать», «Ставка», «Выставить») were
+   therefore clipped at the cell edge and unreachable, i.e. a docked player could
+   neither trade nor bid on a plain 1280px desktop. Two mechanisms fix that, in
+   this order:
      1. compaction (the @container block below) shrinks the table until the
         price / quantity / action columns fit with NO horizontal scroll;
      2. .sw-table-scroll catches whatever still does not fit, as a visible
-        horizontal scrollbar INSIDE the card. */
+        horizontal scrollbar INSIDE the card. That is the only outcome available
+        to the scanner matrix, whose column count is the sector's station count
+        (22 in sector 1) and cannot be compacted into 392px. */
 
 /* Wrapper around each wide table. Scrolling per table (rather than relying on
    .sw-station__body) keeps the two axes independent: rows scroll vertically with
@@ -1155,9 +1167,30 @@ html, body, #root {
 .sw-table__actions { display: flex; align-items: center; gap: 6px; }
 .sw-table__pair { display: inline-flex; align-items: center; gap: 6px; }
 
-/* Quantity input. A class rather than an inline style="width:70" so the compact
-   mode can actually narrow it (an inline style would need !important). */
-.sw-input.qty { width: 70px; }
+/* Fixed-width numeric controls in table rows. Classes rather than inline
+   style="width:N" so the compact mode below can actually narrow them (an inline
+   style would need !important) and so all three widths live in one place. */
+.sw-input.sw-qty { width: 70px; }
+.sw-input.sw-bid { width: 90px; }
+.sw-input.sw-level { width: 64px; }
+
+/* Blink reserves layout space for the number spinner unconditionally -- it is
+   painted only on hover, but it always eats the box. Measured on the live
+   compact input (12px JetBrains Mono, 4px 6px padding): «999500» does not fit
+   in 70px WITH the spinner but fits in 58px without it («99999» 66 -> 50,
+   «500» 54 -> 40). The «↑ максимум» button substitutes exactly such values, so
+   these two inputs drop the spinner and their widths below are sized from the
+   spinner-free numbers (TASK-134 AC #2). Arrow keys still step the value.
+   `appearance: textfield` covers Gecko; Blink needs the pseudo-elements too. */
+.sw-input.sw-qty,
+.sw-input.sw-bid { appearance: textfield; }
+.sw-input.sw-qty::-webkit-outer-spin-button,
+.sw-input.sw-qty::-webkit-inner-spin-button,
+.sw-input.sw-bid::-webkit-outer-spin-button,
+.sw-input.sw-bid::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
 
 /* Visible, non-overlay scrollbar for the table scroll containers. The platform
    default over this dark theme gives close to zero affordance -- the original bug
@@ -1187,28 +1220,55 @@ html, body, #root {
   }
 }
 
-/* 759.98px is derived from the content, not from a device: it sits just above the
-   754px market table, so a card wide enough to show every column untouched
-   (drawer regime 808px+, 1920px desktop 1108px) is left alone, and every card
-   that would clip something (628px at 1440px, 521/468/396px at 1149/1280/1024px)
-   is compacted. The .98 keeps a fractional container width from landing in a
-   whole-pixel hole, matching the media-query convention above. */
-@container station (max-width: 759.98px) {
+/* The threshold is derived from the content, not from a device: it sits just
+   above the min-content width of the widest full table, so a card that can show
+   every column untouched is left alone and every card that would clip something
+   is compacted. Widest full table measured across all four docked object types:
+   761px (the pirbase market -- longer goods names), 754px at the trade station,
+   601px for the auction lot list, 561px for the shipyard buy list. The market
+   figures were RE-MEASURED after the action buttons were regrouped into ↑+label
+   pairs -- the regrouping cannot move them, because `flex-wrap: wrap` only
+   applies inside this block, so in full mode the four buttons still lay out in
+   one row exactly as before.
+   Do not lower this to ~694px: that figure is a measurement artifact. Reading a
+   table's `width: min-content` in the same frame that turns the query container
+   off returns a stale 686px even though getComputedStyle already reports the
+   uncompacted 12px font / 6px 12px padding / visible «Запас»; let one frame
+   settle and the same table measures 754px. Verified at 800/900/1920px, where
+   compaction is genuinely off and no injection is involved: 754px every time.
+   A lower threshold regresses the 800px drawer -- its card is 708px, so the full
+   table would overflow by 47px with 65 controls out of view, and .sw-cargo would
+   go back to halving the card and clipping «→ Загрузить».
+   The .98 keeps a fractional container width from landing in a whole-pixel hole,
+   matching the media-query convention above; see .sw-station for the card widths
+   this lands on. 769.98 rather than 761 leaves room for the live prices and
+   stock figures, which change width as production runs (the same table measured
+   753-761px over an afternoon), and no card in the 761-770 band exists in either
+   regime anyway. */
+@container station (max-width: 769.98px) {
   /* Secondary INFORMATION folds away -- «Запас» on the market, «Корпус»/«Щит» on
-     the shipyard buy list. Never an action: every button keeps its word label.
-     Stock stays reachable through the ↑ max-buy / max-sell button titles. */
+     the shipyard buy list, «#»/«Лидер» on the auction lot list. Never an action:
+     every button keeps its word label. Each folded value stays readable in the
+     title of an ALWAYS-ENABLED element of the same row (the goods-name / model
+     cell) -- not of the ↑ button, which is disabled on most rows and therefore
+     gets no pointer events at all in Firefox (TASK-134 AC #6). */
   .sw-table__secondary { display: none; }
 
-  /* Tighten the grid itself: 12px side padding is a third of a narrow column. */
+  /* Tighten the grid itself: 12px side padding is a third of a narrow column.
+     5px a side is what closes the last gap on the narrowest card -- per-column
+     min-content of the compact market table at 1024px measured
+     104(Товар)+65+58+70+106(Действие) = 404 against a 394px body, and 1px off
+     each of the five visible columns' two sides is exactly those 10px. */
   .sw-table { font-size: 11px; }
   .sw-table th,
-  .sw-table td { padding: 5px 6px; }
+  .sw-table td { padding: 5px; }
   .sw-table th { font-size: 9px; letter-spacing: 0.04em; }
 
   /* Buttons in table rows lose padding and display tracking (0.18em -> 0.06em is
-     ~30% of the width of an uppercase label). */
+     ~30% of the width of an uppercase label). The 6px side padding takes another
+     4px off the «Действие» column, whose width is the widest ↑+label pair. */
   .sw-table .sw-btn {
-    padding: 5px 7px;
+    padding: 5px 6px;
     letter-spacing: 0.06em;
     gap: 4px;
   }
@@ -1222,22 +1282,43 @@ html, body, #root {
   .sw-table__actions { flex-wrap: wrap; gap: 4px; }
   .sw-table__pair { gap: 4px; }
 
-  .sw-input.qty { width: 46px; }
+  /* 58px = a 6-digit value, spinner-free (see the measurement above the .sw-qty
+     rule); the font is monospace, so every 6-digit value is exactly this wide.
+     NOT smaller: the point of the column is to be read, and 46px silently
+     truncated even «500». */
+  .sw-input.sw-qty,
+  .sw-input.sw-bid { width: 58px; }
 
   /* Ship hold and station hold stack instead of halving an already narrow card
      (1fr 1fr left each CargoView table ~228px, clipping «→ Загрузить»). */
   .sw-cargo { grid-template-columns: 1fr; }
+
+  /* «Создать лот» needs nothing here: its track list is intrinsic, so it reflows
+     on its own (two columns at 396-468px, four at 684-708px). See
+     .sw-auction__create below. */
 }
 
+/* «Создать лот». The track list is intrinsic, not a fixed six columns: with
+   `1fr 1fr 1fr 1fr auto auto` the row could not wrap, and the goods <select>
+   contributes the widest option string («Модуль расширения торговой станции»
+   class of name) to its own min-content, which pushed the form to 1184px --
+   «Выставить» sat outside the card at EVERY width, 1920px included, and the form
+   only renders when the hold is non-empty so the first pass never saw it
+   (TASK-134). auto-fit + minmax gives as many ~150px columns as fit (six at
+   1920px, two on a narrow card) and min-width:0 lets the select/inputs shrink
+   below their content instead of forcing the track. */
 .sw-auction__create {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr 1fr auto auto;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
   align-items: end;
   padding: 12px;
   border-top: 1px solid var(--line);
   margin-top: 8px;
 }
+.sw-auction__create label,
+.sw-auction__create select,
+.sw-auction__create input { min-width: 0; }
 .sw-auction__create .title {
   grid-column: 1 / -1;
   font-family: var(--font-display);

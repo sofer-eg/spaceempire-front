@@ -116,92 +116,106 @@ export function AuctionView({ station, shipID }: Props) {
       {lots.length === 0 ? (
         <div className="sw-station__empty">Нет активных лотов.</div>
       ) : (
-        <table className="sw-table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Товар</th>
-              <th>Кол-во</th>
-              <th>Цена</th>
-              <th>Лидер</th>
-              <th>До конца</th>
-              <th>Ставка</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {lots.map((lot) => {
-              const own = player && lot.sellerID === player.playerID;
-              const ttl = formatTtl(lot.endsAt);
-              const myBid = bidByLot[lot.id] ?? lot.currentPrice + 1;
-              return (
-                <tr key={lot.id}>
-                  <td className="sw-mono">#{lot.id}</td>
-                  <td>{goodsName(goods, lot.goodsTypeID)}</td>
-                  <td className="sw-mono">{lot.quantity}</td>
-                  <td className="sw-mono">{lot.currentPrice.toLocaleString('ru-RU')}</td>
-                  <td className="sw-mono">{lot.currentBidderID ?? '—'}</td>
-                  <td className="sw-mono">{ttl}</td>
-                  <td>
-                    <input
-                      type="number"
-                      min={lot.currentPrice + 1}
-                      value={myBid}
-                      onChange={(e) =>
-                        setBidByLot((prev) => ({
-                          ...prev,
-                          [lot.id]: Math.max(lot.currentPrice + 1, Number(e.target.value)),
-                        }))
-                      }
-                      className="sw-input"
-                      style={{ width: 90 }}
-                      disabled={Boolean(own)}
-                    />
-                  </td>
-                  <td>
-                    <button
-                      type="button"
-                      className="sw-btn"
-                      disabled={Boolean(own) || busyLot === lot.id}
-                      onClick={() => void onBid(lot)}
+        // sw-table-scroll: residual overflow scrolls inside the card instead of
+        // being clipped at the HUD centre-cell edge, where «Ставка» ended up
+        // whole at 1024px and 13px short at 1280px (TASK-134).
+        <div className="sw-table-scroll">
+          <table className="sw-table">
+            <thead>
+              <tr>
+                <th className="sw-table__secondary">#</th>
+                <th>Товар</th>
+                <th>Кол-во</th>
+                <th>Цена</th>
+                <th className="sw-table__secondary">Лидер</th>
+                <th>До конца</th>
+                <th>Ставка</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {lots.map((lot) => {
+                const own = player && lot.sellerID === player.playerID;
+                const ttl = formatTtl(lot.endsAt);
+                const myBid = bidByLot[lot.id] ?? lot.currentPrice + 1;
+                return (
+                  <tr key={lot.id}>
+                    <td className="sw-mono sw-table__secondary">#{lot.id}</td>
+                    {/* The lot number and the leading bidder are the two
+                        columns that fold on a narrow card; the goods cell — the
+                        one element of the row that is never disabled — carries
+                        them in its title so they stay readable (AC #6). */}
+                    <td
+                      title={`Лот #${lot.id} · лидер: ${lot.currentBidderID ?? 'ставок нет'}`}
                     >
-                      Ставка
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                      {goodsName(goods, lot.goodsTypeID)}
+                    </td>
+                    <td className="sw-mono">{lot.quantity}</td>
+                    <td className="sw-mono">{lot.currentPrice.toLocaleString('ru-RU')}</td>
+                    <td className="sw-mono sw-table__secondary">{lot.currentBidderID ?? '—'}</td>
+                    <td className="sw-mono">{ttl}</td>
+                    <td>
+                      <input
+                        type="number"
+                        min={lot.currentPrice + 1}
+                        value={myBid}
+                        onChange={(e) =>
+                          setBidByLot((prev) => ({
+                            ...prev,
+                            [lot.id]: Math.max(lot.currentPrice + 1, Number(e.target.value)),
+                          }))
+                        }
+                        className="sw-input sw-bid"
+                        disabled={Boolean(own)}
+                      />
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="sw-btn"
+                        disabled={Boolean(own) || busyLot === lot.id}
+                        onClick={() => void onBid(lot)}
+                      >
+                        Ставка
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {myLots.length > 0 && (
         <div className="sw-clan__section">
           <div className="sw-clan__subhead">Мои лоты и ставки</div>
-          <table className="sw-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Товар</th>
-                <th>Кол-во</th>
-                <th>Цена</th>
-                <th>Роль</th>
-                <th>Статус</th>
-              </tr>
-            </thead>
-            <tbody>
-              {myLots.map((lot) => (
-                <tr key={lot.id}>
-                  <td className="sw-mono">#{lot.id}</td>
-                  <td>{goodsName(goods, lot.goodsTypeID)}</td>
-                  <td className="sw-mono">{lot.quantity}</td>
-                  <td className="sw-mono">{lot.currentPrice.toLocaleString('ru-RU')}</td>
-                  <td>{player && lot.sellerID === player.playerID ? 'продавец' : 'ставка'}</td>
-                  <td>{auctionStatusLabel(lot.status)}</td>
+          <div className="sw-table-scroll">
+            <table className="sw-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Товар</th>
+                  <th>Кол-во</th>
+                  <th>Цена</th>
+                  <th>Роль</th>
+                  <th>Статус</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {myLots.map((lot) => (
+                  <tr key={lot.id}>
+                    <td className="sw-mono">#{lot.id}</td>
+                    <td>{goodsName(goods, lot.goodsTypeID)}</td>
+                    <td className="sw-mono">{lot.quantity}</td>
+                    <td className="sw-mono">{lot.currentPrice.toLocaleString('ru-RU')}</td>
+                    <td>{player && lot.sellerID === player.playerID ? 'продавец' : 'ставка'}</td>
+                    <td>{auctionStatusLabel(lot.status)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

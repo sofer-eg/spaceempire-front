@@ -254,12 +254,17 @@ export function MarketView({ station, shipID, reloadSignal }: Props) {
     const showSell = mode === 'sell' || mode === 'both';
     return (
       <tr key={it.typeID}>
-        <td>{goodsName(goods, it.typeID)}</td>
+        {/* The goods cell carries «Запас» in its title. It has to live here and
+            not on the ↑ buttons: those are absent in the factory's single-mode
+            sections (a `sell` row has no max-buy button and vice versa) and
+            disabled on half the rows, and a disabled control receives no pointer
+            events in Firefox — so the folded stock would be unreachable in
+            exactly the modes the review found (TASK-134 AC #6). */}
+        <td title={`Запас: ${it.stock} / ${it.maxStock}`}>{goodsName(goods, it.typeID)}</td>
         <td className="sw-mono">{it.sellPrice ?? '—'}</td>
         <td className="sw-mono">{it.buyPrice ?? '—'}</td>
         {/* Stock is secondary info: it folds away on a narrow card so «Кол-во»
-            and the buy/sell buttons stay on screen (TASK-134). The ↑ buttons'
-            titles still report what the station has. */}
+            and the buy/sell buttons stay on screen (TASK-134). */}
         <td className="sw-mono sw-table__secondary">
           {it.stock}/{it.maxStock}
         </td>
@@ -269,7 +274,7 @@ export function MarketView({ station, shipID, reloadSignal }: Props) {
             min={1}
             value={qty(it.typeID)}
             onChange={(e) => setQty(it.typeID, Number(e.target.value))}
-            className="sw-input qty"
+            className="sw-input sw-qty"
           />
         </td>
         <td>

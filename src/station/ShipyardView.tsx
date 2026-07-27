@@ -219,7 +219,16 @@ export function ShipyardView({ shipyardID }: Props) {
               {buyList.map((c) => (
                 <tr key={c.id}>
                   <td>{c.categoryLabel}</td>
-                  <td>{c.name}</td>
+                  {/* The model cell carries the folded hull/shield figures. The
+                      «Купить» button cannot be their only home: it is disabled on
+                      exactly the ships the player is saving up for, and a
+                      disabled control gets no pointer events in Firefox, so the
+                      title would never open (TASK-134 AC #6). */}
+                  <td
+                    title={`Корпус ${c.hull.toLocaleString('ru-RU')} · щит ${c.shield.toLocaleString('ru-RU')}`}
+                  >
+                    {c.name}
+                  </td>
                   <td className="sw-mono sw-table__secondary">{c.hull.toLocaleString('ru-RU')}</td>
                   <td className="sw-mono sw-table__secondary">{c.shield.toLocaleString('ru-RU')}</td>
                   <td className="sw-mono">{c.basePrice.toLocaleString('ru-RU')}</td>
@@ -228,11 +237,9 @@ export function ShipyardView({ shipyardID }: Props) {
                       type="button"
                       className="sw-btn"
                       disabled={busy || cash < c.basePrice}
-                      title={
-                        cash < c.basePrice
-                          ? 'Недостаточно кредитов'
-                          : `Корпус ${c.hull.toLocaleString('ru-RU')} · щит ${c.shield.toLocaleString('ru-RU')}`
-                      }
+                      title={`Корпус ${c.hull.toLocaleString('ru-RU')} · щит ${c.shield.toLocaleString(
+                        'ru-RU',
+                      )}${cash < c.basePrice ? ' · недостаточно кредитов' : ''}`}
                       onClick={() => void onBuy(c)}
                     >
                       Купить
@@ -430,8 +437,7 @@ function OutfitSection({
                       <td>
                         {e.maxLevel > 1 ? (
                           <select
-                            className="sw-input"
-                            style={{ width: 64 }}
+                            className="sw-input sw-level"
                             value={lvl}
                             onChange={(ev) =>
                               setLevels((p) => ({ ...p, [e.id]: Number(ev.target.value) }))

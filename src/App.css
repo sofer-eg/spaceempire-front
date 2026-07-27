@@ -478,22 +478,37 @@ html, body, #root {
    being cut -- it moves with the longest ship name in the list) = 675px and up,
    which would leave the centre 363px or less, under its 390px floor. The two
    demands are arithmetically incompatible, so the centre wins and the sides
-   stay short: measured, the ship column is under that 313px over 1150-1193 (the
-   «Автопилот» select loses up to 19.2px of its right edge, arrow included), and
-   the nav column can be under the «⋯» threshold up to ~1178 when ship names run
-   long. Nothing becomes unreachable -- the ship column is a scroll container
+   stay short: measured, the ship column is under that 313px over 1150-1194 (the
+   «Автопилот» select loses up to 19.2px of its right edge, arrow included -- the
+   ramp only clears 313px at 1194.58, so 1194 is still 0.25px short), and the nav
+   column can be under the «⋯» threshold up to ~1178 when ship names run long.
+   Both 313px and that ~344-362px are CLIP THRESHOLDS measured on screen, not
+   `width: min-content` values: the undocked column's formal min-content is a
+   different, higher number (330px, the SetCoursePanel alone 326px), and it is
+   not what this note or the ::-webkit-scrollbar note near the bottom of the file
+   is about. Nothing becomes unreachable -- the ship column is a scroll container
    with a styled bar (see the ::-webkit-scrollbar rules near the bottom of this
    file). Making the side panels narrow-capable is TASK-139 and is the only
    thing that removes this residue.
    Docked, that column no longer contributes to it. It wanted 412px before
    TASK-126, when a single nowrap .sw-row held the id, the ПРИСТЫКОВАН chip and
    all three actions -- 175.5px of that hung outside the 240px column. The
-   wrapping .sw-panel-actions grid brought the column down to min-content 143px
-   (the panel itself 139px + the 4px scrollbar gutter), and docked it is the
-   only panel in the ship area: CombatHUD and SetCoursePanel render on !docked
-   only (SectorView). Re-measured on the current HEAD, nothing in it is clipped
-   docked at 1024 / 1150 / 1212 / 1280. So the ship-column half of this residue
-   is now the undocked «Автопилот» select and nothing else.
+   wrapping .sw-panel-actions grid (96px min-content) took that constraint out
+   of the panel, and docked the PilotPanel is the only panel in the ship area:
+   CombatHUD and SetCoursePanel render on !docked only (SectorView). What is
+   left is set by DATA, so expect the number to move with the ship: the panel's
+   min-content is the wider of the telemetry .sw-kv block (113px + 24px of body
+   padding = 137px) and .sw-panel-head, where the title (ship name) and the meta
+   (#id) share one space-between row. Measured on sofer's «Кентавр» / #1283:
+   head 119.9px, so .sw-kv binds, the panel is 139px and the column 143px with
+   its 4px scrollbar gutter. The head takes over at a ~9-character unbreakable
+   run in the name («Разведчик» -> head 138px, panel 140px); a multi-word name
+   breaks per word, so «Искатель Истинного Света» (the longest ship name in the
+   DB) measures the same 140px, while those 22 characters with no space in them
+   would want 257.5px. Re-measured on the current HEAD, nothing is clipped
+   docked at 1024 / 1150 / 1212 / 1280, and with any real name the panel still
+   fits the 240px floor. So the ship-column half of this residue is now the
+   undocked «Автопилот» select and nothing else.
 
    This replaces a fixed 320|1fr|380 base plus a 240|1fr|280 band that ended at
    1149.98px: that pair made the centre NARROWER at 1150px (338px) than at
@@ -1320,11 +1335,12 @@ html, body, #root {
    same intent through the @supports branch instead.
    .sw-sector-grid__ship is in the list for exactly the same reason, not for its
    vertical overflow: `overflow-y: auto` makes overflow-x compute to auto too, so
-   between 1150 and 1193 -- where the fluid column is under its 313px min-content
-   (TASK-138) -- the «Автопилот» select scrolls rather than being cut, and the bar
-   is what says so. Side effect worth knowing: this also swaps that column's
-   default 15px platform bar for the 9px one, which hands 6px back to the panels
-   at every width.
+   between 1150 and 1194 -- where the fluid column is under the 313px at which the
+   undocked «Автопилот» select stops being clipped (TASK-138; that 313px is a clip
+   threshold, not the column's formal min-content, see «adaptive HUD layout»
+   above) -- the select scrolls rather than being cut, and the bar is what says so.
+   Side effect worth knowing: this also swaps that column's default 15px platform
+   bar for the 9px one, which hands 6px back to the panels at every width.
    Caveat for whoever verifies this: headless Chromium forces overlay scrollbars
    regardless (an unstyled overflow:auto div also measures
    offsetHeight - clientHeight == 0 there), so the classic bar cannot be observed

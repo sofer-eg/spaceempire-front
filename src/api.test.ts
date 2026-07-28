@@ -5,7 +5,7 @@
 // ./api.ts directly is safe (that module has no top-level browser access).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ApiError, installErrorText, jumpDriveErrorText } from './api.ts';
+import { ApiError, installErrorText, isOutcomeUnknown, jumpDriveErrorText } from './api.ts';
 
 test('jumpDriveErrorText maps each backend status to a Russian line', () => {
   assert.equal(jumpDriveErrorText(new ApiError(404, 'ship not found')), 'Корабль не найден.');
@@ -128,13 +128,23 @@ test('installErrorText separates the misconfigured installer from a busy sector'
     new ApiError(503, 'install unavailable: server misconfigured'),
     'jammer',
   );
-  assert.equal(
-    misconfigured,
-    'Установка недоступна: сервер не сконфигурирован. Повтор не поможет — сообщите администрации.',
-  );
+  assert.match(misconfigured, /Установка недоступна на стороне сервера/);
+  assert.doesNotMatch(misconfigured, /попробуйте ещё раз/i);
   const busy = installErrorText(new ApiError(503, 'sector busy'), 'jammer');
   assert.equal(busy, 'Сектор занят, попробуйте ещё раз.');
   assert.notEqual(misconfigured, busy);
+});
+
+// Only the explicit ErrInboxFull sentinel earns the retryable line: "sector
+// busy" is one hand-written literal away from a backend rewording, and 503 also
+// arrives from proxies with a generic body. Anything unrecognised must fall to
+// the cautious side, not to «попробуйте ещё раз».
+test('installErrorText treats an unrecognised 503 as non-retryable', () => {
+  for (const body of ['Service Unavailable', 'sector: static installer not wired']) {
+    const text = installErrorText(new ApiError(503, body), 'jammer');
+    assert.doesNotMatch(text, /попробуйте ещё раз/i, `503 «${body}» must not invite a retry`);
+    assert.equal(text, installErrorText(new ApiError(503, 'install unavailable: server misconfigured'), 'jammer'));
+  }
 });
 
 // AC-2: since TASK-144 the goods debit commits with the object INSERT, so 504
@@ -151,11 +161,51 @@ test('installErrorText 504 says the outcome is unknown instead of inviting a ret
   assert.doesNotMatch(jammer, /попробуйте ещё раз/i);
 });
 
-test('installErrorText echoes unmapped statuses and stringifies non-ApiError inputs', () => {
+// The commonest way to lose an ack is not 504 but a dead connection: fetch
+// rejects with a TypeError, which never reaches the status switch. It must read
+// like 504 — «TypeError: Failed to fetch» says nothing and looks like "nothing
+// happened", which is how a player ends up deploying a second ≈1.13M cr
+// generator.
+test('installErrorText gives a dropped connection the same unknown-outcome line as 504', () => {
+  const dropped = installErrorText(new TypeError('Failed to fetch'), 'jammer');
+  assert.equal(dropped, installErrorText(new ApiError(504, 'command timeout'), 'jammer'));
+  assert.match(dropped, /исход неизвестен/i);
+  assert.doesNotMatch(dropped, /Failed to fetch/);
+
+  // Same for a non-Error rejection and for the satellite wording.
   assert.equal(
-    installErrorText(new ApiError(500, 'satellite goods type missing'), 'satellite'),
-    'satellite goods type missing',
+    installErrorText('boom', 'satellite'),
+    installErrorText(new ApiError(504, 'command timeout'), 'satellite'),
   );
-  assert.equal(installErrorText(new Error('boom'), 'jammer'), 'Error: boom');
-  assert.equal(installErrorText('plain string failure', 'jammer'), 'plain string failure');
+});
+
+// isOutcomeUnknown is what makes the HUD re-read the hold after a failure, so it
+// must cover both ways of not learning the server's answer — and nothing else.
+test('isOutcomeUnknown covers 504 and non-ApiError failures only', () => {
+  assert.equal(isOutcomeUnknown(new ApiError(504, 'command timeout')), true);
+  assert.equal(isOutcomeUnknown(new TypeError('Failed to fetch')), true);
+  assert.equal(isOutcomeUnknown('boom'), true);
+  assert.equal(isOutcomeUnknown(new ApiError(400, 'no jammer in cargo')), false);
+  assert.equal(isOutcomeUnknown(new ApiError(503, 'sector busy')), false);
+  assert.equal(isOutcomeUnknown(new ApiError(500, 'boom')), false);
+});
+
+test('installErrorText hides raw 5xx bodies behind a Russian line', () => {
+  // install_satellite.go's default branch passes the repository error through
+  // verbatim, so a Postgres message could otherwise land in the combat HUD.
+  const text = installErrorText(
+    new ApiError(500, 'ERROR: duplicate key value violates unique constraint "satellites_pkey"'),
+    'satellite',
+  );
+  assert.equal(text, 'Сервер не смог выполнить установку. Если повторяется — сообщите администрации.');
+  assert.doesNotMatch(text, /constraint/);
+
+  assert.equal(
+    installErrorText(new ApiError(401, 'not authenticated'), 'jammer'),
+    'Сессия истекла — войдите в игру заново.',
+  );
+});
+
+test('installErrorText echoes unmapped non-5xx statuses', () => {
+  assert.equal(installErrorText(new ApiError(409, 'unexpected conflict'), 'jammer'), 'unexpected conflict');
 });

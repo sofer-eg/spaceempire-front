@@ -1063,6 +1063,14 @@ async function parseErrorBody(res: Response): Promise<string> {
   }
 }
 
+// Lines shared by jumpDriveErrorText and installErrorText below. Both mappers
+// word the same three backend outcomes identically (404 ship not found, 403
+// foreign ship, ErrInboxFull), and keeping the literals in one place stops them
+// drifting apart the next time one of the two gets reworded.
+const ERR_SHIP_NOT_FOUND = 'Корабль не найден.';
+const ERR_NOT_YOUR_SHIP = 'Это не ваш корабль.';
+const ERR_SECTOR_BUSY = 'Сектор занят, попробуйте ещё раз.';
+
 // jumpDriveErrorText turns a sendJumpDrive failure into a Russian, human-
 // readable line for the galaxy-map footer / Journal (TASK-129). It branches on
 // the HTTP status ApiError carries and — for the three statuses the backend
@@ -1080,9 +1088,9 @@ export function jumpDriveErrorText(err: unknown): string {
   const msg = err.message.toLowerCase();
   switch (err.status) {
     case 404:
-      return 'Корабль не найден.';
+      return ERR_SHIP_NOT_FOUND;
     case 403:
-      return 'Это не ваш корабль.';
+      return ERR_NOT_YOUR_SHIP;
     case 409:
       // Overloaded status: "antijump" sentinel → hyper-interference jams the
       // jump (a powered up_antijump ship, TASK-100.3.8, or a deployed
@@ -1105,7 +1113,7 @@ export function jumpDriveErrorText(err: unknown): string {
         ? 'Прыжок из этого сектора запрещён.'
         : 'Недопустимый сектор назначения.';
     case 503:
-      return 'Сектор занят, попробуйте ещё раз.';
+      return ERR_SECTOR_BUSY;
     case 504:
       return 'Команда не успела выполниться, попробуйте ещё раз.';
     default:
@@ -1124,32 +1132,76 @@ const INSTALL_NOUNS: Record<InstallKind, { nominative: string; genitive: string 
   jammer: { nominative: 'Генератор гипер-помех', genitive: 'генераторов гипер-помех' },
 };
 
+// isOutcomeUnknown reports whether a failed command may nonetheless have been
+// applied by the server. Two cases, and they mean the same thing to the player:
+//
+//   504 — the POST reached the worker's inbox and the HTTP wait for the ack
+//         expired; the command is queued or already applied.
+//   non-ApiError — fetch itself rejected (a TypeError: Failed to fetch on a
+//         dropped connection, DNS, an aborted request). ApiError is only ever
+//         thrown after a response arrived, so anything else means we never
+//         learned the server's answer — and the request may well have landed.
+//
+// Callers use it to decide whether to re-read server state (cargo, statics)
+// after a failure instead of assuming nothing happened. See TASK-144: the goods
+// debit now commits with the object INSERT, so "no answer" no longer implies
+// "no charge".
+export function isOutcomeUnknown(err: unknown): boolean {
+  return !(err instanceof ApiError) || err.status === 504;
+}
+
+// installUnknownOutcomeText is the single wording for every install-* failure
+// whose outcome we cannot determine (504 and a dead connection alike): don't
+// promise a free retry, point at the hold and the radar instead.
+function installUnknownOutcomeText(nominative: string): string {
+  return (
+    `Ответ не получен, исход неизвестен. ${nominative} мог быть уже развёрнут, ` +
+    'а товар списан. Проверьте трюм и радар, прежде чем повторять: если команда прошла, ' +
+    'объект появится сам со следующим обновлением обстановки.'
+  );
+}
+
 // installErrorText turns a sendInstallSatellite / sendInstallJammer failure into
 // a Russian, human-readable line for the combat HUD (TASK-149). Shaped like
 // jumpDriveErrorText: branch on the HTTP status ApiError carries, and on a
 // substring of the English sentinel where the backend overloads a status.
 //
-// Two statuses are overloaded by install_satellite.go / install_jammer.go:
-//   400 — "ship is docked" | "no satellite|jammer in cargo" | bad request body;
-//   503 — "sector busy" (ErrInboxFull, a retry is meaningful) |
-//         "install unavailable: server misconfigured" (ErrInstallerUnavailable,
-//         a server wiring fault a retry cannot fix).
+// 504 (and a dropped connection, which is the more common way to lose an ack)
+// is the reason this mapper exists at all. Since TASK-144 the goods debit runs
+// inside the sector worker in the same transaction as the object INSERT, so a
+// lost ack no longer means "nothing happened, retry is free" — it means the
+// outcome is unknown and the object may already stand. Telling the player to
+// just try again would deploy (and charge for) a second one.
 //
-// 504 is the reason this mapper exists at all. Since TASK-144 the goods debit
-// runs inside the sector worker in the same transaction as the object INSERT,
-// so a lost ack no longer means "nothing happened, retry is free" — it means
-// the outcome is unknown and the object may already stand. Telling the player
-// to just try again would deploy (and charge for) a second one, so the line
-// points at the hold and the radar instead.
+// Statuses the two handlers overload:
+//   400 — "ship is docked" | "no satellite|jammer in cargo" | bad request body;
+//   503 — "sector busy" (ErrInboxFull, the only genuinely retryable one) |
+//         "install unavailable: server misconfigured" (ErrInstallerUnavailable).
+// The 503 test is deliberately positive on the retryable sentinel rather than on
+// the misconfigured one: "misconfigured" lives only in a hand-written handler
+// literal, while ErrInstallerUnavailable's own text is "static installer not
+// wired". Keying on the fault would make a routine backend rewording — or a
+// proxy's generic "Service Unavailable" — silently read as "try again", which
+// is exactly the advice this mapper exists to withhold. Unrecognised 503s
+// therefore land on the cautious side.
 export function installErrorText(err: unknown, kind: InstallKind): string {
-  if (!(err instanceof ApiError)) return String(err);
-  const msg = err.message.toLowerCase();
   const noun = INSTALL_NOUNS[kind];
+  if (!(err instanceof ApiError)) {
+    // The connection died before an answer arrived. The command may already be
+    // in the worker's inbox, so this reads exactly like 504 — never as the raw
+    // English «TypeError: Failed to fetch», which tells the player nothing and
+    // reads like "nothing happened".
+    console.error('install command failed without a response', err);
+    return installUnknownOutcomeText(noun.nominative);
+  }
+  const msg = err.message.toLowerCase();
   switch (err.status) {
+    case 401:
+      return 'Сессия истекла — войдите в игру заново.';
     case 404:
-      return 'Корабль не найден.';
+      return ERR_SHIP_NOT_FOUND;
     case 403:
-      return 'Это не ваш корабль.';
+      return ERR_NOT_YOUR_SHIP;
     case 400:
       // Overloaded status: "docked" sentinel → the ship must undock first,
       // "cargo" → the hold ran empty (the button count can lag a snapshot),
@@ -1161,18 +1213,19 @@ export function installErrorText(err: unknown, kind: InstallKind): string {
         ? `В трюме нет ${noun.genitive}.`
         : 'Некорректный запрос на установку.';
     case 503:
-      // Overloaded status: "misconfigured" sentinel → ErrInstallerUnavailable,
-      // a server-side wiring fault; otherwise the sector inbox is full.
-      return msg.includes('misconfigured')
-        ? 'Установка недоступна: сервер не сконфигурирован. Повтор не поможет — сообщите администрации.'
-        : 'Сектор занят, попробуйте ещё раз.';
+      return msg.includes('sector busy')
+        ? ERR_SECTOR_BUSY
+        : 'Установка недоступна на стороне сервера — возможно, он не сконфигурирован. Повтор не поможет, сообщите администрации.';
     case 504:
-      return (
-        `Ответ не получен, исход неизвестен. ${noun.nominative} мог быть уже развёрнут, ` +
-        'а товар списан. Проверьте трюм и радар, прежде чем повторять: если команда прошла, ' +
-        'объект появится сам со следующим обновлением обстановки.'
-      );
+      return installUnknownOutcomeText(noun.nominative);
     default:
+      // A 5xx body is a raw server-side message (install_satellite.go passes the
+      // repository error straight through), so it can leak a Postgres error into
+      // the combat HUD. Keep it in the console for debugging, show Russian.
+      if (err.status >= 500) {
+        console.error('install command failed', err.status, err.message);
+        return 'Сервер не смог выполнить установку. Если повторяется — сообщите администрации.';
+      }
       return err.message;
   }
 }

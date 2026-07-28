@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   EntityKind,
   installErrorText,
+  isOutcomeUnknown,
   isStaticTargetKind,
   sendCeaseFire,
   sendInstallJammer,
@@ -119,6 +120,14 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
       })
       .catch((err: unknown) => {
         setPending(false);
+        // A lost ack (504) or a dropped connection leaves the outcome unknown:
+        // the command may have applied and spent the cargo it consumes. Nothing
+        // else re-reads the hold — WS deltas don't carry cargo and GameLayout
+        // only re-fetches on refreshTick — so without this the counters on the
+        // buttons keep showing the pre-command stock, which is precisely when
+        // they are most likely wrong, and installErrorText's «проверьте трюм»
+        // would be unfollowable (TASK-149).
+        if (refresh && isOutcomeUnknown(err)) onCargoChanged();
         if (toText) {
           setError(toText(err));
           return;

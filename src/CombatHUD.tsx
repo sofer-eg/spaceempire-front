@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   EntityKind,
+  installErrorText,
   isStaticTargetKind,
   sendCeaseFire,
   sendInstallJammer,
@@ -105,7 +106,10 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
   const torpedoHoly = cargoCount(ownCargo, TORPEDO_HOLY_GOODS);
   const hasTorpedoLauncher = !!ownShip.equipment?.some((e) => e.type === 'up_torpedo_launcher');
 
-  const run = (action: Promise<unknown>, refresh: boolean) => {
+  // toText lets a command translate its own failures (TASK-149: the install-*
+  // commands need installErrorText, whose 504 line must not invite a blind
+  // retry). Commands that pass nothing keep showing the raw backend message.
+  const run = (action: Promise<unknown>, refresh: boolean, toText?: (err: unknown) => string) => {
     setPending(true);
     setError(null);
     action
@@ -115,6 +119,10 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
       })
       .catch((err: unknown) => {
         setPending(false);
+        if (toText) {
+          setError(toText(err));
+          return;
+        }
         setError(err instanceof Error ? err.message : String(err));
       });
   };
@@ -277,7 +285,9 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
               count={satellites}
               disabled={pending || satellites === 0}
               title={satellites === 0 ? 'Нет спутников в трюме' : 'Развернуть навигационный спутник здесь'}
-              onClick={() => run(sendInstallSatellite(ownShip.id), true)}
+              onClick={() =>
+                run(sendInstallSatellite(ownShip.id), true, (err) => installErrorText(err, 'satellite'))
+              }
             />
             <WeaponButton
               glyph="≋"
@@ -289,7 +299,9 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
                   ? 'Нет генераторов гипер-помех в трюме'
                   : 'Развернуть генератор гипер-помех здесь: блокирует прыжковый двигатель всех кораблей рядом, включая ваш'
               }
-              onClick={() => run(sendInstallJammer(ownShip.id), true)}
+              onClick={() =>
+                run(sendInstallJammer(ownShip.id), true, (err) => installErrorText(err, 'jammer'))
+              }
             />
           </div>
 

@@ -941,9 +941,13 @@ export async function sendPickupContainer(
 }
 
 // sendInstallSatellite deploys one navigation satellite from shipID's cargo at
-// the ship's current position (phase 10.15). The server consumes 1× goods id 26
-// and persists the satellite; throws ApiError on a non-2xx (e.g. 400 no
-// satellite in cargo, 400 ship docked).
+// the ship's current position (phase 10.15). The HTTP handler only forwards the
+// command: the 1× goods id 26 debit happens inside the sector worker, in the
+// same transaction as the satellite INSERT (TASK-144), so goods and object
+// always agree. Throws ApiError on a non-2xx (e.g. 400 no satellite in cargo,
+// 400 ship docked) — and note that 504 now means "outcome unknown", not
+// "nothing happened": the command may already have applied. Map failures with
+// installErrorText(err, 'satellite') instead of showing err.message raw.
 export async function sendInstallSatellite(
   shipID: number,
 ): Promise<{ satelliteID: number }> {
@@ -960,9 +964,13 @@ export async function sendInstallSatellite(
 }
 
 // sendInstallJammer deploys one hyper-interference generator from shipID's
-// cargo at the ship's current position (TASK-131). The server consumes 1× goods
-// id 27 and persists the generator; throws ApiError on a non-2xx (e.g. 400 no
-// generator in cargo, 400 ship docked).
+// cargo at the ship's current position (TASK-131). Like install-satellite, the
+// 1× goods id 27 debit lives inside the sector worker and commits together with
+// the generator INSERT (TASK-144) — the handler never consumes or refunds.
+// Throws ApiError on a non-2xx (e.g. 400 no generator in cargo, 400 ship
+// docked); 504 means "outcome unknown", so a blind retry can deploy (and pay
+// for) a second ≈1.13M cr generator. Map failures with
+// installErrorText(err, 'jammer').
 export async function sendInstallJammer(
   shipID: number,
 ): Promise<{ jammerID: number }> {
@@ -1100,6 +1108,70 @@ export function jumpDriveErrorText(err: unknown): string {
       return 'Сектор занят, попробуйте ещё раз.';
     case 504:
       return 'Команда не успела выполниться, попробуйте ещё раз.';
+    default:
+      return err.message;
+  }
+}
+
+// InstallKind names the two deployable statics install-* commands build, so one
+// mapper can word its lines for the right object.
+export type InstallKind = 'satellite' | 'jammer';
+
+// Nominative/genitive captions per install kind — both nouns are masculine, so
+// the shared «мог быть развёрнут» phrasing agrees for either.
+const INSTALL_NOUNS: Record<InstallKind, { nominative: string; genitive: string }> = {
+  satellite: { nominative: 'Спутник', genitive: 'спутников' },
+  jammer: { nominative: 'Генератор гипер-помех', genitive: 'генераторов гипер-помех' },
+};
+
+// installErrorText turns a sendInstallSatellite / sendInstallJammer failure into
+// a Russian, human-readable line for the combat HUD (TASK-149). Shaped like
+// jumpDriveErrorText: branch on the HTTP status ApiError carries, and on a
+// substring of the English sentinel where the backend overloads a status.
+//
+// Two statuses are overloaded by install_satellite.go / install_jammer.go:
+//   400 — "ship is docked" | "no satellite|jammer in cargo" | bad request body;
+//   503 — "sector busy" (ErrInboxFull, a retry is meaningful) |
+//         "install unavailable: server misconfigured" (ErrInstallerUnavailable,
+//         a server wiring fault a retry cannot fix).
+//
+// 504 is the reason this mapper exists at all. Since TASK-144 the goods debit
+// runs inside the sector worker in the same transaction as the object INSERT,
+// so a lost ack no longer means "nothing happened, retry is free" — it means
+// the outcome is unknown and the object may already stand. Telling the player
+// to just try again would deploy (and charge for) a second one, so the line
+// points at the hold and the radar instead.
+export function installErrorText(err: unknown, kind: InstallKind): string {
+  if (!(err instanceof ApiError)) return String(err);
+  const msg = err.message.toLowerCase();
+  const noun = INSTALL_NOUNS[kind];
+  switch (err.status) {
+    case 404:
+      return 'Корабль не найден.';
+    case 403:
+      return 'Это не ваш корабль.';
+    case 400:
+      // Overloaded status: "docked" sentinel → the ship must undock first,
+      // "cargo" → the hold ran empty (the button count can lag a snapshot),
+      // otherwise the request itself was malformed.
+      if (msg.includes('docked')) {
+        return 'Нельзя разворачивать оборудование пристыкованным — сначала отстыкуйтесь.';
+      }
+      return msg.includes('cargo')
+        ? `В трюме нет ${noun.genitive}.`
+        : 'Некорректный запрос на установку.';
+    case 503:
+      // Overloaded status: "misconfigured" sentinel → ErrInstallerUnavailable,
+      // a server-side wiring fault; otherwise the sector inbox is full.
+      return msg.includes('misconfigured')
+        ? 'Установка недоступна: сервер не сконфигурирован. Повтор не поможет — сообщите администрации.'
+        : 'Сектор занят, попробуйте ещё раз.';
+    case 504:
+      return (
+        `Ответ не получен, исход неизвестен. ${noun.nominative} мог быть уже развёрнут, ` +
+        'а товар списан. Проверьте трюм и радар, прежде чем повторять: если команда прошла, ' +
+        'объект появится сам со следующим обновлением обстановки.'
+      );
     default:
       return err.message;
   }

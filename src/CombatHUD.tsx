@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import {
   EntityKind,
   installErrorText,
-  isOutcomeUnknown,
   isStaticTargetKind,
   sendCeaseFire,
   sendInstallJammer,
@@ -120,14 +119,16 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
       })
       .catch((err: unknown) => {
         setPending(false);
-        // A lost ack (504) or a dropped connection leaves the outcome unknown:
-        // the command may have applied and spent the cargo it consumes. Nothing
-        // else re-reads the hold — WS deltas don't carry cargo and GameLayout
-        // only re-fetches on refreshTick — so without this the counters on the
-        // buttons keep showing the pre-command stock, which is precisely when
-        // they are most likely wrong, and installErrorText's «проверьте трюм»
-        // would be unfollowable (TASK-149).
-        if (refresh && isOutcomeUnknown(err)) onCargoChanged();
+        // Re-read the hold after any failure, same as after a success. Nothing
+        // else does — WS deltas don't carry cargo and GameLayout re-fetches only
+        // on refreshTick — so the counters on these buttons would otherwise keep
+        // the pre-command stock exactly when it is most likely wrong: after a
+        // lost ack (the command may have applied and spent the goods), and after
+        // a 400 «no X in cargo», where the server has just said outright that the
+        // hold disagrees with the chip. Unconditional rather than gated on the
+        // failure kind because it is one setState and two GETs, and `pending`
+        // already caps how often it can fire (TASK-149).
+        if (refresh) onCargoChanged();
         if (toText) {
           setError(toText(err));
           return;

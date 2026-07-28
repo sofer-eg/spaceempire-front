@@ -1113,6 +1113,11 @@ export function jumpDriveErrorText(err: unknown): string {
         ? 'Прыжок из этого сектора запрещён.'
         : 'Недопустимый сектор назначения.';
     case 503:
+      // Unconditional, unlike installErrorText, which only says «сектор занят»
+      // on the explicit sentinel and treats every other 503 cautiously. Left as
+      // it was on purpose: a jump costs shield and a recharge, not ≈1.13M cr, so
+      // the two mappers are allowed different discipline here even though they
+      // now share the constant. Follow-up against TASK-129 tracks revisiting it.
       return ERR_SECTOR_BUSY;
     case 504:
       return 'Команда не успела выполниться, попробуйте ещё раз.';
@@ -1132,27 +1137,47 @@ const INSTALL_NOUNS: Record<InstallKind, { nominative: string; genitive: string 
   jammer: { nominative: 'Генератор гипер-помех', genitive: 'генераторов гипер-помех' },
 };
 
-// isOutcomeUnknown reports whether a failed command may nonetheless have been
-// applied by the server. Two cases, and they mean the same thing to the player:
+// Statuses on which the request demonstrably reached the server but its answer
+// did not reach us. The single place this list lives: installErrorText phrases
+// them, and adding one here must not require touching the mapper.
 //
 //   504 — the POST reached the worker's inbox and the HTTP wait for the ack
 //         expired; the command is queued or already applied.
-//   non-ApiError — fetch itself rejected (a TypeError: Failed to fetch on a
-//         dropped connection, DNS, an aborted request). ApiError is only ever
-//         thrown after a response arrived, so anything else means we never
-//         learned the server's answer — and the request may well have landed.
+//   502 — in production Apache fronts the Go process
+//         (deploy/spaceempire.online.conf proxies / to 127.0.0.1:8081) and
+//         answers 502 when the backend drops the connection *after* the request
+//         was forwarded: a restart, a deploy, a worker panic. Same in-doubt
+//         situation as 504.
 //
-// Callers use it to decide whether to re-read server state (cargo, statics)
-// after a failure instead of assuming nothing happened. See TASK-144: the goods
-// debit now commits with the object INSERT, so "no answer" no longer implies
-// "no charge".
+// A proxy 503 is deliberately NOT here: it means the connection was never
+// established, so the command cannot have been enqueued.
+const UNKNOWN_OUTCOME_STATUSES = new Set([502, 504]);
+
+// isOutcomeUnknown reports whether a failed install-* command may nonetheless
+// have been applied by the server — either one of the statuses above, or a
+// rejection that is not an ApiError at all (fetch rejects with a TypeError on a
+// dropped connection, DNS failure or abort, and the request may still have
+// landed). See TASK-144: the goods debit now commits with the object INSERT, so
+// "no answer" no longer implies "no charge".
+//
+// Two limits on the non-ApiError half, both narrower than the name suggests:
+//
+//   - It holds for sendInstallSatellite / sendInstallJammer, not for api.ts at
+//     large. Around twenty other senders throw a plain Error() *after* reading a
+//     response (claimStation, getShipAtShipyard, sendCeaseFire, …), and for
+//     those a non-ApiError says nothing about the outcome. Check what a command
+//     throws before reusing this predicate on it.
+//   - It errs the other way in one harmless spot: a 2xx whose body is not valid
+//     JSON makes res.json() throw a SyntaxError, which reads here as "unknown"
+//     even though the install in fact succeeded. The cost is one over-cautious
+//     line and a redundant cargo re-read.
 export function isOutcomeUnknown(err: unknown): boolean {
-  return !(err instanceof ApiError) || err.status === 504;
+  return !(err instanceof ApiError) || UNKNOWN_OUTCOME_STATUSES.has(err.status);
 }
 
 // installUnknownOutcomeText is the single wording for every install-* failure
-// whose outcome we cannot determine (504 and a dead connection alike): don't
-// promise a free retry, point at the hold and the radar instead.
+// whose outcome we cannot determine (504, 502 and a dead connection alike):
+// don't promise a free retry, point at the hold and the radar instead.
 function installUnknownOutcomeText(nominative: string): string {
   return (
     `Ответ не получен, исход неизвестен. ${nominative} мог быть уже развёрнут, ` +
@@ -1166,9 +1191,11 @@ function installUnknownOutcomeText(nominative: string): string {
 // jumpDriveErrorText: branch on the HTTP status ApiError carries, and on a
 // substring of the English sentinel where the backend overloads a status.
 //
-// 504 (and a dropped connection, which is the more common way to lose an ack)
-// is the reason this mapper exists at all. Since TASK-144 the goods debit runs
-// inside the sector worker in the same transaction as the object INSERT, so a
+// The unknown outcome — 504, a proxy 502, or a dropped connection, the last two
+// being commoner ways to lose an ack than a genuine worker timeout — is the
+// reason this mapper exists at all (see isOutcomeUnknown, which owns that set,
+// and which this function asks before anything else). Since TASK-144 the debit
+// runs inside the sector worker in the same transaction as the object INSERT, so a
 // lost ack no longer means "nothing happened, retry is free" — it means the
 // outcome is unknown and the object may already stand. Telling the player to
 // just try again would deploy (and charge for) a second one.
@@ -1186,12 +1213,13 @@ function installUnknownOutcomeText(nominative: string): string {
 // therefore land on the cautious side.
 export function installErrorText(err: unknown, kind: InstallKind): string {
   const noun = INSTALL_NOUNS[kind];
-  if (!(err instanceof ApiError)) {
-    // The connection died before an answer arrived. The command may already be
-    // in the worker's inbox, so this reads exactly like 504 — never as the raw
-    // English «TypeError: Failed to fetch», which tells the player nothing and
-    // reads like "nothing happened".
-    console.error('install command failed without a response', err);
+  // Asked before the switch so the set of in-doubt statuses is stated once, in
+  // UNKNOWN_OUTCOME_STATUSES. The instanceof half is redundant with the
+  // predicate (which is true for every non-ApiError) and is written out only to
+  // narrow err for the switch below — TypeScript cannot follow the narrowing
+  // through a boolean-returning function.
+  if (!(err instanceof ApiError) || isOutcomeUnknown(err)) {
+    console.error('install command: outcome unknown', err);
     return installUnknownOutcomeText(noun.nominative);
   }
   const msg = err.message.toLowerCase();
@@ -1209,22 +1237,32 @@ export function installErrorText(err: unknown, kind: InstallKind): string {
       if (msg.includes('docked')) {
         return 'Нельзя разворачивать оборудование пристыкованным — сначала отстыкуйтесь.';
       }
-      return msg.includes('cargo')
-        ? `В трюме нет ${noun.genitive}.`
-        : 'Некорректный запрос на установку.';
+      if (msg.includes('cargo')) return `В трюме нет ${noun.genitive}.`;
+      console.error('install command: unrecognised 400', err.message);
+      return 'Некорректный запрос на установку.';
     case 503:
-      return msg.includes('sector busy')
-        ? ERR_SECTOR_BUSY
-        : 'Установка недоступна на стороне сервера — возможно, он не сконфигурирован. Повтор не поможет, сообщите администрации.';
-    case 504:
-      return installUnknownOutcomeText(noun.nominative);
+      if (msg.includes('sector busy')) return ERR_SECTOR_BUSY;
+      // Catch-all by design (see the header), which makes it the one branch
+      // where the body is most likely to be news — a renamed sentinel, a proxy's
+      // own wording — so it must not be swallowed. Retrying later can genuinely
+      // work here (the backend may simply be down), so the line withholds the
+      // blind retry without claiming a retry is pointless.
+      console.error('install command: unrecognised 503', err.message);
+      return 'Установка сейчас недоступна на стороне сервера. Не повторяйте вслепую — сначала проверьте трюм и радар.';
     default:
       // A 5xx body is a raw server-side message (install_satellite.go passes the
       // repository error straight through), so it can leak a Postgres error into
       // the combat HUD. Keep it in the console for debugging, show Russian.
+      //
+      // The wording stops short of asserting failure: the worker runs the
+      // install under a RepoTimeout context (back/internal/sector/satellite.go),
+      // and a deadline struck on COMMIT is in-doubt — the handler answers 500
+      // while the transaction may have committed. Rarer than 502/504, hence its
+      // own line rather than the unknown-outcome one, but not a failure we can
+      // promise.
       if (err.status >= 500) {
         console.error('install command failed', err.status, err.message);
-        return 'Сервер не смог выполнить установку. Если повторяется — сообщите администрации.';
+        return 'Сервер вернул ошибку. Скорее всего установка не прошла — но проверьте трюм и радар, прежде чем повторять.';
       }
       return err.message;
   }

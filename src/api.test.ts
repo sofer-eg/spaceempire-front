@@ -128,8 +128,11 @@ test('installErrorText separates the misconfigured installer from a busy sector'
     new ApiError(503, 'install unavailable: server misconfigured'),
     'jammer',
   );
-  assert.match(misconfigured, /Установка недоступна на стороне сервера/);
+  assert.match(misconfigured, /Установка сейчас недоступна на стороне сервера/);
   assert.doesNotMatch(misconfigured, /попробуйте ещё раз/i);
+  // Cautious, but without claiming a later retry is pointless: the commonest
+  // non-sentinel 503 is a backend that is simply down, and it will come back.
+  assert.doesNotMatch(misconfigured, /не поможет/i);
   const busy = installErrorText(new ApiError(503, 'sector busy'), 'jammer');
   assert.equal(busy, 'Сектор занят, попробуйте ещё раз.');
   assert.notEqual(misconfigured, busy);
@@ -179,26 +182,44 @@ test('installErrorText gives a dropped connection the same unknown-outcome line 
   );
 });
 
-// isOutcomeUnknown is what makes the HUD re-read the hold after a failure, so it
-// must cover both ways of not learning the server's answer — and nothing else.
-test('isOutcomeUnknown covers 504 and non-ApiError failures only', () => {
+// In production Apache proxies to the Go process, so a backend that dies after
+// the request was forwarded (restart, deploy, worker panic) surfaces as 502 —
+// the request landed, the answer did not. Exactly 504's situation, and the one
+// most likely to hit a player mid-deploy.
+test('installErrorText 502 reads as an unknown outcome, not as a failure', () => {
+  const badGateway = installErrorText(new ApiError(502, 'Bad Gateway'), 'jammer');
+  assert.equal(badGateway, installErrorText(new ApiError(504, 'command timeout'), 'jammer'));
+  assert.match(badGateway, /исход неизвестен/i);
+  assert.doesNotMatch(badGateway, /не смог|не прошла/i);
+  assert.doesNotMatch(badGateway, /Bad Gateway/);
+});
+
+// isOutcomeUnknown states the in-doubt set once, for installErrorText to ask.
+// A proxy 503 stays out: it means the connection was never established, so the
+// command cannot have been enqueued.
+test('isOutcomeUnknown covers 502, 504 and non-ApiError failures only', () => {
   assert.equal(isOutcomeUnknown(new ApiError(504, 'command timeout')), true);
+  assert.equal(isOutcomeUnknown(new ApiError(502, 'Bad Gateway')), true);
   assert.equal(isOutcomeUnknown(new TypeError('Failed to fetch')), true);
   assert.equal(isOutcomeUnknown('boom'), true);
   assert.equal(isOutcomeUnknown(new ApiError(400, 'no jammer in cargo')), false);
   assert.equal(isOutcomeUnknown(new ApiError(503, 'sector busy')), false);
+  assert.equal(isOutcomeUnknown(new ApiError(503, 'Service Unavailable')), false);
   assert.equal(isOutcomeUnknown(new ApiError(500, 'boom')), false);
 });
 
-test('installErrorText hides raw 5xx bodies behind a Russian line', () => {
+test('installErrorText hides raw 5xx bodies without asserting the install failed', () => {
   // install_satellite.go's default branch passes the repository error through
   // verbatim, so a Postgres message could otherwise land in the combat HUD.
   const text = installErrorText(
     new ApiError(500, 'ERROR: duplicate key value violates unique constraint "satellites_pkey"'),
     'satellite',
   );
-  assert.equal(text, 'Сервер не смог выполнить установку. Если повторяется — сообщите администрации.');
   assert.doesNotMatch(text, /constraint/);
+  // A RepoTimeout deadline struck on COMMIT answers 500 over a transaction that
+  // may have committed, so the line may not flatly claim nothing happened.
+  assert.doesNotMatch(text, /не смог выполнить/);
+  assert.match(text, /проверьте трюм и радар/i);
 
   assert.equal(
     installErrorText(new ApiError(401, 'not authenticated'), 'jammer'),

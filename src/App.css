@@ -1243,12 +1243,18 @@ html, body, #root {
   color: var(--ink-mute);
 }
 .sw-mscan__table th { white-space: nowrap; }
-/* Collapsed borders belong to the TABLE, not to the cell, so they stay behind
-   when a cell sticks: the frozen column below arrived at the left edge with its
-   row separators left back at scrollLeft 0 (verified on screen -- the lines
-   stopped dead at the column's right rule). `separate` hands each cell its own
-   border again; with zero spacing and bottom-only borders it paints identically. */
-.sw-mscan__table { border-collapse: separate; border-spacing: 0; }
+/* Collapsed borders belong to the TABLE, not to the cell, so they can stay
+   behind when a cell sticks. `separate` hands each cell its own border again;
+   with zero spacing and bottom-only borders it paints identically.
+   Two independent checks say Blink does NOT need this: forcing `separate` on
+   the scanner renders byte-identically to `collapse` at max scroll, and the
+   separators through the frozen column pixel-sample the same brightness as a
+   normal column's. It is kept for the engines where sticky cells DO drop
+   collapsed borders (Gecko), which is also why the selector carries .sw-table:
+   `.sw-mscan__table` alone ties 0,1,0 with `.sw-table` below and loses on
+   source order, so this declaration sat dead in the cascade until TASK-142's
+   review measured it (computed value was `collapse`). */
+.sw-table.sw-mscan__table { border-collapse: separate; border-spacing: 0; }
 
 /* Frozen «Товар» column. The matrix is ~2.9-3.3k px wide against a 466px card,
    so scrolling to the far stations used to leave rows of bare figures with no

@@ -14,6 +14,7 @@ import {
 } from '../api';
 import { goodsName, useGameContext, usePlayer } from '../gameContext';
 import { emitLog } from '../eventBus';
+import { formatTtl } from './lotTtl';
 
 type Props = {
   // stationLabel is the docked object's human title ("Торговая станция",
@@ -406,16 +407,3 @@ function auctionStatusLabel(status: number): string {
 // «265:45» and «16079:06» for the 4-hour and 11-day cases -- a number no reader
 // converts on sight (TASK-142). Only under an hour is MM:SS, the countdown
 // shape that makes the last minutes readable; above that the unit is named.
-function formatTtl(endsAt: string): string {
-  const ms = Date.parse(endsAt) - Date.now();
-  if (Number.isNaN(ms) || ms <= 0) return '00:00';
-  const sec = Math.floor(ms / 1000);
-  if (sec < 3600) {
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  }
-  const hours = Math.floor(sec / 3600);
-  if (hours < 24) return `${hours} ч ${Math.floor((sec % 3600) / 60)} мин`;
-  return `${Math.floor(hours / 24)} д ${hours % 24} ч`;
-}

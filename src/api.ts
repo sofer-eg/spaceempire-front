@@ -884,11 +884,13 @@ export async function sendLaunchDrone(
   return { spawned: body.spawned };
 }
 
-// sendRecallDrones recalls every live drone owned by shipID back to cargo.
-// Returns how many returned. Throws ApiError on a non-2xx.
+// sendRecallDrones recalls as many of shipID's live drones as its hold can take.
+// Returns how many returned and how many stayed out for want of space (TASK-156:
+// the recall is partial rather than overfilling the hold or refusing outright).
+// Throws ApiError on a non-2xx.
 export async function sendRecallDrones(
   shipID: number,
-): Promise<{ recalled: number }> {
+): Promise<{ recalled: number; left: number }> {
   const res = await fetch('/api/cmd/recall-drones', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -897,8 +899,8 @@ export async function sendRecallDrones(
   if (!res.ok) {
     throw new ApiError(res.status, await parseErrorBody(res));
   }
-  const body = (await res.json()) as { ok: boolean; recalled: number };
-  return { recalled: body.recalled };
+  const body = (await res.json()) as { ok: boolean; recalled: number; left: number };
+  return { recalled: body.recalled, left: body.left };
 }
 
 // sendLaunchTorpedo fires one torpedo of `torpedoClass` (2 = "Огненная Буря" /

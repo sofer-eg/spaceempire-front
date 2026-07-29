@@ -10,7 +10,6 @@ import {
   sendLaunchDrone,
   sendLaunchMissile,
   sendLaunchTorpedo,
-  sendRecallDrones,
   type CargoInventory,
   type DestructibleStatic,
   type EntityRef,
@@ -19,6 +18,7 @@ import {
   type StationType,
 } from './api';
 import { shipDisplayName, staticTypeLabel } from './gameContext';
+import { recallDronesReported } from './recallDrones';
 import type { TrackedShip } from './useWorldState';
 
 // Cargo goods that back the launch buttons. Mirror the backend constants:
@@ -277,7 +277,7 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
               type="button"
               className="sw-btn ghost"
               disabled={pending}
-              onClick={() => run(sendRecallDrones(ownShip.id), true)}
+              onClick={() => run(recallDronesReported(ownShip.id), true)}
             >
               ⬡ Вернуть дронов
             </button>

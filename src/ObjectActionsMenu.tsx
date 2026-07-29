@@ -15,11 +15,11 @@ import {
   sendMine,
   sendMove,
   sendPickupContainer,
-  sendRecallDrones,
   type EntityRef,
   type InstalledEquipment,
 } from './api';
 import { emitLog } from './eventBus';
+import { recallDronesReported } from './recallDrones';
 import { relationColor, type Relation } from './sector/shapeData';
 
 // DRONE_SALVO is how many drones one "launch drones" action sends. A
@@ -252,7 +252,7 @@ export function ObjectActionsMenu({
     run(sendLaunchTorpedo(ownShipID, weaponRef, torpedoClass));
   };
   const doRecallDrones = () => {
-    run(sendRecallDrones(ownShipID));
+    run(recallDronesReported(ownShipID));
   };
   const doPickup = () => {
     if (target.kind !== 'container') return;

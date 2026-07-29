@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ApiError,
   fetchCargo,
+  friendlyError,
   sendMoveCargo,
   type CargoInventory,
   type CargoItem,
   type EntityRef,
 } from '../api';
-import { goodsName, goodsSpace, useGameContext } from '../gameContext';
+import { goodsName, goodsSpace, shipDisplayName, useGameContext } from '../gameContext';
 import { emitLog } from '../eventBus';
 
 type Props = {
@@ -20,7 +20,7 @@ type Props = {
 // purpose — explicit per-row buttons + qty input is simpler to test and
 // covers the same MVP UX the task spec asks for.
 export function CargoView({ station, shipID }: Props) {
-  const { goods } = useGameContext();
+  const { goods, ownShip, races } = useGameContext();
   const ship = useMemo<EntityRef>(() => ({ kind: 1, id: shipID }), [shipID]);
   const [shipInv, setShipInv] = useState<CargoInventory | null>(null);
   const [stationInv, setStationInv] = useState<CargoInventory | null>(null);
@@ -41,7 +41,7 @@ export function CargoView({ station, shipID }: Props) {
         setLoadStatus('ok');
       } catch (err) {
         if (cancelled) return;
-        setLoadError(err instanceof Error ? err.message : String(err));
+        setLoadError(friendlyError(err));
         setLoadStatus('error');
       }
     })();
@@ -49,12 +49,6 @@ export function CargoView({ station, shipID }: Props) {
       cancelled = true;
     };
   }, [ship, station, reloadKey]);
-
-  const friendlyError = (err: unknown) => {
-    if (err instanceof ApiError) return err.message.replace(/^[A-Z]+ \/api[^:]+: /, '');
-    if (err instanceof Error) return err.message;
-    return String(err);
-  };
 
   const move = async (from: EntityRef, to: EntityRef, typeID: number, qty: number) => {
     setBusy(true);
@@ -89,7 +83,9 @@ export function CargoView({ station, shipID }: Props) {
   return (
     <div className="sw-cargo">
       <CargoColumn
-        title={`Трюм корабля #${shipID}`}
+        // The docked ship is ownShip (StationView passes its id), so it is
+        // named the way the HUD names it instead of by its raw id (TASK-140).
+        title={ownShip ? `Трюм · ${shipDisplayName(ownShip, races)}` : 'Трюм корабля'}
         inv={shipInv}
         action="unload"
         busy={busy}

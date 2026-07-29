@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { fetchMarketScan, type ScanGood, type ScanResponse } from '../api';
+import { fetchMarketScan, friendlyError, type ScanGood, type ScanResponse } from '../api';
 import { goodsName, staticTypeLabel, useGameContext } from '../gameContext';
 
 // MarketScanPanel renders the trade_up sector price-scanner: a товар × станция
@@ -45,7 +45,7 @@ export function MarketScanPanel({ reloadSignal }: Props) {
         setStatus('ok');
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : String(err));
+        setError(friendlyError(err));
         setStatus('error');
       }
     })();
@@ -98,7 +98,7 @@ export function MarketScanPanel({ reloadSignal }: Props) {
         {level >= 4 && g.forecastPrice > 0 && (
           <span
             className={`sw-mono sw-mscan__forecast ${trend.cls}`}
-            title={`Прогноз цены: ${g.forecastPrice} cr · прогноз запаса: ${g.forecastStock}`}
+            title={`Прогноз цены: ${g.forecastPrice.toLocaleString('ru-RU')} cr · прогноз запаса: ${g.forecastStock.toLocaleString('ru-RU')}`}
           >
             {trend.arrow}
             {g.forecastPrice}

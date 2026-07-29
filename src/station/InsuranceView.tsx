@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { friendlyError } from '../api';
 import { useGameContext } from '../gameContext';
 import {
   buyInsurance,
@@ -32,7 +33,7 @@ export function InsuranceView({ shipID }: { shipID: number }) {
         }
       })
       .catch((e) => {
-        if (alive) setError(e instanceof Error ? e.message : String(e));
+        if (alive) setError(friendlyError(e));
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -45,7 +46,7 @@ export function InsuranceView({ shipID }: { shipID: number }) {
   const active = policies.find((p) => p.shipId === shipID && p.status === 'active');
 
   const onBought = useCallback(() => {
-    void reload().catch((e) => setError(e instanceof Error ? e.message : String(e)));
+    void reload().catch((e) => setError(friendlyError(e)));
     void refreshPlayer();
   }, [reload, refreshPlayer]);
 
@@ -93,7 +94,7 @@ function BuyInsuranceForm({ shipID, onBought }: { shipID: number; onBought: () =
       setPremium('');
       onBought();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(friendlyError(e));
     } finally {
       setBusy(false);
     }

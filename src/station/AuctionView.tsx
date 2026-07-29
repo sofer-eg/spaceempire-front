@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ApiError,
   EntityKind,
   fetchAuctionLots,
   fetchMyAuctionLots,
   fetchCargo,
+  friendlyError,
   sendAuctionBid,
   sendAuctionCreate,
   type AuctionLot,
@@ -15,7 +15,10 @@ import { goodsName, useGameContext, usePlayer } from '../gameContext';
 import { emitLog } from '../eventBus';
 
 type Props = {
-  station: EntityRef;
+  // stationLabel is the docked object's human title ("Торговая станция",
+  // "Электростанция", …) as resolved by useStation(). The tab used to print the
+  // raw `kind#id` pair instead (TASK-140).
+  stationLabel: string;
   shipID: number;
 };
 
@@ -23,8 +26,8 @@ type Props = {
 // create a new lot from the docked ship's hold. Lots are global (not
 // station-bound) but live behind the StationView for now per phase 3.8
 // scope ("Только как вкладка в StationView").
-export function AuctionView({ station, shipID }: Props) {
-  const { goods } = useGameContext();
+export function AuctionView({ stationLabel, shipID }: Props) {
+  const { goods, logins } = useGameContext();
   const { player, refreshPlayer } = usePlayer();
   const ship = useMemo<EntityRef>(() => ({ kind: EntityKind.Ship, id: shipID }), [shipID]);
 
@@ -54,7 +57,7 @@ export function AuctionView({ station, shipID }: Props) {
         setLoadStatus('ok');
       } catch (err) {
         if (cancelled) return;
-        setLoadError(err instanceof Error ? err.message : String(err));
+        setLoadError(friendlyError(err));
         setLoadStatus('error');
       }
     })();
@@ -63,10 +66,12 @@ export function AuctionView({ station, shipID }: Props) {
     };
   }, [ship, reloadKey]);
 
-  const friendlyError = (err: unknown) => {
-    if (err instanceof ApiError) return err.message.replace(/^[A-Z]+ \/api[^:]+: /, '');
-    if (err instanceof Error) return err.message;
-    return String(err);
+  // bidderLabel turns a lot's currentBidderID into the leader's login. The
+  // fallback covers a bidder missing from the players catalog (it is fetched
+  // once at mount, so an account created since then is not in it).
+  const bidderLabel = (bidderID: number | undefined) => {
+    if (bidderID == null) return 'ставок нет';
+    return logins.get(bidderID) ?? `игрок #${bidderID}`;
   };
 
   const onBid = async (lot: AuctionLot) => {
@@ -145,14 +150,14 @@ export function AuctionView({ station, shipID }: Props) {
                         columns that fold on a narrow card; the goods cell — the
                         one element of the row that is never disabled — carries
                         them in its title so they stay readable (AC #6). */}
-                    <td
-                      title={`Лот #${lot.id} · лидер: ${lot.currentBidderID ?? 'ставок нет'}`}
-                    >
+                    <td title={`Лот #${lot.id} · лидер: ${bidderLabel(lot.currentBidderID)}`}>
                       {goodsName(goods, lot.goodsTypeID)}
                     </td>
                     <td className="sw-mono">{lot.quantity}</td>
                     <td className="sw-mono">{lot.currentPrice.toLocaleString('ru-RU')}</td>
-                    <td className="sw-mono sw-table__secondary">{lot.currentBidderID ?? '—'}</td>
+                    <td className="sw-mono sw-table__secondary">
+                      {bidderLabel(lot.currentBidderID)}
+                    </td>
                     <td className="sw-mono">{ttl}</td>
                     <td>
                       <input
@@ -232,7 +237,7 @@ export function AuctionView({ station, shipID }: Props) {
         Лот выставляется со склада корабля. После создания груз списывается;
         при отсутствии ставок к концу аукциона возвращается обратно (при
         наличии места). Источник по умолчанию — корабль; стыковочный объект:{' '}
-        {station.kind}#{station.id}.
+        {stationLabel}.
       </div>
     </div>
   );
@@ -267,12 +272,6 @@ function CreateLotForm({ source, shipCargo, onCreated }: CreateProps) {
   const effectiveTypeID = typeID ?? cargoTypes[0]?.typeID ?? null;
   const selected = cargoTypes.find((c) => c.typeID === effectiveTypeID);
   const max = selected?.quantity ?? 0;
-
-  const friendlyError = (err: unknown) => {
-    if (err instanceof ApiError) return err.message.replace(/^[A-Z]+ \/api[^:]+: /, '');
-    if (err instanceof Error) return err.message;
-    return String(err);
-  };
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

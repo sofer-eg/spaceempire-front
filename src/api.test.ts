@@ -1,11 +1,18 @@
-// Unit tests for the pure Russian error mappers in api.ts: jumpDriveErrorText
+// Unit tests for the pure Russian error mappers in api.ts: friendlyError (the
+// generic one every station tab uses, TASK-140), jumpDriveErrorText
 // (up_jump_drive, TASK-129) and installErrorText (install-satellite /
 // install-jammer, TASK-149). Run with the Node built-in test runner
 // (`npm run test`, i.e. `node --test`); the mappers are DOM-free, so importing
 // ./api.ts directly is safe (that module has no top-level browser access).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ApiError, installErrorText, isOutcomeUnknown, jumpDriveErrorText } from './api.ts';
+import {
+  ApiError,
+  friendlyError,
+  installErrorText,
+  isOutcomeUnknown,
+  jumpDriveErrorText,
+} from './api.ts';
 
 test('jumpDriveErrorText maps each backend status to a Russian line', () => {
   assert.equal(jumpDriveErrorText(new ApiError(404, 'ship not found')), 'Корабль не найден.');
@@ -229,4 +236,25 @@ test('installErrorText hides raw 5xx bodies without asserting the install failed
 
 test('installErrorText echoes unmapped non-5xx statuses', () => {
   assert.equal(installErrorText(new ApiError(409, 'unexpected conflict'), 'jammer'), 'unexpected conflict');
+});
+
+test('friendlyError strips the route prefix off a backend error', () => {
+  assert.equal(
+    friendlyError(new ApiError(400, 'POST /api/auction/4/bid: bid below current price')),
+    'bid below current price',
+  );
+  // insuranceApi throws a plain Error with the same prefix shape.
+  assert.equal(friendlyError(new Error('GET /api/insurance: not found')), 'not found');
+});
+
+test('friendlyError words a dead connection in Russian', () => {
+  // fetch rejects with a TypeError when the request never got an answer — the
+  // native message is the English "Failed to fetch" the Russian UI used to show.
+  const text = friendlyError(new TypeError('Failed to fetch'));
+  assert.doesNotMatch(text, /Failed to fetch/);
+  assert.match(text, /Нет связи с сервером/);
+});
+
+test('friendlyError stringifies a non-Error rejection', () => {
+  assert.equal(friendlyError('boom'), 'boom');
 });

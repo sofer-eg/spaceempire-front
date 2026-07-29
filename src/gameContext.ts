@@ -141,11 +141,14 @@ export function dockedStationLabel(
 }
 
 // goodsName / goodsSpace are tiny lookup helpers used by Market/Cargo/Auction
-// views. Falls back to "type N" / 0 when the catalog has not loaded yet or
-// the id is unknown (legacy data).
+// views. Falls back to "Товар #N" / 0 when the catalog has not loaded yet or
+// the id is not in it — GET /api/goods currently omits some ids a hold can
+// legitimately carry (50 Missile, 51 Combat Drone), and the old "type 50"
+// fallback put an English machine label in the Russian hold list (TASK-140).
+// The id stays in the fallback: it is the only handle on an uncatalogued good.
 export function goodsName(goods: GoodsRow[], typeID: number): string {
   const hit = goods.find((g) => g.typeID === typeID);
-  return hit?.name ?? `type ${typeID}`;
+  return hit?.name ?? `Товар #${typeID}`;
 }
 
 export function goodsSpace(goods: GoodsRow[], typeID: number): number {

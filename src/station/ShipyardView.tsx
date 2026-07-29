@@ -4,6 +4,7 @@ import {
   fetchEquipment,
   fetchRaceStandings,
   fetchShipClasses,
+  friendlyError,
   installEquipment,
   uninstallEquipment,
   type Equipment,
@@ -62,7 +63,7 @@ export function ShipyardView({ shipyardID }: Props) {
         setLoadStatus('ok');
       } catch (err) {
         if (cancelled) return;
-        setLoadError(err instanceof Error ? err.message : String(err));
+        setLoadError(friendlyError(err));
         setLoadStatus('error');
       }
     })();
@@ -146,7 +147,7 @@ export function ShipyardView({ shipyardID }: Props) {
       emitLog({
         category: 'system',
         kind: 'danger',
-        message: `Покупка «${cls.name}»: ${err instanceof Error ? err.message : String(err)}`,
+        message: `Покупка «${cls.name}»: ${friendlyError(err)}`,
       });
     } finally {
       setBusy(false);
@@ -166,7 +167,7 @@ export function ShipyardView({ shipyardID }: Props) {
       emitLog({
         category: 'system',
         kind: 'danger',
-        message: `Установка «${eq.description}»: ${err instanceof Error ? err.message : String(err)}`,
+        message: `Установка «${eq.description}»: ${friendlyError(err)}`,
       });
     } finally {
       setBusy(false);
@@ -186,7 +187,7 @@ export function ShipyardView({ shipyardID }: Props) {
       emitLog({
         category: 'system',
         kind: 'danger',
-        message: `Снятие модуля: ${err instanceof Error ? err.message : String(err)}`,
+        message: `Снятие модуля: ${friendlyError(err)}`,
       });
     } finally {
       setBusy(false);

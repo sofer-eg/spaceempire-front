@@ -1100,6 +1100,33 @@ async function parseErrorBody(res: Response): Promise<string> {
   }
 }
 
+// friendlyError is the line a view shows the player when a request fails. It is
+// the generic mapper — the station tabs and their forms use it for every
+// failure; jumpDriveErrorText / installErrorText below are its per-command
+// specialisations, worth their own wording because their outcome matters.
+//
+// Three shapes reach it:
+//   - ApiError — the backend answered {"error": "..."}; requireOk prefixes that
+//     with the route ("GET /api/auction: ..."), stripped here.
+//   - TypeError — fetch never got an answer: backend down, connection dropped,
+//     request aborted. Its native message is the English "Failed to fetch",
+//     which is what the Russian UI showed verbatim until TASK-140.
+//   - any other Error / value — insuranceApi and the senders that throw a plain
+//     Error() after reading a response; show the message as-is.
+//
+// This lived as four copies of the same closure (AuctionView ×2, CargoView,
+// MarketView); none of them worded the network case.
+export function friendlyError(err: unknown): string {
+  if (err instanceof TypeError) {
+    // Keep the native reason in the console — the player only sees the Russian
+    // line, but "Failed to fetch" vs "aborted" still matters when debugging.
+    console.error('request failed without a response', err);
+    return 'Нет связи с сервером. Проверьте подключение и повторите.';
+  }
+  if (err instanceof Error) return err.message.replace(/^[A-Z]+ \/api[^:]+: /, '');
+  return String(err);
+}
+
 // Lines shared by jumpDriveErrorText and installErrorText below. Both mappers
 // word the same three backend outcomes identically (404 ship not found, 403
 // foreign ship, ErrInboxFull), and keeping the literals in one place stops them

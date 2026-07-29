@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { EntityKind, claimStation, getShipAtShipyard } from '../api';
+import { EntityKind, claimStation, friendlyError, getShipAtShipyard } from '../api';
 import { useGameContext, useStation } from '../gameContext';
 import { CargoView } from './CargoView';
 import { MarketView } from './MarketView';
@@ -45,7 +45,7 @@ export function StationView() {
       void refreshPlayer();
       setClaimMsg('Станция куплена — арендные обязательства начислены.');
     } catch (err) {
-      setClaimMsg(err instanceof Error ? err.message : String(err));
+      setClaimMsg(friendlyError(err));
     }
   };
 
@@ -59,7 +59,7 @@ export function StationView() {
       void refreshPlayer();
       setClaimMsg('Получен новый корабль.');
     } catch (err) {
-      setClaimMsg(err instanceof Error ? err.message : String(err));
+      setClaimMsg(friendlyError(err));
     }
   };
 
@@ -184,7 +184,7 @@ export function StationView() {
           <CargoView station={station.ref} shipID={ownShip.id} />
         )}
         {tab === 'auction' && (
-          <AuctionView station={station.ref} shipID={ownShip.id} />
+          <AuctionView stationLabel={station.label} shipID={ownShip.id} />
         )}
         {tab === 'insurance' && <InsuranceView shipID={ownShip.id} />}
         {tab === 'hangar' && <HangarView station={station.ref} />}

@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import {
-  ApiError,
   EntityKind,
   fetchCargo,
   fetchMarket,
+  friendlyError,
   sendBuy,
   sendSell,
   type CargoInventory,
@@ -70,7 +70,7 @@ export function MarketView({ station, shipID, reloadSignal }: Props) {
         setLoadStatus('ok');
       } catch (err) {
         if (cancelled) return;
-        setLoadError(err instanceof Error ? err.message : String(err));
+        setLoadError(friendlyError(err));
         setLoadStatus('error');
       }
     })();
@@ -152,11 +152,10 @@ export function MarketView({ station, shipID, reloadSignal }: Props) {
       };
     });
 
-  const friendlyError = (err: unknown) => {
-    if (err instanceof ApiError) return err.message.replace(/^[A-Z]+ \/api[^:]+: /, '');
-    if (err instanceof Error) return err.message;
-    return String(err);
-  };
+  // Tooltip numbers get the same ru-RU thousands separators as the rest of the
+  // UI — the wallet in particular reads as «10 829 372 434», not one 11-digit
+  // run (TASK-140).
+  const ru = (n: number) => n.toLocaleString('ru-RU');
 
   const onBuy = async (entry: MarketEntry) => {
     const typeID = entry.typeID;
@@ -260,7 +259,7 @@ export function MarketView({ station, shipID, reloadSignal }: Props) {
             disabled on half the rows, and a disabled control receives no pointer
             events in Firefox — so the folded stock would be unreachable in
             exactly the modes the review found (TASK-134 AC #6). */}
-        <td title={`Запас: ${it.stock} / ${it.maxStock}`}>{goodsName(goods, it.typeID)}</td>
+        <td title={`Запас: ${ru(it.stock)} / ${ru(it.maxStock)}`}>{goodsName(goods, it.typeID)}</td>
         <td className="sw-mono">{it.sellPrice ?? '—'}</td>
         <td className="sw-mono">{it.buyPrice ?? '—'}</td>
         {/* Stock is secondary info: it folds away on a narrow card so «Кол-во»
@@ -288,7 +287,7 @@ export function MarketView({ station, shipID, reloadSignal }: Props) {
                   type="button"
                   className="sw-btn ghost"
                   disabled={maxBuy(it) === 0 || status.kind === 'pending'}
-                  title={`Максимум для покупки: ${maxBuy(it)} (кошелёк ${cash}, свободно в трюме ${freeUnits(it.typeID)}, на станции ${it.stock})`}
+                  title={`Максимум для покупки: ${ru(maxBuy(it))} (кошелёк ${ru(cash)}, свободно в трюме ${ru(freeUnits(it.typeID))}, на станции ${ru(it.stock)})`}
                   onClick={() => setQty(it.typeID, maxBuy(it))}
                   aria-label="Максимум для покупки"
                 >
@@ -318,7 +317,7 @@ export function MarketView({ station, shipID, reloadSignal }: Props) {
                   type="button"
                   className="sw-btn ghost"
                   disabled={maxSell(it) === 0 || status.kind === 'pending'}
-                  title={`Максимум для продажи: ${maxSell(it)} (трюм ${cargoQty(it.typeID)}, свободно у станции ${it.maxStock - it.stock})`}
+                  title={`Максимум для продажи: ${ru(maxSell(it))} (трюм ${ru(cargoQty(it.typeID))}, свободно у станции ${ru(it.maxStock - it.stock)})`}
                   onClick={() => setQty(it.typeID, maxSell(it))}
                   aria-label="Максимум для продажи"
                 >

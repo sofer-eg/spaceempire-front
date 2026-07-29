@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { boardShip, type EntityRef } from '../api';
+import { boardShip, friendlyError, type EntityRef } from '../api';
 import { shipDisplayName, useGameContext } from '../gameContext';
 
 // HangarView lists every ship docked at the current station (phase 10.23) and
@@ -30,7 +30,7 @@ export function HangarView({ station }: { station: EntityRef }) {
       await boardShip(targetID);
       void refreshPlayer();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось сесть на корабль');
+      setError(friendlyError(err));
     } finally {
       setBusy(0);
     }

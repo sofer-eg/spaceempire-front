@@ -141,11 +141,16 @@ export function dockedStationLabel(
 }
 
 // goodsName / goodsSpace are tiny lookup helpers used by Market/Cargo/Auction
-// views. Falls back to "Товар #N" / 0 when the catalog has not loaded yet or
-// the id is not in it — GET /api/goods currently omits some ids a hold can
-// legitimately carry (50 Missile, 51 Combat Drone), and the old "type 50"
-// fallback put an English machine label in the Russian hold list (TASK-140).
-// The id stays in the fallback: it is the only handle on an uncatalogued good.
+// views. Falls back to "Товар #N" / 0 while the catalog is still loading — the
+// views render before the GET /api/goods response arrives.
+//
+// The fallback no longer stands in for goods the catalog does not know: it used
+// to, because GET /api/goods serves configs/balance.yaml while holds referenced
+// goods_types, and ammunition lived only in the table (50 Missile, 51 Combat
+// Drone) — hence the English machine label TASK-140 reported. TASK-167 put both
+// on their catalog ids (10 «Ракета Москит», 21 «Боевой дрон») and an integration
+// test now pins the two sources together, so an id missing here is a bug, not a
+// known gap. The id stays in the fallback text as the only handle on such a good.
 export function goodsName(goods: GoodsRow[], typeID: number): string {
   const hit = goods.find((g) => g.typeID === typeID);
   return hit?.name ?? `Товар #${typeID}`;

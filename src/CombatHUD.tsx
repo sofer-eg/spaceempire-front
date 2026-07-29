@@ -21,10 +21,15 @@ import { shipDisplayName, staticTypeLabel } from './gameContext';
 import { recallDronesReported } from './recallDrones';
 import type { TrackedShip } from './useWorldState';
 
-// Cargo goods that back the launch buttons. Mirror the backend constants:
-// api.MissileGoodsType (migration 0017) and api.DroneGoodsType (0018).
-const MISSILE_GOODS = 50;
-const DRONE_GOODS = 51;
+// Cargo goods that back the launch buttons. Mirror the backend constants
+// api.MissileGoodsType and api.DroneGoodsType, which TASK-167 moved onto the real
+// catalog: 10 «Ракета Москит» (space 1) and 21 «Боевой дрон» (space 290). Before
+// that they were 50/51, goods no station sold and GET /api/goods had never heard
+// of — so the hold listed them as «Товар #50» and a spent magazine could not be
+// refilled. A drone is a big-ship weapon at 290: a starter hull (cargobay 50)
+// cannot carry one, and the button says so.
+const MISSILE_GOODS = 10;
+const DRONE_GOODS = 21;
 // Satellite goods id consumed by one install (phase 10.15). Mirrors
 // api.SatelliteGoodsType.
 const SATELLITE_GOODS = 26;
@@ -40,6 +45,14 @@ const TORPEDO_CLASS_FIRESTORM = 2;
 const TORPEDO_CLASS_HOLY = 3;
 // DRONE_SALVO matches ObjectActionsMenu — one launch action sends a small
 // fixed salvo so the button stays a single click.
+//
+// It is an upper bound, not the count sent: the salvo is clamped to the hold
+// below. The worker clamps Count to what up_drone_control still allows
+// (sector/command.go), but NOT to what the hold carries — the ordnance charges the
+// clamped size as one all-or-nothing debit, so asking for 3 with 1 unit aboard is
+// refused outright ("3 requested, 2 in the hold" is a pinned backend case). At
+// space 290 a drone-capable hull carries single digits of them, so an unclamped
+// request would refuse a launch the player can plainly see they can make.
 const DRONE_SALVO = 3;
 
 type Props = {
@@ -239,7 +252,9 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
                       ? 'Нет дронов в трюме'
                       : undefined
               }
-              onClick={() => targetRef && run(sendLaunchDrone(ownShip.id, targetRef, DRONE_SALVO), true)}
+              onClick={() =>
+                targetRef && run(sendLaunchDrone(ownShip.id, targetRef, Math.min(DRONE_SALVO, drones)), true)
+              }
             />
             <WeaponButton
               glyph="☄"

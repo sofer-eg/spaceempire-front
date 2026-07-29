@@ -702,6 +702,12 @@ html, body, #root {
     visibility: visible;
   }
 
+  /* Full-width map: the head has room to give its title a line of its own,
+     which packs the chip strip into 3 rows under it instead of 4 narrow rows
+     beside a 2-line title. Measured with this one declaration switched off:
+     110px against 142px at 360, 85 against 90 at 420. TASK-170. */
+  .sw-mapcard .sw-panel-head { flex-wrap: wrap; gap: 6px 10px; }
+
   /* journal: bottom sheet, off-canvas until toggled. */
   .sw-sector-grid__log {
     position: absolute;
@@ -825,6 +831,28 @@ html, body, #root {
 /* ---------- map ---------- */
 .sw-mapcard { height: 100%; display: flex; flex-direction: column; }
 .sw-mapcard__body { flex: 1 1 0; min-height: 0; position: relative; }
+/* The map card's head used to overflow its own column (TASK-170): the chip
+   strip is a flex row with the default min-width:auto, so its min-content was
+   the whole strip and the head could not be made narrower than it. Measured at
+   1024: scrollWidth 445 against clientWidth 394, with «N контактов» painted
+   OUTSIDE the map column and under the neighbouring «Навигация» panel —
+   elementFromPoint on the chip returned that panel's head, so the count was
+   unreadable and unreachable. At 1149/1212 the same 445 against 399/398. At 360
+   the overflow reached a real control: the «По радару» zoom toggle lost 32.1px
+   of its right edge.
+   Same remedy as TASK-139 one cell to the left: min-width:0 removes the floor
+   and the strip reflows onto a second line instead of running past the column.
+   The chips are nowrap so a break lands BETWEEN chips and never inside a label
+   — «Возле корабля» / «По радару» are action labels and stay whole. Nothing is
+   truncated, so no title-attribute fallback is needed.
+   The cost is head height, measured on the undocked fixture against the same
+   page with these three declarations switched back off: 51 -> 65px over
+   1024-1280 (map body 605 -> 591 at 1024), 51 -> 85px at 420 and 110px at 360
+   (see the drawer regime below), unchanged 38px at 900 where the full-width head
+   already fit one line. Before the fix the head held those 51px only by breaking
+   three chip labels mid-phrase AND still overflowing. */
+.sw-mapcard .sw-panel-head .sw-row { flex-wrap: wrap; min-width: 0; row-gap: 4px; }
+.sw-mapcard .sw-panel-head .sw-chip { white-space: nowrap; }
 
 .sw-map-wrap {
   position: absolute; inset: 0;

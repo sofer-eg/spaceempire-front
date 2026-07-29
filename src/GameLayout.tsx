@@ -255,9 +255,11 @@ export function GameLayout() {
     if (galaxy.status !== 'ready' || !ownShip) return null;
     return galaxy.world.sectors.find((s) => s.id === ownShip.sectorID)?.name ?? null;
   }, [galaxy, ownShip]);
+  // Split from its «SECTOR · » keyword so the phone breakpoint can drop the
+  // keyword and keep the part that carries information (TASK-172).
   const sectorLabel = ownShip
-    ? `SECTOR · #${ownShip.sectorID}${sectorName ? ` · «${sectorName}»` : ''}`
-    : 'SECTOR · —';
+    ? `#${ownShip.sectorID}${sectorName ? ` · «${sectorName}»` : ''}`
+    : '—';
   const connChip = world.connection === 'open' ? 'good' : world.connection === 'closed' ? 'danger' : 'warn';
 
   return (
@@ -266,7 +268,12 @@ export function GameLayout() {
       <div className="sw-shell">
         <header className="sw-shell__header">
           <div className="sw-panel sw-topbar">
-            <Link to="/sector" className="sw-row" style={{ gap: 10, textDecoration: 'none' }}>
+            <Link
+              to="/sector"
+              className="sw-row"
+              style={{ gap: 10, textDecoration: 'none' }}
+              aria-label="Space Empire — карта сектора"
+            >
               <div className="sw-topbar__brandbox" aria-hidden>
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                   <ellipse cx="8" cy="8" rx="7" ry="2.4" stroke="currentColor" strokeWidth="1.1" />
@@ -276,7 +283,9 @@ export function GameLayout() {
               </div>
               <span className="sw-topbar__brand">SPACE · EMPIRE</span>
             </Link>
-            <span className="sw-topbar__subtitle">{sectorLabel}</span>
+            <span className="sw-topbar__subtitle">
+              <span className="sw-topbar__subtitle-kw">SECTOR · </span>{sectorLabel}
+            </span>
             <div className="sw-spacer" />
             <span className={`sw-chip dot ${connChip}`}>{world.connection.toUpperCase()}</span>
             {world.timeScale < 1 && (

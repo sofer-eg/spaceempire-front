@@ -365,10 +365,16 @@ html, body, #root {
 /* ---------- app grid ---------- */
 /* Top row = topbar; below = [rail | main]. The rail lives in GameLayout
    (persistent across routes); each Outlet screen owns its own layout inside
-   .sw-main. */
+   .sw-main.
+   The header row is minmax(44px, auto) and not a flat 44px because the topbar
+   wraps (see .sw-topbar): one line is the familiar 44px bar, and when the chips
+   need a second line the row grows instead of clipping them. It used to be flat
+   44px here with the minmax living inside the drawer media query, which is why
+   at exactly 1024px the bar snapped back to one line and broke five chips
+   mid-phrase — TASK-172. */
 .sw-shell {
   display: grid;
-  grid-template-rows: 44px 1fr;
+  grid-template-rows: minmax(44px, auto) 1fr;
   gap: 10px;
   padding: 10px;
   width: 100%; height: 100%;
@@ -581,32 +587,21 @@ html, body, #root {
    map. A toolbar row of toggles drives them via React state; a scrim catches an
    outside tap to close. The journal becomes a bottom sheet. */
 @media (max-width: 1023.98px) {
-  /* The topbar wraps here instead of forcing the shell wider than the window
-     (TASK-139; see .sw-shell__header above for what that used to cost). It is a
-     flex row of ~10 chips that wants 757px and only gets ~330px at a 360px
-     viewport, so it takes as many lines as it needs and the header row grows
-     with it — minmax keeps the familiar 44px bar whenever one line is enough,
-     which is every viewport from ~778px up, the drawer regime's whole upper
-     half included. Wrapping and not `overflow-x: auto` because both controls
-     that live up here — «? Вики» and «Выйти» — must stay reachable without a
-     sideways scroll nobody would guess is there.
-
-     What the wrap costs, measured on both fixtures after this commit, because
-     one number of it (900px) was all the commit message quoted:
-       900px  44 -> 75px   (2 rows)
-       420px  44 -> 145-150px
-       360px  44 -> 145-150px  (4-5 rows, ~23% of a 640px-tall phone)
-     The 44px it replaces was not compact, it was shredded — at 900 five chips
-     wrapped mid-phrase at once («SPACE ·/EMPIRE», «tick/1850», «?/Вики»), i.e.
-     the bar only held one line by breaking the product name in half. Below
-     ~500px the trade gets expensive enough to be worth revisiting by trimming
-     secondary chips rather than by unwrapping — TASK-172.
-
-     The wrap lives inside this media query only, so at exactly 1024px the bar
-     is back to one 44px line with the same mid-phrase breaking. TASK-172. */
-  .sw-shell { grid-template-rows: minmax(44px, auto) 1fr; }
-  .sw-topbar { flex-wrap: wrap; row-gap: 4px; padding: 4px 14px; }
-
+  /* The topbar's wrap (TASK-139) used to live in this media query, which is what
+     left the 1024px hole TASK-172 closed; it and the header row's minmax are now
+     unconditional, up at .sw-topbar / .sw-shell. Header height, measured on the
+     undocked fixture — before the wrap, after the wrap, after TASK-172's trims:
+       1024px  44 ->  44px (one line, five labels split mid-phrase) ->  44px whole
+        900px  44 ->  75px (2 rows)                                 ->  71px
+        420px  44 -> 145px                                          ->  75px 2 rows
+        360px  44 -> 145px (4-5 rows, ~23% of a 640px-tall phone)    ->  76px 2 rows
+     The 44px the wrap replaced was not compact, it was shredded: the bar only
+     held one line by breaking the product name in half.
+     The docked fixture is the wide-data case — its balance chip reads
+     «10 829 372 592 cr», ~150px against 78px — and lands one row higher at two
+     widths: 72px at 1024 and 105px at 360 (still down from 146px). That is the
+     data being wide, not the layout failing; nothing splits mid-word there
+     either. */
   .sw-sector-grid {
     --sw-toolbar-h: 42px;
     grid-template-columns: 1fr;
@@ -793,10 +788,28 @@ html, body, #root {
 }
 
 /* ---------- HUD header bar ---------- */
+/* The bar wraps at EVERY width (TASK-172). It is a row of ~10 chips wanting
+   ~995px of content box for an ordinary balance, so with the tighter column gap
+   below 1150px it holds one 44px line down to 1024 and takes a second line under
+   that. Wrapping used to start only below 1024px, so at exactly 1024 the bar was
+   forced back onto one line by breaking five chips mid-phrase instead: «SPACE
+   ·/EMPIRE», «SECTOR · #1 · «Аргон/Прайм»», «tick/8066», «10 000/cr», «?/Вики»
+   (measured on both fixtures). The nowrap rule below is the other half of that fix: labels now
+   break BETWEEN chips only, so the bar either fits or grows a line, and never
+   splits a word. Wrapping and not `overflow-x: auto` because both controls up
+   here — «? Вики» and «Выйти» — must stay reachable without a sideways scroll
+   nobody would guess is there. */
 .sw-topbar {
   height: 100%;
-  display: flex; align-items: center; padding: 0 14px; gap: 16px;
+  display: flex; align-items: center; padding: 4px 14px; gap: 16px;
+  flex-wrap: wrap;
+  row-gap: 4px;
 }
+.sw-topbar__brand,
+.sw-topbar__subtitle,
+.sw-topbar__clock,
+.sw-topbar .sw-chip,
+.sw-topbar .sw-btn { white-space: nowrap; }
 .sw-topbar__brandbox {
   width: 26px; height: 26px;
   border: 1px solid var(--accent);
@@ -823,6 +836,41 @@ html, body, #root {
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--ink-dim);
+}
+
+/* Just below 1150px the bar is one chip short of needing a second line, so at
+   1024 it pushed a single «Выйти» onto one of its own. Trimming the column gap
+   16 -> 12 buys back 32px across the row's 8 gaps and holds one 44px line at
+   1024 for an ordinary balance. A 12-digit balance still takes the second line —
+   that is the data being wide, not the layout being wrong. TASK-172. */
+@media (max-width: 1149.98px) {
+  .sw-topbar { column-gap: 12px; }
+}
+
+/* Phone density (TASK-172). The wrap above is right, but on a 360px screen the
+   bar took 145px — 4-5 rows, ~23% of a 640px-tall phone, before the map even
+   starts. Four secondary items go away here rather than the wrap:
+     - the brand WORDMARK. 177px of the 995px the bar wants, and the widest item
+       in it. The 26px logo box keeps the link to /sector, which now carries its
+       own aria-label because the text that used to name it is gone.
+     - the wall CLOCK. A phone shows the time in its own status bar; game time
+       («tick N») stays.
+     - the literal «SECTOR · » in front of the sector label, so what is left
+       reads «#1 · «Аргон Прайм»» — the number and the name, in full. Nothing is
+       ellipsised, so there is no hidden value to recover from a title tooltip.
+     - the .sw-spacer. It has flex:1, so in a wrapping row it swallows the rest
+       of the line it lands on and pushes every following chip to the next one —
+       which is what made the bar 4-5 rows and not 3. Losing it costs the
+       right-alignment of «? Вики» / «Выйти»; they stay in the flow, fully
+       labelled and hit-testable.
+   Measured 360px: 145 -> 76px, two rows (105px on the fixture whose balance chip
+   is 12 digits wide). See the drawer media query for the full table. */
+@media (max-width: 499.98px) {
+  .sw-topbar { gap: 8px; }
+  .sw-topbar__brand,
+  .sw-topbar__clock,
+  .sw-topbar__subtitle-kw,
+  .sw-topbar .sw-spacer { display: none; }
 }
 
 /* nav links rendered as sw-btn */

@@ -333,10 +333,17 @@ export function SectorView() {
 }
 
 // selectedStaticList picks the statics array a target EntityRef of a static
-// kind lives in. Mirrors ObjectLayer.staticList: both consumers of
-// selectedTargetRef (panel row, canvas ring) resolve through it, so a kind
-// missing here silently drops the whole selected-highlight for that object
-// type (TASK-125: satellites and laser towers were absent).
+// kind lives in. Both consumers of selectedTargetRef (panel row, canvas ring)
+// resolve through it, so a kind missing here silently drops the whole
+// selected-highlight for that object type (TASK-125: satellites and laser
+// towers were absent).
+//
+// It does NOT mirror ObjectLayer.staticList — that one also has Jammer, which
+// is reachable here (TargetsPanel and the map menu both send a Jammer ref) and
+// so has the same missing highlight, plus it makes ObjectLayer's own Jammer
+// case unreachable. Left out deliberately: closing it needs its own live check
+// against a placed jammer, and the real fix is one shared helper rather than a
+// sixth case in a second copy of this switch. Both are TASK-165.
 function selectedStaticList(
   statics: SectorStatics,
   refKind: number,

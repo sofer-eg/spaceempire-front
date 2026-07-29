@@ -680,9 +680,12 @@ function TargetRow({
           // The label is ellipsised when the panel is narrow (TASK-139), so the
           // tooltip carries it in full — a long contact name is otherwise
           // unreadable in a 240px column with no way to widen it.
+          // Own row carries the label too: its name ellipsises exactly like any
+          // other, so leaving the tooltip at the bare action would be the one
+          // row whose full value is nowhere to be read.
           title={
             own
-              ? 'Показать свой корабль'
+              ? `${target.label} — показать свой корабль`
               : `${target.label} — лететь к (${target.x.toFixed(0)}, ${target.y.toFixed(0)})`
           }
         >

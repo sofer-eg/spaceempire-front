@@ -385,19 +385,24 @@ html, body, #root {
    (overflow:hidden) document: at 420px the sector grid ran 82..767, so the
    «Навигация» and «Журнал» drawer toggles sat at 312..767 with their centres
    at x = 425 and 655 — off-screen, hit-test dead — and the nav drawer opened at
-   447..767, entirely outside the window. (The same overflow has a second face:
-   the grid is scrollable by script even at overflow:hidden, so any focus move
-   inside a drawer scrolls the whole HUD sideways and slides the toggles under
-   the rail, which is the form TASK-149 ran into.) With the floor removed the
-   column tracks the viewport; the topbar's own overflow is handled by the wrap
-   in the drawer regime below. */
+   447..767, entirely outside the window. With the floor removed the column
+   tracks the viewport; the topbar's own overflow is handled by the wrap in the
+   drawer regime below.
+
+   NOT fixed here, and still reachable by keyboard: a closed off-canvas drawer
+   is only translated away (see .sw-sector-grid__ship/__nav below — no `inert`,
+   no visibility:hidden), so it stays in the tab order. Tabbing into it makes
+   the browser scroll the grid, which is scrollable by script even at
+   overflow:hidden — 233px of it at 420px, measured after this commit — and the
+   toggles slide under the rail again. That is the shape TASK-149 hit. Removing
+   the shell's 757px floor shrank the runway from 757px to those 233px but did
+   not close it; `inert` on the closed drawer is the actual fix — TASK-171. */
 .sw-shell__header { min-width: 0; }
 .sw-shell__body {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 10px;
   min-height: 0;
-  min-width: 0;
 }
 .sw-main { min-height: 0; min-width: 0; position: relative; }
 
@@ -576,7 +581,21 @@ html, body, #root {
      which is every viewport from ~778px up, the drawer regime's whole upper
      half included. Wrapping and not `overflow-x: auto` because both controls
      that live up here — «? Вики» and «Выйти» — must stay reachable without a
-     sideways scroll nobody would guess is there. */
+     sideways scroll nobody would guess is there.
+
+     What the wrap costs, measured on both fixtures after this commit, because
+     one number of it (900px) was all the commit message quoted:
+       900px  44 -> 75px   (2 rows)
+       420px  44 -> 145-150px
+       360px  44 -> 145-150px  (4-5 rows, ~23% of a 640px-tall phone)
+     The 44px it replaces was not compact, it was shredded — at 900 five chips
+     wrapped mid-phrase at once («SPACE ·/EMPIRE», «tick/1850», «?/Вики»), i.e.
+     the bar only held one line by breaking the product name in half. Below
+     ~500px the trade gets expensive enough to be worth revisiting by trimming
+     secondary chips rather than by unwrapping — TASK-172.
+
+     The wrap lives inside this media query only, so at exactly 1024px the bar
+     is back to one 44px line with the same mid-phrase breaking. TASK-172. */
   .sw-shell { grid-template-rows: minmax(44px, auto) 1fr; }
   .sw-topbar { flex-wrap: wrap; row-gap: 4px; padding: 4px 14px; }
 
@@ -1400,12 +1419,17 @@ html, body, #root {
    standard properties are set, Blink ignores the ::-webkit- pseudo-elements and
    reverts to the overlay bar. Firefox, which has no ::-webkit-scrollbar, gets the
    same intent through the @supports branch instead.
-   .sw-sector-grid__ship is in the list for exactly the same reason, not for its
-   vertical overflow: `overflow-y: auto` makes overflow-x compute to auto too, so
-   between 1150 and 1194 -- where the fluid column is under the 313px at which the
-   undocked «Автопилот» select stops being clipped (TASK-138; that 313px is a clip
-   threshold, not the column's formal min-content, see «adaptive HUD layout»
-   above) -- the select scrolls rather than being cut, and the bar is what says so.
+   .sw-sector-grid__ship was in the list for exactly the same reason, not for its
+   vertical overflow: `overflow-y: auto` makes overflow-x compute to auto too, and
+   between 1150 and 1194 the fluid column used to sit under the 313px at which the
+   undocked «Автопилот» select stopped being clipped (TASK-138), so the select
+   scrolled rather than being cut and the bar was what said so.
+   That horizontal overflow is GONE as of TASK-139 -- the select lost its
+   min-content floor, and the column measures scrollWidth == clientWidth at 1150
+   again. The entry stays because the column still scrolls VERTICALLY and the 9px
+   bar is what the rest of this rule is for; do not re-derive the 313px threshold
+   from this paragraph (see «adaptive HUD layout» above, which is the current
+   record).
    Side effect worth knowing: this also swaps that column's default 15px platform
    bar for the 9px one, which hands 6px back to the panels at every width.
    Caveat for whoever verifies this: headless Chromium forces overlay scrollbars
@@ -1526,9 +1550,11 @@ html, body, #root {
   border-top: 1px solid var(--line);
   margin-top: 8px;
 }
-.sw-auction__create label,
-.sw-auction__create select,
-.sw-auction__create input { min-width: 0; }
+/* Only the label needs its own rule now: the form carries .sw-form too, so
+   `.sw-form select, .sw-form input { min-width: 0 }` (TASK-139) already covers
+   the controls, and repeating them here would be one more place to keep in
+   sync for no effect. */
+.sw-auction__create label { min-width: 0; }
 
 /* ...but min-width:0 alone traded one lost control for one unreadable one: the
    goods <select> then shrank to its track and cut 176-194px off the option text

@@ -15,7 +15,7 @@ import { usePoliceLog } from './usePoliceLog';
 import { useShipCaptureLog } from './useShipCaptureLog';
 import { useStationHackedLog } from './useStationHackedLog';
 import { useQuestOfferLog } from './useQuestOfferLog';
-import { EntityKind, type WorldGate } from './api';
+import { EntityKind, type SectorStatics, type WorldGate } from './api';
 
 const EMPTY_GATES: WorldGate[] = [];
 const EMPTY_SECTOR_NAMES = new Map<number, string>();
@@ -141,16 +141,7 @@ export function SectorView() {
       if (!target || target.sectorID !== ownSectorID) return null;
       return { kind: 'ship', id: ref.id };
     }
-    const list =
-      ref.kind === EntityKind.Station
-        ? statics.stations
-        : ref.kind === EntityKind.Shipyard
-          ? statics.shipyards
-          : ref.kind === EntityKind.TradeStation
-            ? statics.tradeStations
-            : ref.kind === EntityKind.Pirbase
-              ? statics.pirbases
-              : undefined;
+    const list = selectedStaticList(statics, ref.kind);
     const hit = list?.find((s) => s.id === ref.id && s.sectorID === ownSectorID);
     if (!hit) return null;
     return { kind: 'dock', refKind: ref.kind, id: ref.id };
@@ -339,6 +330,33 @@ export function SectorView() {
       />
     </div>
   );
+}
+
+// selectedStaticList picks the statics array a target EntityRef of a static
+// kind lives in. Mirrors ObjectLayer.staticList: both consumers of
+// selectedTargetRef (panel row, canvas ring) resolve through it, so a kind
+// missing here silently drops the whole selected-highlight for that object
+// type (TASK-125: satellites and laser towers were absent).
+function selectedStaticList(
+  statics: SectorStatics,
+  refKind: number,
+): { id: number; sectorID: number }[] | undefined {
+  switch (refKind) {
+    case EntityKind.Station:
+      return statics.stations;
+    case EntityKind.Shipyard:
+      return statics.shipyards;
+    case EntityKind.TradeStation:
+      return statics.tradeStations;
+    case EntityKind.Pirbase:
+      return statics.pirbases;
+    case EntityKind.Satellite:
+      return statics.satellites;
+    case EntityKind.LaserTower:
+      return statics.laserTowers;
+    default:
+      return undefined;
+  }
 }
 
 function ZoomToggle({

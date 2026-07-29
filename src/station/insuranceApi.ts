@@ -1,5 +1,8 @@
 // Typed client for the insurance endpoints (phase 6.5). Same fetch + {error}
-// convention as the other station tabs.
+// convention as the other station tabs — and, since the review of TASK-140, the
+// same transport: netFetch so a dead connection is a NetworkError, ApiError so
+// commandErrorText can tell a refused premium from an unanswered one.
+import { ApiError, netFetch } from '../api';
 
 export type InsurancePolicy = {
   id: number;
@@ -26,9 +29,9 @@ async function errMessage(res: Response): Promise<string> {
 }
 
 export async function fetchMyPolicies(): Promise<InsurancePolicy[]> {
-  const res = await fetch('/api/insurance');
+  const res = await netFetch('/api/insurance');
   if (!res.ok) {
-    throw new Error(`GET /api/insurance: ${await errMessage(res)}`);
+    throw new ApiError(res.status, `GET /api/insurance: ${await errMessage(res)}`);
   }
   return (await res.json()) as InsurancePolicy[];
 }
@@ -38,13 +41,13 @@ export async function buyInsurance(
   premium: number,
   durationDays: number,
 ): Promise<{ id: number }> {
-  const res = await fetch('/api/insurance', {
+  const res = await netFetch('/api/insurance', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ shipId, premium, durationDays }),
   });
   if (!res.ok) {
-    throw new Error(await errMessage(res));
+    throw new ApiError(res.status, await errMessage(res));
   }
   return (await res.json()) as { id: number };
 }

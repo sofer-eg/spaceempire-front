@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  commandErrorText,
   fetchCargo,
   friendlyError,
   sendMoveCargo,
@@ -20,8 +21,9 @@ type Props = {
 // purpose — explicit per-row buttons + qty input is simpler to test and
 // covers the same MVP UX the task spec asks for.
 export function CargoView({ station, shipID }: Props) {
-  const { goods, ownShip, races } = useGameContext();
+  const { goods, ships, races } = useGameContext();
   const ship = useMemo<EntityRef>(() => ({ kind: 1, id: shipID }), [shipID]);
+  const dockedShip = ships.get(shipID);
   const [shipInv, setShipInv] = useState<CargoInventory | null>(null);
   const [stationInv, setStationInv] = useState<CargoInventory | null>(null);
   const [loadStatus, setLoadStatus] = useState<'loading' | 'ok' | 'error'>('loading');
@@ -59,7 +61,7 @@ export function CargoView({ station, shipID }: Props) {
       emitLog({
         category: 'trade',
         kind: 'danger',
-        message: `Перенос ${qty} × ${goodsName(goods, typeID)}: ${friendlyError(err)}`,
+        message: `Перенос ${qty} × ${goodsName(goods, typeID)}: ${commandErrorText(err)}`,
       });
     } finally {
       setBusy(false);
@@ -83,9 +85,12 @@ export function CargoView({ station, shipID }: Props) {
   return (
     <div className="sw-cargo">
       <CargoColumn
-        // The docked ship is ownShip (StationView passes its id), so it is
-        // named the way the HUD names it instead of by its raw id (TASK-140).
-        title={ownShip ? `Трюм · ${shipDisplayName(ownShip, races)}` : 'Трюм корабля'}
+        // Named the way the HUD names it instead of by its raw id (TASK-140).
+        // Resolved from the shipID prop the inventory is loaded for, not from
+        // ownShip: the two agree today only because StationView passes ownShip's
+        // id, and a header naming a different ship than the hold below it is the
+        // exact defect class this task is about.
+        title={dockedShip ? `Трюм · ${shipDisplayName(dockedShip, races)}` : 'Трюм корабля'}
         inv={shipInv}
         action="unload"
         busy={busy}

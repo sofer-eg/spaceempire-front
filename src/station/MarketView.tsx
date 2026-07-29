@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   EntityKind,
+  commandErrorText,
   fetchCargo,
   fetchMarket,
   friendlyError,
@@ -152,9 +153,10 @@ export function MarketView({ station, shipID, reloadSignal }: Props) {
       };
     });
 
-  // Tooltip numbers get the same ru-RU thousands separators as the rest of the
-  // UI — the wallet in particular reads as «10 829 372 434», not one 11-digit
-  // run (TASK-140).
+  // Figures get the same ru-RU thousands separators as the rest of the UI — the
+  // wallet in particular reads as «10 829 372 434», not one 11-digit run
+  // (TASK-140). The «Запас» cell shares it with its own title, which was
+  // formatted while the cell one line away was not.
   const ru = (n: number) => n.toLocaleString('ru-RU');
 
   const onBuy = async (entry: MarketEntry) => {
@@ -178,7 +180,7 @@ export function MarketView({ station, shipID, reloadSignal }: Props) {
       emitLog({
         category: 'trade',
         kind: 'danger',
-        message: `Покупка ${want} × ${goodsName(goods, typeID)}: ${friendlyError(err)}`,
+        message: `Покупка ${want} × ${goodsName(goods, typeID)}: ${commandErrorText(err)}`,
       });
     }
   };
@@ -202,7 +204,7 @@ export function MarketView({ station, shipID, reloadSignal }: Props) {
       emitLog({
         category: 'trade',
         kind: 'danger',
-        message: `Продажа ${want} × ${goodsName(goods, typeID)}: ${friendlyError(err)}`,
+        message: `Продажа ${want} × ${goodsName(goods, typeID)}: ${commandErrorText(err)}`,
       });
     }
   };
@@ -265,7 +267,7 @@ export function MarketView({ station, shipID, reloadSignal }: Props) {
         {/* Stock is secondary info: it folds away on a narrow card so «Кол-во»
             and the buy/sell buttons stay on screen (TASK-134). */}
         <td className="sw-mono sw-table__secondary">
-          {it.stock}/{it.maxStock}
+          {ru(it.stock)}/{ru(it.maxStock)}
         </td>
         <td>
           <input

@@ -53,7 +53,7 @@ export function HangarView({ station }: { station: EntityRef }) {
             ? 'свой'
             : s.isNPC
               ? null
-              : logins.get(s.playerID) ?? `#${s.playerID}`;
+              : logins.get(s.playerID) ?? `игрок #${s.playerID}`;
           const label = owner ? `${shipDisplayName(s, races)} · ${owner}` : shipDisplayName(s, races);
 
           // Board affordance: own → control; NPC/open → passenger; else closed.

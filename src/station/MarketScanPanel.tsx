@@ -101,7 +101,7 @@ export function MarketScanPanel({ reloadSignal }: Props) {
             title={`Прогноз цены: ${g.forecastPrice.toLocaleString('ru-RU')} cr · прогноз запаса: ${g.forecastStock.toLocaleString('ru-RU')}`}
           >
             {trend.arrow}
-            {g.forecastPrice}
+            {g.forecastPrice.toLocaleString('ru-RU')}
           </span>
         )}
       </div>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { friendlyError } from '../api';
+import { commandErrorText, friendlyError } from '../api';
 import { useGameContext } from '../gameContext';
 import {
   buyInsurance,
@@ -94,7 +94,7 @@ function BuyInsuranceForm({ shipID, onBought }: { shipID: number; onBought: () =
       setPremium('');
       onBought();
     } catch (e) {
-      setError(friendlyError(e));
+      setError(commandErrorText(e));
     } finally {
       setBusy(false);
     }

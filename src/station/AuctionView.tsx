@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   EntityKind,
+  commandErrorText,
   fetchAuctionLots,
   fetchMyAuctionLots,
   fetchCargo,
@@ -69,8 +70,14 @@ export function AuctionView({ stationLabel, shipID }: Props) {
   // bidderLabel turns a lot's currentBidderID into the leader's login. The
   // fallback covers a bidder missing from the players catalog (it is fetched
   // once at mount, so an account created since then is not in it).
-  const bidderLabel = (bidderID: number | undefined) => {
-    if (bidderID == null) return 'ставок нет';
+  //
+  // `empty` is what an unbid lot reads as. The narrow ЛИДЕР column takes «—»,
+  // the file's convention for an empty cell (MarketView, MarketScanPanel): a
+  // fresh auction is mostly unbid lots, and «ставок нет» on every row at once
+  // widened a column TASK-134 had fitted to the HUD centre cell. The title,
+  // which has the room, spells it out.
+  const bidderLabel = (bidderID: number | undefined, empty: string) => {
+    if (bidderID == null) return empty;
     return logins.get(bidderID) ?? `игрок #${bidderID}`;
   };
 
@@ -150,13 +157,18 @@ export function AuctionView({ stationLabel, shipID }: Props) {
                         columns that fold on a narrow card; the goods cell — the
                         one element of the row that is never disabled — carries
                         them in its title so they stay readable (AC #6). */}
-                    <td title={`Лот #${lot.id} · лидер: ${bidderLabel(lot.currentBidderID)}`}>
+                    <td
+                      title={`Лот #${lot.id} · лидер: ${bidderLabel(lot.currentBidderID, 'ставок нет')}`}
+                    >
                       {goodsName(goods, lot.goodsTypeID)}
                     </td>
                     <td className="sw-mono">{lot.quantity}</td>
                     <td className="sw-mono">{lot.currentPrice.toLocaleString('ru-RU')}</td>
-                    <td className="sw-mono sw-table__secondary">
-                      {bidderLabel(lot.currentBidderID)}
+                    <td
+                      className="sw-mono sw-table__secondary"
+                      title={lot.currentBidderID == null ? 'Ставок нет' : undefined}
+                    >
+                      {bidderLabel(lot.currentBidderID, '—')}
                     </td>
                     <td className="sw-mono">{ttl}</td>
                     <td>
@@ -297,7 +309,7 @@ function CreateLotForm({ source, shipCargo, onCreated }: CreateProps) {
       emitLog({
         category: 'trade',
         kind: 'danger',
-        message: `Создание лота (${goodsName(goods, effectiveTypeID!)}): ${friendlyError(err)}`,
+        message: `Создание лота (${goodsName(goods, effectiveTypeID!)}): ${commandErrorText(err)}`,
       });
     }
   };

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { EntityKind, claimStation, friendlyError, getShipAtShipyard } from '../api';
+import { EntityKind, claimStation, commandErrorText, friendlyError, getShipAtShipyard } from '../api';
 import { useGameContext, useStation } from '../gameContext';
 import { CargoView } from './CargoView';
 import { MarketView } from './MarketView';
@@ -45,7 +45,7 @@ export function StationView() {
       void refreshPlayer();
       setClaimMsg('Станция куплена — арендные обязательства начислены.');
     } catch (err) {
-      setClaimMsg(friendlyError(err));
+      setClaimMsg(commandErrorText(err));
     }
   };
 
@@ -75,7 +75,7 @@ export function StationView() {
   // Auction is always available — lots are global, not station-bound.
 
   const ownerLabel = station.ownerID
-    ? logins.get(station.ownerID) ?? `#${station.ownerID}`
+    ? logins.get(station.ownerID) ?? `игрок #${station.ownerID}`
     : 'NPC';
 
   return (

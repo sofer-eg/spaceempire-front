@@ -1,17 +1,25 @@
-// Unit tests for the pure Russian error mappers in api.ts: friendlyError (the
-// generic one every station tab uses, TASK-140), jumpDriveErrorText
-// (up_jump_drive, TASK-129) and installErrorText (install-satellite /
-// install-jammer, TASK-149). Run with the Node built-in test runner
-// (`npm run test`, i.e. `node --test`); the mappers are DOM-free, so importing
-// ./api.ts directly is safe (that module has no top-level browser access).
+// Unit tests for the Russian error mappers in api.ts: friendlyError (reads,
+// TASK-140), commandErrorText (anything that spends credits or moves goods),
+// jumpDriveErrorText (up_jump_drive, TASK-129) and installErrorText
+// (install-satellite / install-jammer, TASK-149), plus the netFetch wrapper the
+// first two classify by. Run with the Node built-in test runner (`npm run
+// test`, i.e. `node --test`); the mappers are DOM-free, so importing ./api.ts
+// directly is safe (that module has no top-level browser access).
+//
+// The mappers are deterministic but not side-effect-free: each one console.errors
+// the raw failure before returning its Russian line, so a run prints the sample
+// errors below to stderr. That is the intended behaviour, not test noise.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ApiError,
+  NetworkError,
+  commandErrorText,
   friendlyError,
   installErrorText,
   isOutcomeUnknown,
   jumpDriveErrorText,
+  netFetch,
 } from './api.ts';
 
 test('jumpDriveErrorText maps each backend status to a Russian line', () => {
@@ -171,13 +179,13 @@ test('installErrorText 504 says the outcome is unknown instead of inviting a ret
   assert.doesNotMatch(jammer, /попробуйте ещё раз/i);
 });
 
-// The commonest way to lose an ack is not 504 but a dead connection: fetch
-// rejects with a TypeError, which never reaches the status switch. It must read
-// like 504 — «TypeError: Failed to fetch» says nothing and looks like "nothing
+// The commonest way to lose an ack is not 504 but a dead connection: netFetch
+// rejects with a NetworkError, which never reaches the status switch. It must
+// read like 504 — «Failed to fetch» says nothing and looks like "nothing
 // happened", which is how a player ends up deploying a second ≈1.13M cr
 // generator.
 test('installErrorText gives a dropped connection the same unknown-outcome line as 504', () => {
-  const dropped = installErrorText(new TypeError('Failed to fetch'), 'jammer');
+  const dropped = installErrorText(new NetworkError(new TypeError('Failed to fetch')), 'jammer');
   assert.equal(dropped, installErrorText(new ApiError(504, 'command timeout'), 'jammer'));
   assert.match(dropped, /исход неизвестен/i);
   assert.doesNotMatch(dropped, /Failed to fetch/);
@@ -207,7 +215,7 @@ test('installErrorText 502 reads as an unknown outcome, not as a failure', () =>
 test('isOutcomeUnknown covers 502, 504 and non-ApiError failures only', () => {
   assert.equal(isOutcomeUnknown(new ApiError(504, 'command timeout')), true);
   assert.equal(isOutcomeUnknown(new ApiError(502, 'Bad Gateway')), true);
-  assert.equal(isOutcomeUnknown(new TypeError('Failed to fetch')), true);
+  assert.equal(isOutcomeUnknown(new NetworkError(new TypeError('Failed to fetch'))), true);
   assert.equal(isOutcomeUnknown('boom'), true);
   assert.equal(isOutcomeUnknown(new ApiError(400, 'no jammer in cargo')), false);
   assert.equal(isOutcomeUnknown(new ApiError(503, 'sector busy')), false);
@@ -248,13 +256,121 @@ test('friendlyError strips the route prefix off a backend error', () => {
 });
 
 test('friendlyError words a dead connection in Russian', () => {
-  // fetch rejects with a TypeError when the request never got an answer — the
-  // native message is the English "Failed to fetch" the Russian UI used to show.
-  const text = friendlyError(new TypeError('Failed to fetch'));
+  // netFetch rejects with a NetworkError when the request never got an answer —
+  // the native cause is the English "Failed to fetch" the UI used to show.
+  const text = friendlyError(new NetworkError(new TypeError('Failed to fetch')));
   assert.doesNotMatch(text, /Failed to fetch/);
   assert.match(text, /Нет связи с сервером/);
+  // A read may be retried freely, but this same line reaches the player after a
+  // POST too if a caller forgets commandErrorText, so it no longer *invites* a
+  // retry. The tab's own «Повторить» button is the affordance for that.
+  assert.doesNotMatch(text, /повтор/i);
 });
 
 test('friendlyError stringifies a non-Error rejection', () => {
   assert.equal(friendlyError('boom'), 'boom');
+});
+
+// --- Review of TASK-140 -----------------------------------------------------
+
+// The old mapper branched on `err instanceof TypeError`, which is also what a
+// bug in this SPA throws. Demonstrated live: a 200 with a null body makes
+// fetchAuctionLots read `.lots` off null, and the tab announced «Нет связи с
+// сервером» while the server had answered.
+test('friendlyError does not blame the network for a TypeError thrown by our own code', () => {
+  const bug = new TypeError("Cannot read properties of null (reading 'lots')");
+  const text = friendlyError(bug);
+  assert.doesNotMatch(text, /Нет связи с сервером/);
+  assert.doesNotMatch(text, /подключение/i);
+  // Nor is the V8 sentence itself an answer for a player: it gets its own line,
+  // and the raw error stays in the console for whoever reports it.
+  assert.doesNotMatch(text, /Cannot read properties/);
+  assert.match(text, /Ошибка в интерфейсе игры/);
+
+  // Still distinct from a backend refusal, which is echoed as before.
+  assert.equal(friendlyError(new Error('GET /api/insurance: not found')), 'not found');
+});
+
+// AC #3: 502/504 come from Apache in front of the Go process, so their body is
+// HTML and parseErrorBody falls back to statusText — the English "Bad Gateway"
+// the market tab used to print after its Russian prefix.
+test('friendlyError words a proxy 502/504 in Russian', () => {
+  const badGateway = friendlyError(new ApiError(502, 'POST /api/cmd/trade/buy: Bad Gateway'));
+  assert.doesNotMatch(badGateway, /Bad Gateway/);
+  assert.match(badGateway, /Сервер не ответил \(502\)/);
+
+  const timeout = friendlyError(new ApiError(504, 'GET /api/auction: Gateway Timeout'));
+  assert.match(timeout, /Сервер не ответил \(504\)/);
+});
+
+// Over HTTP/2 statusText is always empty, so parseErrorBody returned "" and the
+// caller's line ended at its colon: «Покупка 50 × Энергоэлементы: ».
+test('friendlyError never returns an empty line for a body-less error', () => {
+  const text = friendlyError(new ApiError(500, 'POST /api/cmd/trade/buy: '));
+  assert.notEqual(text.trim(), '');
+  assert.match(text, /Сервер вернул ошибку 500/);
+});
+
+// --- commandErrorText -------------------------------------------------------
+
+// AC #3 + the money half of AC #5: a lost ack does not mean "nothing happened".
+// The station commands all charge or move goods inside the same transaction that
+// answers, so «повторите» is how a 1 200 000 cr hull gets bought twice.
+test('commandErrorText says the outcome is unknown instead of inviting a retry', () => {
+  const dropped = commandErrorText(new NetworkError(new TypeError('Failed to fetch')));
+  assert.match(dropped, /исход неизвестен/i);
+  assert.match(dropped, /Проверьте кошелёк и трюм/);
+  assert.doesNotMatch(dropped, /повторите\./i);
+  assert.doesNotMatch(dropped, /Failed to fetch/);
+
+  // A proxy answering for a backend that died mid-deploy is the same situation.
+  for (const status of [502, 504]) {
+    const text = commandErrorText(new ApiError(status, `POST /api/cmd/trade/buy: ${status}`));
+    assert.equal(text, dropped, `${status} must read like a dropped connection`);
+  }
+});
+
+// The unknown-outcome line must stay the exception: a plain refusal is still
+// reported verbatim, or the caution becomes noise the player learns to ignore.
+test('commandErrorText passes a decided failure through friendlyError', () => {
+  const refused = new ApiError(400, 'POST /api/cmd/trade/buy: not enough cash');
+  assert.equal(commandErrorText(refused), 'not enough cash');
+  assert.equal(commandErrorText(refused), friendlyError(refused));
+  assert.doesNotMatch(commandErrorText(refused), /исход неизвестен/i);
+
+  // 503 stays out of the in-doubt set (the connection was never established),
+  // exactly as UNKNOWN_OUTCOME_STATUSES states for the install commands.
+  assert.doesNotMatch(commandErrorText(new ApiError(503, 'sector busy')), /исход неизвестен/i);
+});
+
+// --- netFetch ---------------------------------------------------------------
+
+// The wrapper is the whole reason the mappers can tell "no answer" from "our own
+// code threw": it labels the rejection at the call, where the distinction is
+// still known.
+test('netFetch wraps a fetch rejection in NetworkError and passes a response through', async () => {
+  const original = globalThis.fetch;
+  try {
+    const cause = new TypeError('Failed to fetch');
+    globalThis.fetch = () => Promise.reject(cause);
+    const err: unknown = await netFetch('/api/state').then(
+      () => null,
+      (e: unknown) => e,
+    );
+    assert.ok(err instanceof NetworkError, 'a fetch rejection must arrive as NetworkError');
+    assert.equal(err.cause, cause);
+    // isOutcomeUnknown (install commands) keeps treating it as in-doubt.
+    assert.equal(isOutcomeUnknown(err), true);
+    // Views outside the station tabs (clans, bounties, fleet, the galaxy map)
+    // render err.message with no mapper at all, so the message itself has to be
+    // the Russian line — not "Failed to fetch" under a new name.
+    assert.equal(err.message, friendlyError(err));
+    assert.match(err.message, /Нет связи с сервером/);
+
+    const ok = new Response('{}', { status: 200 });
+    globalThis.fetch = () => Promise.resolve(ok);
+    assert.equal(await netFetch('/api/state'), ok);
+  } finally {
+    globalThis.fetch = original;
+  }
 });

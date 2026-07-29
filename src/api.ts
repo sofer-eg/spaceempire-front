@@ -512,7 +512,7 @@ export type PlayerSummary = {
 };
 
 export async function fetchState(): Promise<Snapshot> {
-  const res = await fetch('/api/state');
+  const res = await netFetch('/api/state');
   if (!res.ok) {
     throw new Error(`GET /api/state ${res.status}`);
   }
@@ -520,7 +520,7 @@ export async function fetchState(): Promise<Snapshot> {
 }
 
 export async function fetchPlayers(): Promise<PlayerSummary[]> {
-  const res = await fetch('/api/players');
+  const res = await netFetch('/api/players');
   if (!res.ok) {
     throw new Error(`GET /api/players ${res.status}`);
   }
@@ -533,7 +533,7 @@ export async function sendMove(
   y: number,
   targetRef?: EntityRef,
 ): Promise<void> {
-  const res = await fetch('/api/cmd/move', {
+  const res = await netFetch('/api/cmd/move', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ shipID, x, y, targetRef }),
@@ -553,7 +553,7 @@ export async function sendSetCourse(
   y: number,
   approach?: EntityRef,
 ): Promise<SetCourseResponse> {
-  const res = await fetch('/api/cmd/set-course', {
+  const res = await netFetch('/api/cmd/set-course', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ shipID, sectorID, x, y, approach }),
@@ -566,7 +566,7 @@ export async function sendSetCourse(
 }
 
 export async function sendJump(shipID: number, gateID: number): Promise<void> {
-  const res = await fetch('/api/cmd/jump', {
+  const res = await netFetch('/api/cmd/jump', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ shipID, gateID }),
@@ -582,7 +582,7 @@ export async function sendJump(shipID: number, gateID: number): Promise<void> {
 // picks only the sector, not a position. Throws ApiError on a non-2xx so the
 // caller can pass it to jumpDriveErrorText for a Russian, human-readable line.
 export async function sendJumpDrive(shipID: number, targetSectorID: number): Promise<void> {
-  const res = await fetch('/api/cmd/jump-drive', {
+  const res = await netFetch('/api/cmd/jump-drive', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ shipID, targetSectorID }),
@@ -595,31 +595,15 @@ export async function sendJumpDrive(shipID: number, targetSectorID: number): Pro
 // claimStation buys an unowned station for the configured price (phase 8.7).
 // On success the station becomes player-owned and starts owing rent.
 export async function claimStation(stationID: number): Promise<void> {
-  const res = await fetch(`/api/stations/${stationID}/claim`, { method: 'POST' });
-  if (!res.ok) {
-    let msg = res.statusText;
-    try {
-      msg = ((await res.json()) as { error?: string }).error ?? msg;
-    } catch {
-      /* keep statusText */
-    }
-    throw new Error(msg);
-  }
+  const res = await netFetch(`/api/stations/${stationID}/claim`, { method: 'POST' });
+  await requireOk(res, `POST /api/stations/${stationID}/claim`);
 }
 
 // getShipAtShipyard exchanges the player's spacesuit (docked at the shipyard)
 // for a fresh starter ship at the same spot (phase 10.2). Free for now.
 export async function getShipAtShipyard(shipyardID: number): Promise<void> {
-  const res = await fetch(`/api/shipyard/${shipyardID}/get-ship`, { method: 'POST' });
-  if (!res.ok) {
-    let msg = res.statusText;
-    try {
-      msg = ((await res.json()) as { error?: string }).error ?? msg;
-    } catch {
-      /* keep statusText */
-    }
-    throw new Error(msg);
-  }
+  const res = await netFetch(`/api/shipyard/${shipyardID}/get-ship`, { method: 'POST' });
+  await requireOk(res, `POST /api/shipyard/${shipyardID}/get-ship`);
 }
 
 // --- Shipyard purchase + outfitting (phase 10.14) --------------------------
@@ -633,22 +617,16 @@ export type BuyShipAck = { ok: boolean; shipID: number; cash: number };
 export type OutfitAck = { ok: boolean; cash: number; equipment: InstalledEquipment[] };
 
 // postShipyard POSTs a JSON body and unwraps the {error} message on failure,
-// mirroring getShipAtShipyard's error handling.
+// mirroring getShipAtShipyard's error handling. It throws ApiError rather than a
+// plain Error so commandErrorText can see the status: a ship costs up to ~1.2M
+// cr, and only the status tells «отказано» apart from «ответа нет».
 async function postShipyard<T>(url: string, body: unknown): Promise<T> {
-  const res = await fetch(url, {
+  const res = await netFetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  if (!res.ok) {
-    let msg = res.statusText;
-    try {
-      msg = ((await res.json()) as { error?: string }).error ?? msg;
-    } catch {
-      /* keep statusText */
-    }
-    throw new Error(msg);
-  }
+  await requireOk(res, `POST ${url}`);
   return (await res.json()) as T;
 }
 
@@ -688,7 +666,7 @@ export async function uninstallEquipment(
 }
 
 export async function sendDock(shipID: number, target: EntityRef): Promise<void> {
-  const res = await fetch('/api/cmd/dock', {
+  const res = await netFetch('/api/cmd/dock', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ shipID, target }),
@@ -700,7 +678,7 @@ export async function sendDock(shipID: number, target: EntityRef): Promise<void>
 }
 
 export async function sendUndock(shipID: number): Promise<void> {
-  const res = await fetch('/api/cmd/undock', {
+  const res = await netFetch('/api/cmd/undock', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ shipID }),
@@ -715,16 +693,17 @@ export async function sendUndock(shipID: number): Promise<void> {
 // own ship → take control; NPC / another player's open ship → ride as a
 // passenger. Returns the resulting mode. Callers refreshPlayer afterwards so the
 // HUD/own-ship (and passenger state) re-resolve.
+//
+// requireOk, not res.text(): eva.go answers {"error":"вход на этот корабль
+// закрыт"} and the raw body put that JSON envelope on screen verbatim when the
+// player raced the isOpen snapshot in the hangar (found in review of TASK-140).
 export async function boardShip(targetShipID: number): Promise<{ mode: 'control' | 'passenger' }> {
-  const res = await fetch('/api/cmd/board-ship', {
+  const res = await netFetch('/api/cmd/board-ship', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ targetShipID }),
   });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`POST /api/cmd/board-ship ${res.status}: ${body}`);
-  }
+  await requireOk(res, 'POST /api/cmd/board-ship');
   return (await res.json()) as { mode: 'control' | 'passenger' };
 }
 
@@ -732,7 +711,7 @@ export async function boardShip(targetShipID: number): Promise<{ mode: 'control'
 // current spot (10.23). Returns the new spacesuit id. Callers refreshPlayer
 // afterwards so ownShip / passenger state re-resolve.
 export async function disembark(): Promise<{ shipID: number }> {
-  const res = await fetch('/api/cmd/disembark', { method: 'POST' });
+  const res = await netFetch('/api/cmd/disembark', { method: 'POST' });
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`POST /api/cmd/disembark ${res.status}: ${body}`);
@@ -744,7 +723,7 @@ export async function disembark(): Promise<{ shipID: number }> {
 // passenger (10.23). The WS snapshot reflects the new isOpen on the next tick,
 // so callers don't need to refresh.
 export async function setShipAccess(shipID: number, open: boolean): Promise<void> {
-  const res = await fetch('/api/cmd/ship-access', {
+  const res = await netFetch('/api/cmd/ship-access', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ shipID, open }),
@@ -760,7 +739,7 @@ export async function setShipAccess(shipID: number, open: boolean): Promise<void
 // space → the suit floats free. Returns the new spacesuit id. Callers
 // refreshPlayer afterwards so ownShip re-resolves to the suit.
 export async function exitShip(shipID: number): Promise<{ shipID: number }> {
-  const res = await fetch('/api/cmd/exit-ship', {
+  const res = await netFetch('/api/cmd/exit-ship', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ shipID }),
@@ -776,7 +755,7 @@ export async function exitShip(shipID: number): Promise<{ shipID: number }> {
 // callers refreshPlayer() so the HUD/own-ship picks up the new activeShipID;
 // the WS follows the ship into its sector via a server-published handoff.
 export async function activateShip(shipID: number): Promise<void> {
-  const res = await fetch(`/api/ship/${shipID}/activate`, { method: 'POST' });
+  const res = await netFetch(`/api/ship/${shipID}/activate`, { method: 'POST' });
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`POST /api/ship/${shipID}/activate ${res.status}: ${body}`);
@@ -787,7 +766,7 @@ export async function activateShip(shipID: number): Promise<void> {
 // fraction of its base price. Returns the new wallet balance. The ship must be
 // owned, docked at this shipyard, not the active ship, and not the last one.
 export async function sellShip(shipyardID: number, shipID: number): Promise<{ cash: number }> {
-  const res = await fetch(`/api/shipyard/${shipyardID}/sell-ship`, {
+  const res = await netFetch(`/api/shipyard/${shipyardID}/sell-ship`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ shipID }),
@@ -800,7 +779,7 @@ export async function sellShip(shipyardID: number, shipID: number): Promise<{ ca
 }
 
 export async function sendAttack(shipID: number, targetRef: EntityRef): Promise<void> {
-  const res = await fetch('/api/cmd/attack', {
+  const res = await netFetch('/api/cmd/attack', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ shipID, targetRef }),
@@ -818,7 +797,7 @@ export async function sendAttack(shipID: number, targetRef: EntityRef): Promise<
 // the win/lose journal line arrives asynchronously on the WS ship_capture frame,
 // so this resolves void like sendAttack and surfaces only the 4xx as an error.
 export async function sendCapture(shipID: number, targetRef: EntityRef): Promise<void> {
-  const res = await fetch('/api/cmd/capture', {
+  const res = await netFetch('/api/cmd/capture', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ shipID, targetRef }),
@@ -837,7 +816,7 @@ export async function sendCapture(shipID: number, targetRef: EntityRef): Promise
 // arrives asynchronously on the WS station_hacked frame, so this resolves void
 // like sendCapture and surfaces only the 4xx as an error.
 export async function sendHack(shipID: number, targetRef: EntityRef): Promise<void> {
-  const res = await fetch('/api/cmd/hack', {
+  const res = await netFetch('/api/cmd/hack', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ shipID, targetRef }),
@@ -849,7 +828,7 @@ export async function sendHack(shipID: number, targetRef: EntityRef): Promise<vo
 }
 
 export async function sendCeaseFire(shipID: number): Promise<void> {
-  const res = await fetch('/api/cmd/cease-fire', {
+  const res = await netFetch('/api/cmd/cease-fire', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ shipID }),
@@ -868,7 +847,7 @@ export async function sendLaunchMissile(
   shipID: number,
   targetRef: EntityRef,
 ): Promise<{ missileID: number }> {
-  const res = await fetch('/api/cmd/launch-missile', {
+  const res = await netFetch('/api/cmd/launch-missile', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ shipID, targetRef }),
@@ -887,7 +866,7 @@ export async function sendLaunchDrone(
   targetRef: EntityRef,
   count: number,
 ): Promise<{ spawned: number }> {
-  const res = await fetch('/api/cmd/launch-drone', {
+  const res = await netFetch('/api/cmd/launch-drone', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ shipID, targetRef, count }),
@@ -909,7 +888,7 @@ export async function sendDismantleStatic(
   shipID: number,
   target: EntityRef,
 ): Promise<void> {
-  const res = await fetch('/api/cmd/dismantle-static', {
+  const res = await netFetch('/api/cmd/dismantle-static', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ shipID, target }),
@@ -926,7 +905,7 @@ export async function sendDismantleStatic(
 export async function sendRecallDrones(
   shipID: number,
 ): Promise<{ recalled: number; left: number }> {
-  const res = await fetch('/api/cmd/recall-drones', {
+  const res = await netFetch('/api/cmd/recall-drones', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ shipID }),
@@ -948,7 +927,7 @@ export async function sendLaunchTorpedo(
   targetRef: EntityRef,
   torpedoClass: number,
 ): Promise<{ torpedoID: number }> {
-  const res = await fetch('/api/cmd/launch-torpedo', {
+  const res = await netFetch('/api/cmd/launch-torpedo', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ shipID, targetRef, class: torpedoClass }),
@@ -967,7 +946,7 @@ export async function sendPickupContainer(
   shipID: number,
   containerID: number,
 ): Promise<void> {
-  const res = await fetch('/api/cmd/pickup-container', {
+  const res = await netFetch('/api/cmd/pickup-container', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ shipID, containerID }),
@@ -988,7 +967,7 @@ export async function sendPickupContainer(
 export async function sendInstallSatellite(
   shipID: number,
 ): Promise<{ satelliteID: number }> {
-  const res = await fetch('/api/cmd/install-satellite', {
+  const res = await netFetch('/api/cmd/install-satellite', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ shipID }),
@@ -1011,7 +990,7 @@ export async function sendInstallSatellite(
 export async function sendInstallJammer(
   shipID: number,
 ): Promise<{ jammerID: number }> {
-  const res = await fetch('/api/cmd/install-jammer', {
+  const res = await netFetch('/api/cmd/install-jammer', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ shipID }),
@@ -1030,7 +1009,7 @@ export async function sendInstallJammer(
 // when the ship lacks a mining drill (the menu gates the button to avoid this),
 // 404 asteroid gone, 400 out of range / docked.
 export async function sendMine(shipID: number, asteroidID: number): Promise<void> {
-  const res = await fetch('/api/cmd/mine', {
+  const res = await netFetch('/api/cmd/mine', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ shipID, asteroidID }),
@@ -1067,7 +1046,7 @@ export type WorldResponse = {
 };
 
 export async function fetchWorld(): Promise<WorldResponse> {
-  const res = await fetch('/api/world');
+  const res = await netFetch('/api/world');
   if (!res.ok) {
     throw new Error(`GET /api/world ${res.status}`);
   }
@@ -1091,6 +1070,46 @@ export class ApiError extends Error {
   }
 }
 
+// NetworkError means the request never got an answer: the backend is down, the
+// connection dropped mid-flight, DNS failed. fetch signals those by rejecting
+// with a TypeError, and testing `err instanceof TypeError` at the mapper cannot
+// tell them apart from an ordinary bug in this SPA — `body.lots` off a null body
+// throws a TypeError too, and used to surface as «Нет связи с сервером» while
+// the server had in fact answered 200 (found in review of TASK-140). netFetch
+// wraps the rejection where the distinction is still known: at the call itself.
+//
+// (An aborted request rejects with a DOMException named AbortError, not a
+// TypeError. Nothing in src/ uses AbortController today; it is wrapped here all
+// the same, because "no answer" is exactly what it is.)
+//
+// cause carries whatever fetch threw, for the console; message is the line we
+// would show a player. Views outside the station tabs (clans, bounties, fleet,
+// the galaxy map) print err.message straight into their own error slot, and this
+// is the only way they get a Russian line instead of "Failed to fetch" without
+// each of them growing a mapper. friendlyError returns the same constant.
+const NO_CONNECTION_TEXT = 'Нет связи с сервером. Проверьте подключение.';
+
+export class NetworkError extends Error {
+  cause: unknown;
+  constructor(cause: unknown) {
+    super(NO_CONNECTION_TEXT);
+    this.name = 'NetworkError';
+    this.cause = cause;
+  }
+}
+
+// netFetch is fetch plus the NetworkError wrapper. Every request in this module
+// goes through it, so the three outcomes stay distinct types: no answer
+// (NetworkError), an answer that is an error (ApiError), and our own code
+// throwing (anything else).
+export async function netFetch(input: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(input, init);
+  } catch (err) {
+    throw new NetworkError(err);
+  }
+}
+
 async function parseErrorBody(res: Response): Promise<string> {
   try {
     const body = (await res.json()) as { error?: string };
@@ -1100,31 +1119,88 @@ async function parseErrorBody(res: Response): Promise<string> {
   }
 }
 
-// friendlyError is the line a view shows the player when a request fails. It is
-// the generic mapper — the station tabs and their forms use it for every
-// failure; jumpDriveErrorText / installErrorText below are its per-command
-// specialisations, worth their own wording because their outcome matters.
+// stripRoute drops the "POST /api/…: " prefix requireOk puts in front of the
+// backend's own message.
+function stripRoute(message: string): string {
+  return message.replace(/^[A-Z]+ \/api[^:]+: /, '').trim();
+}
+
+// friendlyError is the line a view shows the player when a *read* fails — a tab
+// loading its market, hold, auction or scan. Retrying a GET costs nothing, so it
+// is allowed to read as "try again"; commandErrorText below is the mapper for
+// anything that spends credits or moves goods, and it is not.
+// jumpDriveErrorText / installErrorText are the same idea one command at a time.
 //
-// Three shapes reach it:
-//   - ApiError — the backend answered {"error": "..."}; requireOk prefixes that
-//     with the route ("GET /api/auction: ..."), stripped here.
-//   - TypeError — fetch never got an answer: backend down, connection dropped,
-//     request aborted. Its native message is the English "Failed to fetch",
-//     which is what the Russian UI showed verbatim until TASK-140.
-//   - any other Error / value — insuranceApi and the senders that throw a plain
-//     Error() after reading a response; show the message as-is.
+// Five shapes reach it:
+//   - NetworkError — netFetch never got an answer. Its native cause is the
+//     English "Failed to fetch", which the Russian UI showed verbatim until
+//     TASK-140.
+//   - ApiError — the backend (or a proxy in front of it) answered non-2xx;
+//     requireOk prefixes the message with the route, stripped here. 502/504 come
+//     from Apache, not from the game, so they carry an English statusText — or
+//     an empty one over HTTP/2, which used to leave the caller's line dangling
+//     after its colon. Both are worded here (see UNKNOWN_OUTCOME_STATUSES).
+//   - TypeError — a bug in this SPA, not a failure of the request: no sender
+//     here throws one, and netFetch owns the only rejection fetch itself
+//     produces. It used to be read as "no connection"; it now has its own line,
+//     because «Cannot read properties of null (reading 'lots')» is no better an
+//     answer for a player than the wrong one was.
+//   - any other Error — the senders that throw a plain Error() after reading a
+//     response; show the message as-is. Those messages are the backend's own
+//     (English sentinels included, as they have always been), so this branch
+//     deliberately does not Russianise.
+//   - a non-Error rejection — String()ed. Unreachable from any sender in this
+//     module (they all throw Error subclasses), so it stays a debugging aid
+//     rather than getting a Russian line that would hide the bug.
 //
 // This lived as four copies of the same closure (AuctionView ×2, CargoView,
 // MarketView); none of them worded the network case.
 export function friendlyError(err: unknown): string {
-  if (err instanceof TypeError) {
+  if (err instanceof NetworkError) {
     // Keep the native reason in the console — the player only sees the Russian
-    // line, but "Failed to fetch" vs "aborted" still matters when debugging.
-    console.error('request failed without a response', err);
-    return 'Нет связи с сервером. Проверьте подключение и повторите.';
+    // line, but "Failed to fetch" vs "NetworkError when attempting to fetch
+    // resource" still matters when debugging.
+    console.error('request failed without a response', err.cause);
+    return NO_CONNECTION_TEXT;
   }
-  if (err instanceof Error) return err.message.replace(/^[A-Z]+ \/api[^:]+: /, '');
+  if (err instanceof ApiError) {
+    if (UNKNOWN_OUTCOME_STATUSES.has(err.status)) {
+      console.error('proxy answered instead of the backend', err.status, err.message);
+      return `Сервер не ответил (${err.status}). Попробуйте позже.`;
+    }
+    // Empty when the proxy sent no body and HTTP/2 left statusText blank.
+    return stripRoute(err.message) || `Сервер вернул ошибку ${err.status}.`;
+  }
+  if (err instanceof TypeError) {
+    console.error('bug in the SPA while handling a response', err);
+    return 'Ошибка в интерфейсе игры. Обновите страницу; если повторится — сообщите разработчикам.';
+  }
+  if (err instanceof Error) return stripRoute(err.message);
   return String(err);
+}
+
+// commandErrorText is friendlyError for a request that spends credits or moves
+// goods: market buy/sell, cargo transfer, lot creation, ship purchase and
+// outfitting, insurance, claiming a station.
+//
+// It exists because friendlyError's advice is wrong for those. When no answer
+// arrives the request may still have reached the backend and committed — the
+// same in-doubt situation installErrorText was built around in TASK-149, and
+// which UNKNOWN_OUTCOME_STATUSES already states for 502/504. Telling a player
+// on a lost ack to «повторите» is how a 1 200 000 cr hull gets bought twice.
+//
+// Deliberately NOT applied to sendAuctionBid: the backend only accepts a bid
+// strictly above the current price, so a repeat of a bid that did land is
+// rejected rather than charged twice, and the cautious line would be noise.
+export function commandErrorText(err: unknown): string {
+  if (err instanceof NetworkError || (err instanceof ApiError && UNKNOWN_OUTCOME_STATUSES.has(err.status))) {
+    console.error('command outcome unknown', err);
+    return (
+      'Ответ не получен, исход неизвестен. Команда могла пройти, а кредиты и товар — списаться. ' +
+      'Проверьте кошелёк и трюм, прежде чем повторять.'
+    );
+  }
+  return friendlyError(err);
 }
 
 // Lines shared by jumpDriveErrorText and installErrorText below. Both mappers
@@ -1219,10 +1295,10 @@ const UNKNOWN_OUTCOME_STATUSES = new Set([502, 504]);
 
 // isOutcomeUnknown reports whether a failed install-* command may nonetheless
 // have been applied by the server — either one of the statuses above, or a
-// rejection that is not an ApiError at all (fetch rejects with a TypeError on a
-// dropped connection, DNS failure or abort, and the request may still have
-// landed). See TASK-144: the goods debit now commits with the object INSERT, so
-// "no answer" no longer implies "no charge".
+// rejection that is not an ApiError at all (a NetworkError on a dropped
+// connection or DNS failure, where the request may still have landed). See
+// TASK-144: the goods debit now commits with the object INSERT, so "no answer"
+// no longer implies "no charge".
 //
 // Two limits on the non-ApiError half, both narrower than the name suggests:
 //
@@ -1353,7 +1429,7 @@ export type PlayerSelf = {
 };
 
 export async function fetchPlayerSelf(): Promise<PlayerSelf> {
-  const res = await fetch('/api/player/me');
+  const res = await netFetch('/api/player/me');
   await requireOk(res, 'GET /api/player/me');
   return (await res.json()) as PlayerSelf;
 }
@@ -1362,7 +1438,7 @@ export async function fetchPlayerSelf(): Promise<PlayerSelf> {
 // ship reuses the snapshot Ship shape, so shipDisplayName/class-catalog labelling
 // applies. The fleet panel renders these with a "make active" action.
 export async function fetchFleet(): Promise<Ship[]> {
-  const res = await fetch('/api/player/ships');
+  const res = await netFetch('/api/player/ships');
   await requireOk(res, 'GET /api/player/ships');
   const body = (await res.json()) as { ships: Ship[] };
   return body.ships ?? [];
@@ -1378,7 +1454,7 @@ export type GoodsRow = {
 };
 
 export async function fetchGoodsCatalog(): Promise<GoodsRow[]> {
-  const res = await fetch('/api/goods');
+  const res = await netFetch('/api/goods');
   await requireOk(res, 'GET /api/goods');
   const body = (await res.json()) as { items: GoodsRow[] };
   return body.items ?? [];
@@ -1396,7 +1472,7 @@ export type Race = {
 };
 
 export async function fetchRaces(): Promise<Race[]> {
-  const res = await fetch('/api/races');
+  const res = await netFetch('/api/races');
   await requireOk(res, 'GET /api/races');
   const body = (await res.json()) as { items: Race[] };
   return body.items ?? [];
@@ -1421,7 +1497,7 @@ export type RaceStandings = {
 };
 
 export async function fetchRaceStandings(): Promise<RaceStandings> {
-  const res = await fetch('/api/my/race-standings');
+  const res = await netFetch('/api/my/race-standings');
   await requireOk(res, 'GET /api/my/race-standings');
   const body = (await res.json()) as RaceStandings;
   return {
@@ -1512,7 +1588,7 @@ function cargoEndpoint(ref: EntityRef): string {
 }
 
 export async function fetchCargo(owner: EntityRef): Promise<CargoInventory> {
-  const res = await fetch(cargoEndpoint(owner));
+  const res = await netFetch(cargoEndpoint(owner));
   await requireOk(res, `GET ${cargoEndpoint(owner)}`);
   return (await res.json()) as CargoInventory;
 }
@@ -1523,7 +1599,7 @@ export async function sendMoveCargo(
   typeID: number,
   quantity: number,
 ): Promise<void> {
-  const res = await fetch('/api/cmd/cargo/move', {
+  const res = await netFetch('/api/cmd/cargo/move', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ from, to, typeID, quantity }),
@@ -1574,7 +1650,7 @@ function marketEndpoint(ref: EntityRef): string {
 }
 
 export async function fetchMarket(owner: EntityRef): Promise<MarketResponse> {
-  const res = await fetch(marketEndpoint(owner));
+  const res = await netFetch(marketEndpoint(owner));
   await requireOk(res, `GET ${marketEndpoint(owner)}`);
   return (await res.json()) as MarketResponse;
 }
@@ -1593,7 +1669,7 @@ export async function sendBuy(
   typeID: number,
   qty: number,
 ): Promise<TradeAck> {
-  const res = await fetch('/api/cmd/trade/buy', {
+  const res = await netFetch('/api/cmd/trade/buy', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ shipID, station, typeID, qty }),
@@ -1608,7 +1684,7 @@ export async function sendSell(
   typeID: number,
   qty: number,
 ): Promise<TradeAck> {
-  const res = await fetch('/api/cmd/trade/sell', {
+  const res = await netFetch('/api/cmd/trade/sell', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ shipID, station, typeID, qty }),
@@ -1658,7 +1734,7 @@ export type ScanResponse = {
 // ship. 403 when no trade_up module is fitted — the caller only calls this when
 // the ship carries one, so a 403 surfaces as an ApiError the block can hide on.
 export async function fetchMarketScan(): Promise<ScanResponse> {
-  const res = await fetch('/api/market-scan');
+  const res = await netFetch('/api/market-scan');
   await requireOk(res, 'GET /api/market-scan');
   return (await res.json()) as ScanResponse;
 }
@@ -1679,7 +1755,7 @@ export type AuctionLot = {
 };
 
 export async function fetchAuctionLots(): Promise<AuctionLot[]> {
-  const res = await fetch('/api/auction');
+  const res = await netFetch('/api/auction');
   await requireOk(res, 'GET /api/auction');
   const body = (await res.json()) as { lots: AuctionLot[] };
   return body.lots ?? [];
@@ -1688,7 +1764,7 @@ export async function fetchAuctionLots(): Promise<AuctionLot[]> {
 // fetchMyAuctionLots returns lots the player is involved in (as seller or
 // current high bidder), any status — for the "Мои лоты/ставки" view.
 export async function fetchMyAuctionLots(): Promise<AuctionLot[]> {
-  const res = await fetch('/api/auction/mine');
+  const res = await netFetch('/api/auction/mine');
   await requireOk(res, 'GET /api/auction/mine');
   const body = (await res.json()) as { lots: AuctionLot[] };
   return body.lots ?? [];
@@ -1701,7 +1777,7 @@ export async function sendAuctionCreate(params: {
   startPrice: number;
   durationSeconds: number;
 }): Promise<AuctionLot> {
-  const res = await fetch('/api/auction', {
+  const res = await netFetch('/api/auction', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -1720,7 +1796,7 @@ export async function sendAuctionBid(
   shipID: number,
   amount: number,
 ): Promise<AuctionBidAck> {
-  const res = await fetch(`/api/auction/${lotID}/bid`, {
+  const res = await netFetch(`/api/auction/${lotID}/bid`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ shipID, amount }),
@@ -1752,7 +1828,7 @@ export type ActiveQuest = {
 };
 
 export async function fetchActiveQuests(): Promise<ActiveQuest[]> {
-  const res = await fetch('/api/quests/active');
+  const res = await netFetch('/api/quests/active');
   await requireOk(res, 'GET /api/quests/active');
   return ((await res.json()) as ActiveQuest[]) ?? [];
 }
@@ -1773,7 +1849,7 @@ export type OfferableQuest = {
 };
 
 export async function fetchOfferableQuests(): Promise<OfferableQuest[]> {
-  const res = await fetch('/api/quests/offerable');
+  const res = await netFetch('/api/quests/offerable');
   await requireOk(res, 'GET /api/quests/offerable');
   return ((await res.json()) as OfferableQuest[]) ?? [];
 }
@@ -1782,12 +1858,12 @@ export async function fetchOfferableQuests(): Promise<OfferableQuest[]> {
 // "proc:<n>" handle — it contains a colon, so it MUST be percent-encoded into the
 // path (encodeURIComponent). 404 on a foreign/unknown/expired offer.
 export async function acceptQuest(offerId: string): Promise<void> {
-  const res = await fetch(`/api/quests/${encodeURIComponent(offerId)}/accept`, { method: 'POST' });
+  const res = await netFetch(`/api/quests/${encodeURIComponent(offerId)}/accept`, { method: 'POST' });
   await requireOk(res, `POST /api/quests/${offerId}/accept`);
 }
 
 export async function abandonQuest(questId: string): Promise<void> {
-  const res = await fetch(`/api/quests/${encodeURIComponent(questId)}/abandon`, { method: 'POST' });
+  const res = await netFetch(`/api/quests/${encodeURIComponent(questId)}/abandon`, { method: 'POST' });
   await requireOk(res, `POST /api/quests/${questId}/abandon`);
 }
 
@@ -1815,7 +1891,7 @@ export type ShipClass = {
 };
 
 export async function fetchShipClasses(): Promise<ShipClass[]> {
-  const res = await fetch('/api/ship-classes');
+  const res = await netFetch('/api/ship-classes');
   await requireOk(res, 'GET /api/ship-classes');
   const body = (await res.json()) as { items: ShipClass[] };
   return body.items;
@@ -1835,7 +1911,7 @@ export type StationType = {
 };
 
 export async function fetchStationTypes(): Promise<StationType[]> {
-  const res = await fetch('/api/station-types');
+  const res = await netFetch('/api/station-types');
   await requireOk(res, 'GET /api/station-types');
   const body = (await res.json()) as { items: StationType[] };
   return body.items ?? [];
@@ -1869,7 +1945,7 @@ export type Equipment = {
 };
 
 export async function fetchEquipment(): Promise<Equipment[]> {
-  const res = await fetch('/api/equipment');
+  const res = await netFetch('/api/equipment');
   await requireOk(res, 'GET /api/equipment');
   const body = (await res.json()) as { items: Equipment[] };
   return body.items ?? [];

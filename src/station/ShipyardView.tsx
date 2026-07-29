@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import {
   buyShip,
+  commandErrorText,
   fetchEquipment,
   fetchRaceStandings,
   fetchShipClasses,
@@ -147,7 +148,7 @@ export function ShipyardView({ shipyardID }: Props) {
       emitLog({
         category: 'system',
         kind: 'danger',
-        message: `Покупка «${cls.name}»: ${friendlyError(err)}`,
+        message: `Покупка «${cls.name}»: ${commandErrorText(err)}`,
       });
     } finally {
       setBusy(false);
@@ -167,7 +168,7 @@ export function ShipyardView({ shipyardID }: Props) {
       emitLog({
         category: 'system',
         kind: 'danger',
-        message: `Установка «${eq.description}»: ${friendlyError(err)}`,
+        message: `Установка «${eq.description}»: ${commandErrorText(err)}`,
       });
     } finally {
       setBusy(false);
@@ -187,7 +188,7 @@ export function ShipyardView({ shipyardID }: Props) {
       emitLog({
         category: 'system',
         kind: 'danger',
-        message: `Снятие модуля: ${friendlyError(err)}`,
+        message: `Снятие модуля: ${commandErrorText(err)}`,
       });
     } finally {
       setBusy(false);

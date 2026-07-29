@@ -281,7 +281,11 @@ export function MarketView({ station, shipID, reloadSignal }: Props) {
         <td>
           {/* Each action ships together with its «↑ максимум» helper inside a
               sw-table__pair, so that on a narrow card the cluster wraps between
-              the pairs and never between a button and its helper (TASK-134). */}
+              the pairs and never between a button and its helper (TASK-134).
+              Both pairs put the helper FIRST: the cluster wraps 2x2 on every
+              desktop card width, and the mirrored order («↑ Купить» over
+              «Продать ↑») put the two ↑ buttons on opposite ends of the block
+              (TASK-142). */}
           <div className="sw-table__actions">
             {showBuy && (
               <span className="sw-table__pair">
@@ -309,14 +313,6 @@ export function MarketView({ station, shipID, reloadSignal }: Props) {
               <span className="sw-table__pair">
                 <button
                   type="button"
-                  className="sw-btn"
-                  disabled={!canSell || status.kind === 'pending'}
-                  onClick={() => void onSell(it)}
-                >
-                  Продать
-                </button>
-                <button
-                  type="button"
                   className="sw-btn ghost"
                   disabled={maxSell(it) === 0 || status.kind === 'pending'}
                   title={`Максимум для продажи: ${ru(maxSell(it))} (трюм ${ru(cargoQty(it.typeID))}, свободно у станции ${ru(it.maxStock - it.stock)})`}
@@ -324,6 +320,14 @@ export function MarketView({ station, shipID, reloadSignal }: Props) {
                   aria-label="Максимум для продажи"
                 >
                   ↑
+                </button>
+                <button
+                  type="button"
+                  className="sw-btn"
+                  disabled={!canSell || status.kind === 'pending'}
+                  onClick={() => void onSell(it)}
+                >
+                  Продать
                 </button>
               </span>
             )}

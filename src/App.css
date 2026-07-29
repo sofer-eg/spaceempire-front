@@ -1139,8 +1139,10 @@ html, body, #root {
    container is a containing block for `position: fixed` descendants and forms
    its own stacking context, so a fixed/sticky popover mounted inside
    StationView would anchor to this card rather than to the viewport and could
-   no longer paint over its siblings. Nothing inside uses fixed/sticky today
-   (checked: tabs, tables, forms are all in flow), but the next popover will. */
+   no longer paint over its siblings. Nothing inside uses `position: fixed`
+   today; the one sticky is the scanner's frozen «Товар» column, which sticks to
+   .sw-table-scroll (a scrollport well inside this container) and is unaffected
+   -- but the next popover will care. */
 .sw-station {
   height: 100%;
   display: flex;
@@ -1241,6 +1243,38 @@ html, body, #root {
   color: var(--ink-mute);
 }
 .sw-mscan__table th { white-space: nowrap; }
+/* Collapsed borders belong to the TABLE, not to the cell, so they stay behind
+   when a cell sticks: the frozen column below arrived at the left edge with its
+   row separators left back at scrollLeft 0 (verified on screen -- the lines
+   stopped dead at the column's right rule). `separate` hands each cell its own
+   border again; with zero spacing and bottom-only borders it paints identically. */
+.sw-mscan__table { border-collapse: separate; border-spacing: 0; }
+
+/* Frozen «Товар» column. The matrix is ~2.9-3.3k px wide against a 466px card,
+   so scrolling to the far stations used to leave rows of bare figures with no
+   label in sight: at scrollLeft 2475 the goods cell sat at x -2062 (TASK-142).
+   The sticky axis is the horizontal one only -- .sw-table-scroll is the nearest
+   scrollport and its height is content-driven (scrollHeight == clientHeight), so
+   a `top` offset would have nothing to stick to; the row of station names scrolls
+   away with .sw-station__body, which is a different scroller. Freezing that
+   header too means restructuring the card's vertical scroll, well past the point
+   of a labelled row.
+   The cell must paint opaque or the columns sliding underneath show through, and
+   the flat --bg-1 cannot follow the card's vertical gradient -- so the column
+   also carries a right-hand rule and reads as deliberately pinned rather than as
+   a colour mismatch. The hover tint is re-applied on top of that base, otherwise
+   the opaque cell would swallow the row highlight of .sw-table tbody tr:hover. */
+.sw-mscan__table th:first-child,
+.sw-mscan__table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--bg-1);
+  box-shadow: inset -1px 0 0 var(--line);
+}
+.sw-mscan__table tbody tr:hover td:first-child {
+  background: linear-gradient(rgba(91, 206, 250, 0.04), rgba(91, 206, 250, 0.04)), var(--bg-1);
+}
 .sw-mscan__cell { display: flex; align-items: baseline; gap: 6px; }
 .sw-mscan__tier { display: inline-flex; align-items: baseline; gap: 4px; }
 .sw-mscan__price { font-size: 12px; }
@@ -1531,6 +1565,13 @@ html, body, #root {
      on its own (two columns at 396-468px, four at 684-708px). See
      .sw-auction__create below. */
 }
+
+/* «До конца» is one line. The old MM:SS never wrapped; «4 ч 21 мин» does, and a
+   column of ragged two-line rows is a worse read than the value it replaced
+   (TASK-142). Measured cost: the compact lot table's min-content goes 314 ->
+   347px against a 394px box on the narrowest card (1024px viewport), so it buys
+   the single line out of existing slack and adds no horizontal scroll. */
+.sw-auction__ttl { white-space: nowrap; }
 
 /* «Создать лот». The track list is intrinsic, not a fixed six columns: with
    `1fr 1fr 1fr 1fr auto auto` the row could not wrap, and the goods <select>

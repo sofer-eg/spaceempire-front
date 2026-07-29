@@ -170,7 +170,7 @@ export function AuctionView({ stationLabel, shipID }: Props) {
                     >
                       {bidderLabel(lot.currentBidderID, '—')}
                     </td>
-                    <td className="sw-mono">{ttl}</td>
+                    <td className="sw-mono sw-auction__ttl">{ttl}</td>
                     <td>
                       <input
                         type="number"
@@ -401,11 +401,21 @@ function auctionStatusLabel(status: number): string {
   }
 }
 
+// formatTtl renders the time a lot has left. Minutes are not open-ended: a lot
+// may run up to a week (auction.MaxDuration), and unbounded minutes printed
+// «265:45» and «16079:06» for the 4-hour and 11-day cases -- a number no reader
+// converts on sight (TASK-142). Only under an hour is MM:SS, the countdown
+// shape that makes the last minutes readable; above that the unit is named.
 function formatTtl(endsAt: string): string {
   const ms = Date.parse(endsAt) - Date.now();
   if (Number.isNaN(ms) || ms <= 0) return '00:00';
   const sec = Math.floor(ms / 1000);
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  if (sec < 3600) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+  const hours = Math.floor(sec / 3600);
+  if (hours < 24) return `${hours} ч ${Math.floor((sec % 3600) / 60)} мин`;
+  return `${Math.floor(hours / 24)} д ${hours % 24} ч`;
 }

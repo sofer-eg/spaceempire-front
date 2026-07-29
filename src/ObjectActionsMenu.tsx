@@ -55,6 +55,11 @@ export type PickedObject =
   // (TASK-146). World fixtures (stations, gates, towers) leave it undefined.
   | { kind: 'dock'; ref: EntityRef; x: number; y: number; label: string; letter?: string; ownerID?: number }
   | { kind: 'container'; id: number; x: number; y: number; label: string }
+  // A torpedo is a shoot-downable projectile (TASK-112): the only action it takes
+  // is «Сбить» — an ordered laser shot, which the server accepts for a torpedo
+  // regardless of whose it is (aborting your own is legitimate). own marks the
+  // player's own ordnance so the menu can say so.
+  | { kind: 'torpedo'; id: number; x: number; y: number; label: string; own?: boolean }
   // asteroid carries the human-readable ore label and remaining mass so the
   // menu head reads "Руда · 240" rather than a raw ore_type id (phase 10.3.6).
   | { kind: 'asteroid'; id: number; x: number; y: number; label: string };
@@ -270,6 +275,10 @@ export function ObjectActionsMenu({
     if (target.kind !== 'ship') return;
     run(sendAttack(ownShipID, { kind: EntityKind.Ship, id: target.id }));
   };
+  const doShootTorpedo = () => {
+    if (target.kind !== 'torpedo') return;
+    run(sendAttack(ownShipID, { kind: EntityKind.Torpedo, id: target.id }));
+  };
   const doCeaseFire = () => {
     run(sendCeaseFire(ownShipID));
   };
@@ -365,6 +374,18 @@ export function ObjectActionsMenu({
           title={!hasHack ? 'Нужен взломщик (up_hack)' : undefined}
         >
           ⚿ Взломать
+        </button>
+      )}
+      {target.kind === 'torpedo' && (
+        <button
+          type="button"
+          role="menuitem"
+          className="sw-menu__item"
+          onClick={doShootTorpedo}
+          disabled={baseDisabled}
+          title={target.own ? 'Сбить свою торпеду (отмена пуска)' : 'Навести лазер на торпеду'}
+        >
+          ✶ Сбить торпеду
         </button>
       )}
       {canDismantle && (

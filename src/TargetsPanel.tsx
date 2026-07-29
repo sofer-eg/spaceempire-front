@@ -663,7 +663,9 @@ function TargetRow({
             // has no 'container' kind — skip the hover highlight for them
             // (phase 10.9). Asteroids likewise have no HighlightRef kind
             // (phase 10.3.6 / TASK-118).
-            if (target.kind === 'container' || target.kind === 'asteroid') return;
+            // A torpedo is canvas-only (no contact row — it lives for seconds), so
+            // it has no HighlightRef kind either (TASK-112).
+            if (target.kind === 'container' || target.kind === 'asteroid' || target.kind === 'torpedo') return;
             onHoverTarget?.({
               kind: target.kind,
               id: target.kind === 'dock' ? target.ref.id : target.id,

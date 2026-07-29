@@ -426,10 +426,18 @@ export const ObjectLayer = forwardRef<ObjectLayerHandle, Props>(function ObjectL
           <g className="heading"><use href="#hull-missile" /></g>
         </g>
       ))}
-      {/* Torpedoes — class tints the warhead: 2 = Firestorm (fiery), 3 = Holy (gold) */}
+      {/* Torpedoes — class tints the warhead: 2 = Firestorm (fiery), 3 = Holy (gold).
+          Unlike missiles and drones a torpedo is pickable (TASK-112): it carries HP,
+          so a weapon can be aimed at it and the menu offers «Сбить торпеду». */}
       {[...(p.torpedos?.values() ?? [])].map((t) => (
-        <g key={`torpedo-${t.id}`} ref={dirRef(dirNodes, `torpedo:${t.id}`)} style={{ color: torpedoColor(t.class), pointerEvents: 'none' }}>
-          <g className="heading"><use href="#hull-torpedo" /></g>
+        <g key={`torpedo-${t.id}`} ref={dirRef(dirNodes, `torpedo:${t.id}`)} style={{ color: torpedoColor(t.class) }}>
+          <circle className="hit" r={HIT_R} fill="transparent" style={{ pointerEvents: 'auto', cursor: 'pointer' }}
+            onClick={(e) => p.onPick({
+              kind: 'torpedo', id: t.id, x: t.x, y: t.y,
+              label: torpedoLabel(t.class, t.id),
+              own: t.owner === p.ownPlayerID,
+            }, ...evXY(e.clientX, e.clientY))} />
+          <g className="heading" style={{ pointerEvents: 'none' }}><use href="#hull-torpedo" /></g>
         </g>
       ))}
 
@@ -465,6 +473,13 @@ export const ObjectLayer = forwardRef<ObjectLayerHandle, Props>(function ObjectL
 // class 3 "Святая Торпеда" holy gold. Phase 10.3.5.
 function torpedoColor(cls: number): string {
   return cls === 3 ? '#ffe08a' : '#ff8a3c';
+}
+
+// torpedoLabel names a torpedo pick by its ammunition class (TASK-112) — the
+// action menu head must read as the weapon, not as a bare id.
+function torpedoLabel(cls: number, id: number): string {
+  const name = cls === 3 ? 'Святая Торпеда' : 'Огненная Буря';
+  return `Торпеда «${name}» #${id}`;
 }
 
 // raceTint resolves a static's owning-race colour (phase 8.13), falling back to

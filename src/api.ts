@@ -24,6 +24,9 @@ export const EntityKind = {
   LaserTower: 7,
   Container: 8,
   Satellite: 11,
+  // Torpedo is a shoot-downable projectile (TASK-100.3.5.6): unlike a missile it
+  // carries HP, so a weapon can be aimed at it — TASK-112 made that reachable.
+  Torpedo: 12,
   Jammer: 13,
   Gate: 14,
 } as const;

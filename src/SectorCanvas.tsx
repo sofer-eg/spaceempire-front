@@ -317,8 +317,14 @@ export function SectorCanvas(props: Props) {
     if (menu.target.kind === 'asteroid') {
       return props.asteroids?.has(menu.target.id) ? menu : null;
     }
+    if (menu.target.kind === 'torpedo') {
+      // A torpedo lives for seconds: close its menu the moment it detonates, is
+      // shot down or expires, so «Сбить торпеду» can never be clicked into the
+      // void (TASK-112).
+      return props.torpedos?.has(menu.target.id) ? menu : null;
+    }
     return menu;
-  }, [menu, props.ships, props.statics, props.currentSectorID, props.containers, props.asteroids]);
+  }, [menu, props.ships, props.statics, props.currentSectorID, props.containers, props.asteroids, props.torpedos]);
 
   // Empty-space click → "fly here" menu. Object clicks are caught by the SVG
   // overlay's per-node hit areas (onPickObject) and never reach the canvas,

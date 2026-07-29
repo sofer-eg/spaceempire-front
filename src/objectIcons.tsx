@@ -52,6 +52,17 @@ export function ObjectMarker({ picked, ships, ownPlayerID, ownRace, size = 14 }:
     );
   }
 
+  if (picked.kind === 'torpedo') {
+    // Slim warhead — echoes the canvas #hull-torpedo so a picked torpedo reads as
+    // the same object in both places (TASK-112). Torpedoes have no contact row
+    // (they live for seconds), so this only ever renders in the menu head.
+    return (
+      <svg width={size} height={size} viewBox="0 0 14 14" className="sw-target-marker" aria-hidden>
+        <path d="M2 7 L9 4 L12 7 L9 10 Z" fill="none" stroke="var(--amber)" strokeWidth="1.2" strokeLinejoin="round" />
+      </svg>
+    );
+  }
+
   if (picked.kind === 'asteroid') {
     // Irregular rock lump — mirrors the canvas AsteroidGlyph so a contact row
     // and its map marker read as the same object (phase 10.3.6).

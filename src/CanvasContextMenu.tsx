@@ -5,6 +5,9 @@ import { ObjectActionsMenu, type PickedObject } from './ObjectActionsMenu';
 type Props = {
   target: PickedObject;
   ownShipID: number;
+  // ownPlayerID gates the «Демонтировать» item on the object being the player's
+  // own (TASK-146).
+  ownPlayerID: number;
   ownShip: { x: number; y: number } | null;
   ownShipAttackTargetID?: number;
   ownShipMiningTargetID?: number;
@@ -17,6 +20,9 @@ type Props = {
   // menu is offset slightly (+8/+8) so it doesn't cover the glyph.
   px: number;
   py: number;
+  // onCargoChanged is forwarded to ObjectActionsMenu for the dismantle's hold
+  // refresh (TASK-146).
+  onCargoChanged?: () => void;
   onClose: () => void;
 };
 
@@ -25,6 +31,7 @@ type Props = {
 export function CanvasContextMenu({
   target,
   ownShipID,
+  ownPlayerID,
   ownShip,
   ownShipAttackTargetID,
   ownShipMiningTargetID,
@@ -33,6 +40,7 @@ export function CanvasContextMenu({
   gateRange,
   px,
   py,
+  onCargoChanged,
   onClose,
 }: Props) {
   const ref = useRef<HTMLDivElement | null>(null);
@@ -65,12 +73,14 @@ export function CanvasContextMenu({
       <ObjectActionsMenu
         target={target}
         ownShipID={ownShipID}
+        ownPlayerID={ownPlayerID}
         ownShip={ownShip}
         ownShipAttackTargetID={ownShipAttackTargetID}
         ownShipMiningTargetID={ownShipMiningTargetID}
         ownEquipment={ownEquipment}
         dockRange={dockRange}
         gateRange={gateRange}
+        onCargoChanged={onCargoChanged}
         onActionDone={onClose}
       />
     </div>

@@ -82,6 +82,9 @@ type Props = {
   // row renders with the .sw-target-row--selected modifier so the panel
   // stays in sync with the canvas's persistent orange outline.
   selectedTarget?: SelectedTargetRef | null;
+  // onCargoChanged is forwarded to the row action menu so a dismantle can refresh
+  // the ГРУЗ bar (TASK-146).
+  onCargoChanged?: () => void;
 };
 
 // The navigation panel groups contacts into three tabs, mirroring the
@@ -166,6 +169,7 @@ export function TargetsPanel({
   onHoverTarget,
   onFocusOwnShip,
   selectedTarget,
+  onCargoChanged,
 }: Props) {
   const galaxy = useGalaxy();
   // openMenuKey identifies which row's kebab popover is currently open.
@@ -274,6 +278,7 @@ export function TargetsPanel({
           ref: { kind: EntityKind.Satellite, id: sat.id },
           x: sat.x,
           y: sat.y,
+          ownerID: sat.ownerID,
           label: `${staticTypeLabel(EntityKind.Satellite, undefined, stationTypes)}${raceSuffix(sat.race)}`,
         },
       });
@@ -293,6 +298,7 @@ export function TargetsPanel({
           ref: { kind: EntityKind.Jammer, id: jam.id },
           x: jam.x,
           y: jam.y,
+          ownerID: jam.ownerID,
           label: `${staticTypeLabel(EntityKind.Jammer, undefined, stationTypes)}${raceSuffix(jam.race)}`,
         },
       });
@@ -515,6 +521,7 @@ export function TargetsPanel({
                 ownEquipment={ownShip?.equipment}
                 dockRange={dockRange}
                 gateRange={gateRange}
+                onCargoChanged={onCargoChanged}
                 selected={isSelectedRow(t.picked, selectedTarget)}
               />
             );
@@ -547,6 +554,9 @@ type TargetRowProps = {
   menuOpen: boolean;
   onMenuToggle: () => void;
   onMenuClose: () => void;
+  // onCargoChanged is handed to the action menu for the dismantle's hold refresh
+  // (TASK-146).
+  onCargoChanged?: () => void;
   onHoverTarget?: (h: HighlightRef | null) => void;
   sectorID: number;
   ownShipID: number;
@@ -574,6 +584,7 @@ function TargetRow({
   menuOpen,
   onMenuToggle,
   onMenuClose,
+  onCargoChanged,
   onHoverTarget,
   sectorID,
   ownShipID,
@@ -700,12 +711,14 @@ function TargetRow({
             <ObjectActionsMenu
               target={target}
               ownShipID={ownShipID}
+              ownPlayerID={ownPlayerID}
               ownShip={ownShipPos}
               ownShipAttackTargetID={ownShipAttackTargetID}
               ownShipMiningTargetID={ownShipMiningTargetID}
               ownEquipment={ownEquipment}
               dockRange={dockRange}
               gateRange={gateRange}
+              onCargoChanged={onCargoChanged}
               onActionDone={onMenuClose}
             />
           </div>,

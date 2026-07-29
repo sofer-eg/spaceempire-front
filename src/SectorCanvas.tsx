@@ -114,6 +114,9 @@ type Props = {
   // ownShipMiningTargetID, when set, is the asteroid the player is mining —
   // flips the context menu's «Бурить»/«Прекратить добычу» item (phase 10.3.21).
   ownShipMiningTargetID?: number;
+  // onCargoChanged lets the context menu ask for a hold re-read after an action
+  // that moved goods — the dismantle (TASK-146).
+  onCargoChanged?: () => void;
 };
 
 type MenuState = { target: PickedObject; px: number; py: number };
@@ -417,6 +420,7 @@ export function SectorCanvas(props: Props) {
         <CanvasContextMenu
           target={visibleMenu.target}
           ownShipID={props.controlledShipID}
+          ownPlayerID={props.ownPlayerID}
           ownShip={ownShipPos}
           ownShipAttackTargetID={props.ownShipAttackTargetID}
           ownShipMiningTargetID={props.ownShipMiningTargetID}
@@ -425,6 +429,7 @@ export function SectorCanvas(props: Props) {
           gateRange={props.gateRange}
           px={visibleMenu.px}
           py={visibleMenu.py}
+          onCargoChanged={props.onCargoChanged}
           onClose={() => setMenu(null)}
         />
       )}

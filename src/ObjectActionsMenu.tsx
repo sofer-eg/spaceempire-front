@@ -5,6 +5,7 @@ import {
   isStaticTargetKind,
   sendAttack,
   sendCeaseFire,
+  sendDismantleStatic,
   sendDock,
   sendHack,
   sendJump,
@@ -47,7 +48,11 @@ export type PickedObject =
   // 10.3.9.5); every ship pick supplies it.
   | { kind: 'ship'; id: number; x: number; y: number; label: string; maxShield: number; relation?: Relation }
   | { kind: 'gate'; id: number; x: number; y: number; label: string }
-  | { kind: 'dock'; ref: EntityRef; x: number; y: number; label: string; letter?: string }
+  // ownerID is the deploying player of a player-placed object (jammer /
+  // navigation satellite, both carried as dock picks). Present only for those two
+  // kinds; it drives the «Демонтировать» affordance, which only the owner gets
+  // (TASK-146). World fixtures (stations, gates, towers) leave it undefined.
+  | { kind: 'dock'; ref: EntityRef; x: number; y: number; label: string; letter?: string; ownerID?: number }
   | { kind: 'container'; id: number; x: number; y: number; label: string }
   // asteroid carries the human-readable ore label and remaining mass so the
   // menu head reads "Руда · 240" rather than a raw ore_type id (phase 10.3.6).
@@ -58,6 +63,10 @@ type Props = {
   // ownShipID is the ship that will execute the command. 0 disables every
   // action — the player has no ship in this sector yet.
   ownShipID: number;
+  // ownPlayerID is the logged-in player, compared against a deployed object's
+  // ownerID for the «Демонтировать» gate (TASK-146): only your own generator or
+  // satellite folds back into your hold — someone else's has to be shot.
+  ownPlayerID: number;
   // ownShip carries the player's own position for the dock/jump range check.
   // null when the player has no ship in this sector — every range gate
   // resolves to false and the corresponding menu items render disabled.
@@ -84,6 +93,12 @@ type Props = {
   // panel rows, `.sw-canvas-menu` for canvas-anchored). The component
   // always also carries the base `.sw-menu` look.
   className?: string;
+  // onCargoChanged fires after an action that moved goods into or out of the
+  // ship's hold, so the parent can re-read it. Only the dismantle needs it today
+  // (TASK-146): the whole point of the action is that the object is back in the
+  // hold, and the ГРУЗ bar is otherwise only re-fetched on a ship change or a
+  // buy/sell, so it would keep showing the pre-dismantle figure.
+  onCargoChanged?: () => void;
   // onActionDone fires after a command resolves successfully so the parent
   // can dismiss the popover. Failures keep the menu open and surface the
   // error inline.
@@ -93,6 +108,7 @@ type Props = {
 export function ObjectActionsMenu({
   target,
   ownShipID,
+  ownPlayerID,
   ownShip,
   ownShipAttackTargetID,
   ownShipMiningTargetID,
@@ -100,6 +116,7 @@ export function ObjectActionsMenu({
   dockRange,
   gateRange,
   className,
+  onCargoChanged,
   onActionDone,
 }: Props) {
   const [pending, setPending] = useState(false);
@@ -186,6 +203,16 @@ export function ObjectActionsMenu({
     target.kind === 'dock' &&
     (target.ref.kind === EntityKind.Station || target.ref.kind === EntityKind.TradeStation);
 
+  // Dismantle (TASK-146): only the owner of a deployed generator / satellite can
+  // fold it back into the hold. Range and hold-space are server-authoritative
+  // (422 → journal), like the hack item — the client cannot see the hold's free
+  // space from here.
+  const canDismantle =
+    target.kind === 'dock' &&
+    (target.ref.kind === EntityKind.Jammer || target.ref.kind === EntityKind.Satellite) &&
+    !!target.ownerID &&
+    target.ownerID === ownPlayerID;
+
   const run = (action: Promise<unknown>) => {
     setPending(true);
     setError(null);
@@ -254,6 +281,19 @@ export function ObjectActionsMenu({
   const doRecallDrones = () => {
     run(recallDronesReported(ownShipID));
   };
+  const doDismantle = () => {
+    if (target.kind !== 'dock') return;
+    run(
+      sendDismantleStatic(ownShipID, target.ref).then(() => {
+        onCargoChanged?.();
+        emitLog({
+          category: 'sector',
+          kind: 'good',
+          message: `${target.label}: объект демонтирован, груз вернулся в трюм.`,
+        });
+      }),
+    );
+  };
   const doPickup = () => {
     if (target.kind !== 'container') return;
     run(sendPickupContainer(ownShipID, target.id));
@@ -309,6 +349,18 @@ export function ObjectActionsMenu({
           title={!hasHack ? 'Нужен взломщик (up_hack)' : undefined}
         >
           ⚿ Взломать
+        </button>
+      )}
+      {canDismantle && (
+        <button
+          type="button"
+          role="menuitem"
+          className="sw-menu__item"
+          onClick={doDismantle}
+          disabled={baseDisabled}
+          title="Свернуть объект и вернуть его в трюм"
+        >
+          ⤓ Демонтировать
         </button>
       )}
       {target.kind === 'gate' && (

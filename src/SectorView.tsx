@@ -297,6 +297,7 @@ export function SectorView() {
                 goods={goods}
                 ownShipAttackTargetID={ownShipAttackTargetID}
                 ownShipMiningTargetID={ownShipMiningTargetID}
+                onCargoChanged={refreshPlayer}
               />
               <div className="sw-corner tl" />
               <div className="sw-corner tr" />
@@ -325,6 +326,7 @@ export function SectorView() {
           onHoverTarget={setHighlight}
           onFocusOwnShip={() => setZoomMode('near')}
           selectedTarget={selectedTargetRef}
+          onCargoChanged={refreshPlayer}
         />
       </aside>
       <footer className={`sw-sector-grid__log${openPanel === 'log' ? ' is-open' : ''}`}>

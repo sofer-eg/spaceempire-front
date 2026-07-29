@@ -884,6 +884,26 @@ export async function sendLaunchDrone(
   return { spawned: body.spawned };
 }
 
+// sendDismantleStatic folds one of the player's deployed objects (a
+// hyper-interference generator or a navigation satellite) back into shipID's
+// hold: the object leaves the sector and one goods unit comes back, in one
+// server-side transaction (TASK-146). The ship must be within pickup range of
+// the object and have room for it — the server answers 422 otherwise. Throws
+// ApiError on a non-2xx.
+export async function sendDismantleStatic(
+  shipID: number,
+  target: EntityRef,
+): Promise<void> {
+  const res = await fetch('/api/cmd/dismantle-static', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ shipID, target }),
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await parseErrorBody(res));
+  }
+}
+
 // sendRecallDrones recalls as many of shipID's live drones as its hold can take.
 // Returns how many returned and how many stayed out for want of space (TASK-156:
 // the recall is partial rather than overfilling the hold or refusing outright).

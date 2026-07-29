@@ -355,7 +355,7 @@ export const ObjectLayer = forwardRef<ObjectLayerHandle, Props>(function ObjectL
         return (
           <g key={`sat-${s.id}`} ref={simpleRef(simpleNodes, `11:${s.id}`)}>
             <circle className="hit" r={HIT_R} fill="transparent" style={{ pointerEvents: 'auto', cursor: 'pointer' }}
-              onClick={(e) => p.onPick(dockPick(EntityKind.Satellite, s.id, s.x, s.y, undefined, p.stationTypes), ...evXY(e.clientX, e.clientY))} />
+              onClick={(e) => p.onPick(dockPick(EntityKind.Satellite, s.id, s.x, s.y, undefined, p.stationTypes, s.ownerID), ...evXY(e.clientX, e.clientY))} />
             <SatelliteGlyph color={tint} />
             {shieldBar(combat)}
           </g>
@@ -369,7 +369,7 @@ export const ObjectLayer = forwardRef<ObjectLayerHandle, Props>(function ObjectL
             {/* A jammer is a weapon target (it is the only way to lift the
                 no-jump zone) — make its glyph pickable. */}
             <circle className="hit" r={HIT_R} fill="transparent" style={{ pointerEvents: 'auto', cursor: 'pointer' }}
-              onClick={(e) => p.onPick(dockPick(EntityKind.Jammer, s.id, s.x, s.y, undefined, p.stationTypes), ...evXY(e.clientX, e.clientY))} />
+              onClick={(e) => p.onPick(dockPick(EntityKind.Jammer, s.id, s.x, s.y, undefined, p.stationTypes, s.ownerID), ...evXY(e.clientX, e.clientY))} />
             <JammerGlyph color={tint} />
             {shieldBar(combat)}
           </g>
@@ -488,8 +488,10 @@ function shieldBar(d: DestructibleStatic | undefined) {
   );
 }
 
-function dockPick(kind: number, id: number, x: number, y: number, type: number | undefined, stationTypes: StationType[]): PickedObject {
-  return { kind: 'dock', ref: { kind, id }, x, y, label: staticTypeLabel(kind, type, stationTypes) };
+// ownerID is passed only for the player-deployed kinds (satellite, jammer): the
+// action menu needs it to offer «Демонтировать» to the owner alone (TASK-146).
+function dockPick(kind: number, id: number, x: number, y: number, type: number | undefined, stationTypes: StationType[], ownerID?: number): PickedObject {
+  return { kind: 'dock', ref: { kind, id }, x, y, label: staticTypeLabel(kind, type, stationTypes), ownerID };
 }
 
 // --- node ref helpers -------------------------------------------------------

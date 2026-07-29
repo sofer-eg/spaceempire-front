@@ -389,14 +389,22 @@ html, body, #root {
    tracks the viewport; the topbar's own overflow is handled by the wrap in the
    drawer regime below.
 
-   NOT fixed here, and still reachable by keyboard: a closed off-canvas drawer
-   is only translated away (see .sw-sector-grid__ship/__nav below — no `inert`,
-   no visibility:hidden), so it stays in the tab order. Tabbing into it makes
-   the browser scroll the grid, which is scrollable by script even at
-   overflow:hidden — 233px of it at 420px, measured after this commit — and the
-   toggles slide under the rail again. That is the shape TASK-149 hit. Removing
-   the shell's 757px floor shrank the runway from 757px to those 233px but did
-   not close it; `inert` on the closed drawer is the actual fix — TASK-171. */
+   The keyboard half of it is CLOSED as of TASK-171. A closed off-canvas drawer
+   used to be only translated away, so it stayed in the tab order: Tab walked
+   into it, the browser scrolled the grid to reach the focused control (the grid
+   was scrollable by script even at overflow:hidden — 233px across at 420px) and
+   the toggles slid under the rail again, which is the shape TASK-149 hit.
+   Removing the shell's 757px floor shrank that runway from 757px to 233px;
+   TASK-171 then took both halves out — the closed drawer is `visibility:
+   hidden` (nothing focusable to scroll to) and the grid is `overflow: clip`
+   (not a scrollport at all, so scrollLeft/scrollTop cannot move). Measured
+   after TASK-171 at 420px: 0 off-canvas focus stops in a 90-key Tab walk (was
+   74), grid scrollLeft stays 0 both when assigned 9999 and when the browser is
+   asked to scrollIntoView() a control inside a closed drawer (was 233), and all
+   three toggles hit-test after the walk (all three failed before). The grid's
+   scrollWidth still REPORTS 609 against clientWidth 328: a clipped box keeps an
+   overflow region in the CSSOM, it just has no scrollport to move it with. See
+   .sw-sector-grid__ship/__nav/__log in the drawer regime below. */
 .sw-shell__header { min-width: 0; }
 .sw-shell__body {
   display: grid;
@@ -607,8 +615,15 @@ html, body, #root {
     gap: 8px;
     /* clip the off-canvas drawers to the grid box so a closed drawer can't
        bleed over the rail on the left / spill past the viewport on the right
-       (which would also inflate document scrollWidth — AC #3). */
-    overflow: hidden;
+       (which would also inflate document scrollWidth — TASK-139 AC #3).
+       `clip` and not `hidden`: hidden makes this box a SCROLL container, and a
+       closed drawer's translate leaves real overflow inside it (measured at
+       420px: 281px across, 252px down), which the browser will happily scroll
+       to when something inside the drawer takes focus — that is what slid the
+       toolbar out from under the tap in TASK-149/TASK-171. `clip` clips the
+       same way but creates no scrollport, so scrollLeft/scrollTop cannot move
+       at all, by script or by scroll-into-view. */
+    overflow: clip;
   }
 
   .sw-sector-toolbar {
@@ -635,6 +650,27 @@ html, body, #root {
     background: rgba(3, 8, 16, 0.5);
   }
 
+  /* A closed drawer is `visibility: hidden`, which is what takes its contents
+     out of the tab order (TASK-171). Before that, a closed drawer was only
+     translated away, so Tab walked into 74 focusable controls the player could
+     not see and the browser scrolled the grid to reach them — the HUD slid
+     sideways and the toggles failed their hit-test (TASK-149's symptom).
+
+     `visibility` and not the `inert` attribute on purpose. `is-open` is set by
+     SectorView on EVERY viewport, but off-canvas is a CSS regime that exists
+     only inside this media query: above 1024px these asides are ordinary,
+     always-visible grid columns with openPanel still null. An `inert` prop
+     driven by `openPanel` alone would therefore make the ship / nav / journal
+     panels dead on the desktop layout. Gating it would need a matchMedia
+     listener mirroring this breakpoint in JS; `visibility` is already gated by
+     the media query itself, so there is nothing to keep in sync. (There is no
+     `inert` CSS property — the attribute is the only other option.)
+
+     visibility is in the transition list so the close animation survives: it
+     interpolates discretely and counts as `visible` for the whole duration
+     whenever either end is visible, i.e. the panel stays painted while it
+     slides out and only then stops rendering. Opening is immediate. */
+
   /* shared drawer chrome for the two side asides — solid panel background so
      the map does not bleed through the gaps between the stacked sub-panels. */
   .sw-sector-grid__ship,
@@ -649,7 +685,8 @@ html, body, #root {
     padding: 10px;
     overflow-y: auto;
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55);
-    transition: transform 0.2s ease;
+    visibility: hidden;
+    transition: transform 0.2s ease, visibility 0.2s ease;
   }
   .sw-sector-grid__ship {
     left: 0;
@@ -662,6 +699,7 @@ html, body, #root {
   .sw-sector-grid__ship.is-open,
   .sw-sector-grid__nav.is-open {
     transform: translateX(0);
+    visibility: visible;
   }
 
   /* journal: bottom sheet, off-canvas until toggled. */
@@ -673,10 +711,12 @@ html, body, #root {
     height: min(45%, 240px);
     z-index: 30;
     transform: translateY(calc(100% + 12px));
-    transition: transform 0.2s ease;
+    visibility: hidden;
+    transition: transform 0.2s ease, visibility 0.2s ease;
   }
   .sw-sector-grid__log.is-open {
     transform: translateY(0);
+    visibility: visible;
   }
 }
 

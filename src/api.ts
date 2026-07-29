@@ -1083,10 +1083,13 @@ export class ApiError extends Error {
 // the same, because "no answer" is exactly what it is.)
 //
 // cause carries whatever fetch threw, for the console; message is the line we
-// would show a player. Views outside the station tabs (clans, bounties, fleet,
-// the galaxy map) print err.message straight into their own error slot, and this
-// is the only way they get a Russian line instead of "Failed to fetch" without
-// each of them growing a mapper. friendlyError returns the same constant.
+// would show a player. Views that print err.message straight into their own
+// error slot get a Russian line this way without each growing a mapper — but
+// only the ones whose requests come from this module: the fleet panel and the
+// galaxy map. Clans, bounties and the login screen have their own transport
+// built on bare fetch (7 call sites) and never see netFetch, so they still show
+// "Failed to fetch" on a dead connection — TASK-168. friendlyError returns the
+// same constant.
 const NO_CONNECTION_TEXT = 'Нет связи с сервером. Проверьте подключение.';
 
 export class NetworkError extends Error {

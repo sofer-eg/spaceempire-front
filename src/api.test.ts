@@ -343,6 +343,30 @@ test('commandErrorText passes a decided failure through friendlyError', () => {
   assert.doesNotMatch(commandErrorText(new ApiError(503, 'sector busy')), /исход неизвестен/i);
 });
 
+// The NetworkError branch of friendlyError returns the same constant the error
+// already carries in .message, so deleting it changes nothing a player sees and
+// no assert on the return value can notice — a review mutation proved the branch
+// survived removal with the whole suite green. Its one unique effect is putting
+// the NATIVE cause in the console: "Failed to fetch" vs "NetworkError when
+// attempting to fetch resource" is the only clue left when a player reports
+// "the market won't load". Pin that, or the next simplification drops it.
+test('friendlyError logs the native cause behind a dead connection', () => {
+  const original = console.error;
+  const logged: unknown[][] = [];
+  console.error = (...args: unknown[]) => void logged.push(args);
+  try {
+    const cause = new TypeError('Failed to fetch');
+    assert.equal(friendlyError(new NetworkError(cause)), 'Нет связи с сервером. Проверьте подключение.');
+    assert.equal(logged.length, 1, 'the branch must log exactly once');
+    assert.ok(
+      logged[0].includes(cause),
+      'the native cause itself must reach the console, not just the Russian line',
+    );
+  } finally {
+    console.error = original;
+  }
+});
+
 // --- netFetch ---------------------------------------------------------------
 
 // The wrapper is the whole reason the mappers can tell "no answer" from "our own

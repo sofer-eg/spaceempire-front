@@ -375,11 +375,29 @@ html, body, #root {
   position: relative;
   z-index: 1;
 }
+/* min-width:0 on the header is what keeps the WHOLE app inside a narrow
+   viewport (TASK-139). .sw-shell is a grid with one implicit auto column, so
+   that column's base size is the largest minimum contribution among its two
+   rows. The topbar is a nowrap flex row of ~10 chips and never reported a
+   minimum below 757px, so below ~778px of viewport the column — and with it
+   .sw-shell__body, the rail, .sw-main and the sector grid — was sized 757px
+   wide inside a 420px window. Everything past ~420px was simply outside the
+   (overflow:hidden) document: at 420px the sector grid ran 82..767, so the
+   «Навигация» and «Журнал» drawer toggles sat at 312..767 with their centres
+   at x = 425 and 655 — off-screen, hit-test dead — and the nav drawer opened at
+   447..767, entirely outside the window. (The same overflow has a second face:
+   the grid is scrollable by script even at overflow:hidden, so any focus move
+   inside a drawer scrolls the whole HUD sideways and slides the toggles under
+   the rail, which is the form TASK-149 ran into.) With the floor removed the
+   column tracks the viewport; the topbar's own overflow is handled by the wrap
+   in the drawer regime below. */
+.sw-shell__header { min-width: 0; }
 .sw-shell__body {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 10px;
   min-height: 0;
+  min-width: 0;
 }
 .sw-main { min-height: 0; min-width: 0; position: relative; }
 
@@ -470,26 +488,30 @@ html, body, #root {
    coefficients actually used above, not the plain 80/188 + 100/188 ramp, which
    lands ~0.3px higher at the same end.
 
-   Known, deliberate residue over 1150-1202. The three columns share
+   The residue over 1150-1202 is GONE as of TASK-139; what follows is why it
+   existed, so nobody re-derives the ramp to chase it. The three columns share
    `viewport - 112` there; at 1150 that is 1038px, while the side panels' own
-   content wants 313px (.sw-sector-grid__ship undocked -- the width at which its
-   «Автопилот» sector select stops being clipped, re-measured 313 on the current
-   HEAD) + ~344-362px (nav, the width at which TargetsPanel's «⋯» buttons stop
-   being cut -- it moves with the longest ship name in the list) = 675px and up,
-   which would leave the centre 363px or less, under its 390px floor. The two
-   demands are arithmetically incompatible, so the centre wins and the sides
-   stay short: measured, the ship column is under that 313px over 1150-1194 (the
-   «Автопилот» select loses up to 19.2px of its right edge, arrow included -- the
-   ramp only clears 313px at 1194.58, so 1194 is still 0.25px short), and the nav
-   column can be under the «⋯» threshold up to ~1178 when ship names run long.
-   Both 313px and that ~344-362px are CLIP THRESHOLDS measured on screen, not
-   `width: min-content` values: the undocked column's formal min-content is a
-   different, higher number (330px, the SetCoursePanel alone 326px), and it is
-   not what this note or the ::-webkit-scrollbar note near the bottom of the file
-   is about. Nothing becomes unreachable -- the ship column is a scroll container
-   with a styled bar (see the ::-webkit-scrollbar rules near the bottom of this
-   file). Making the side panels narrow-capable is TASK-139 and is the only
-   thing that removes this residue.
+   content wanted 313px (.sw-sector-grid__ship undocked -- the width at which its
+   «Автопилот» sector select stopped being clipped) + ~344-362px (nav, the width
+   at which TargetsPanel's «⋯» buttons stopped being cut -- it moved with the
+   longest ship name in the list) = 675px and up, which would leave the centre
+   363px or less, under its 390px floor. The two demands were arithmetically
+   incompatible, so the centre won and the sides stayed short: the ship column
+   sat under that 313px over 1150-1194 (the «Автопилот» select losing up to
+   19.2px of its right edge against the column, 36.6px against its own panel
+   body) and the nav column under the «⋯» threshold up to ~1178.
+   Both numbers were CLIP THRESHOLDS measured on screen, not `width: min-content`
+   values -- the undocked column's formal min-content was a different, higher
+   330px (the SetCoursePanel alone 326px). That distinction decided the fix:
+   TASK-139 went after the thresholds, not the min-content. Neither panel now has
+   one. The kebab row shrinks because `.sw-target-row .sw-target-btn` lost its
+   min-content floor and the label ellipsises; the «Автопилот» select shrinks
+   because `.sw-form select` lost the same floor, with its caption stacked above
+   it to buy back 78px first. Both measured 0px lost at 1024 / 1149 / 1280 and in
+   the 900 / 420 / 360 drawers, on a docked and an undocked fixture. So the ramp
+   below is no longer a compromise between the centre and the sides -- the sides
+   fit whatever they are given, and the coefficients exist only to keep the
+   centre at or above its 396px floor.
    Docked, that column no longer contributes to it. It wanted 412px before
    TASK-126, when a single nowrap .sw-row held the id, the ПРИСТЫКОВАН chip and
    all three actions -- 175.5px of that hung outside the 240px column. The
@@ -507,8 +529,8 @@ html, body, #root {
    DB) measures the same 140px, while those 22 characters with no space in them
    would want 257.5px. Re-measured on the current HEAD, nothing is clipped
    docked at 1024 / 1150 / 1212 / 1280, and with any real name the panel still
-   fits the 240px floor. So the ship-column half of this residue is now the
-   undocked «Автопилот» select and nothing else.
+   fits the 240px floor. The undocked «Автопилот» select was the last thing
+   holding this column above 240px, and TASK-139 (above) took it out.
 
    This replaces a fixed 320|1fr|380 base plus a 240|1fr|280 band that ended at
    1149.98px: that pair made the centre NARROWER at 1150px (338px) than at
@@ -541,11 +563,23 @@ html, body, #root {
   }
 }
 
-/* <= 1023.98px (down to ~768px: narrow desktop / tablet-landscape / split-screen):
-   the side asides collapse into off-canvas drawers over a full-width map. A
-   toolbar row of toggles drives them via React state; a scrim catches an
+/* <= 1023.98px (down to ~360px: narrow desktop / tablet-landscape / split-screen
+   / phone): the side asides collapse into off-canvas drawers over a full-width
+   map. A toolbar row of toggles drives them via React state; a scrim catches an
    outside tap to close. The journal becomes a bottom sheet. */
 @media (max-width: 1023.98px) {
+  /* The topbar wraps here instead of forcing the shell wider than the window
+     (TASK-139; see .sw-shell__header above for what that used to cost). It is a
+     flex row of ~10 chips that wants 757px and only gets ~330px at a 360px
+     viewport, so it takes as many lines as it needs and the header row grows
+     with it — minmax keeps the familiar 44px bar whenever one line is enough,
+     which is every viewport from ~778px up, the drawer regime's whole upper
+     half included. Wrapping and not `overflow-x: auto` because both controls
+     that live up here — «? Вики» and «Выйти» — must stay reachable without a
+     sideways scroll nobody would guess is there. */
+  .sw-shell { grid-template-rows: minmax(44px, auto) 1fr; }
+  .sw-topbar { flex-wrap: wrap; row-gap: 4px; padding: 4px 14px; }
+
   .sw-sector-grid {
     --sw-toolbar-h: 42px;
     grid-template-columns: 1fr;
@@ -809,7 +843,22 @@ html, body, #root {
    trigger on the right. flex with a small gap keeps the kebab visually
    attached to the row without collapsing into the button. */
 .sw-target-row { display: flex; gap: 4px; align-items: stretch; }
-.sw-target-row .sw-target-btn { flex: 1 1 auto; }
+/* min-width:0 is what keeps the kebab inside the panel (TASK-139). Without it
+   the button's automatic minimum size is its min-content, and `.sw-target-name`
+   is `white-space: nowrap`, so min-content = the WHOLE contact label. The
+   `overflow: hidden` on that span only lets the span shrink INSIDE the button;
+   it does not lower the button's own floor, so the button refused to shrink,
+   the kebab was pushed past the row and clipped by `.sw-panel-body`'s
+   overflow:auto — 18.4px lost at 1024 and 13.4px in the 900px drawer on the
+   longest row. Not strictly unreachable (that body does carry the matching 18px
+   of scrollWidth), but the scrollbar is an overlay one nobody sees on a list
+   that scrolls vertically, so at rest the control simply is not there.
+   With the floor removed the button shrinks and the ellipsis in
+   `.sw-target-name` does the truncation it was always meant to do. The full
+   label stays available in the row's title attribute (TargetsPanel). The
+   trigger is any long label, not only long player logins: the widest row
+   measured here was a TASK-121 static, «Навигационный спутник · <раса> <N>». */
+.sw-target-row .sw-target-btn { flex: 1 1 auto; min-width: 0; }
 /* --selected marks the row matching ownShip.currentTargetRef. Orange
    left border + tinted background gives the row the same visual
    language as the persistent ring on the canvas, distinct from the
@@ -940,8 +989,26 @@ html, body, #root {
   font-family: var(--font-mono); font-size: 10px;
   color: var(--ink-mute); letter-spacing: 0.06em; text-transform: uppercase;
 }
+/* --stacked puts the caption ABOVE its control instead of in the 70px column.
+   Used by the «Сектор» destination select in SetCoursePanel, whose widest
+   option («Гордость Корпорации (#19)» class of name) needs ~200px: in the ship
+   column, 70px of caption + 8px of gap is the difference between fitting and
+   not. Same trade TASK-134 made for `.sw-auction__goods`, and the same reason —
+   a select whose value is the point of the control must not be the thing that
+   gets truncated (TASK-139). */
+.sw-form label.sw-form__stacked { grid-template-columns: 1fr; gap: 2px; }
+/* ...and min-width:0 is the guarantee behind that. A <select> / <input> is a
+   replaced-ish control with a content-derived intrinsic width (for the select,
+   its widest OPTION — 200px+ of sector name, which is why the «Автопилот» row
+   hung 73px outside the 240px ship column at 1024px and 19.6px at 1149px), and
+   as a grid item its automatic minimum size is that width, so the 1fr track
+   could not shrink. With the floor gone the control tracks its column and the
+   browser ellipsises the displayed value; the dropdown still lists every option
+   in full. The stacked caption above means this only ever bites in the narrowest
+   drawer (218px column at a 360px viewport). */
 .sw-form input,
 .sw-form select {
+  min-width: 0;
   background: rgba(91, 206, 250, 0.04);
   border: 1px solid var(--line);
   color: var(--ink);

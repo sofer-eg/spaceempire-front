@@ -67,7 +67,11 @@ export function SetCoursePanel({ shipID, currentSectorID, equipment }: Props) {
       </div>
       <div className="sw-panel-body">
         <form className="sw-form" onSubmit={(ev) => void onSubmit(ev)}>
-          <label>
+          {/* --stacked: the caption sits above this control, not in the shared
+              70px column. A sector name is the whole point of the field and
+              the ship column is 240px at its narrowest, so those 78px decide
+              whether the select is readable or clipped (TASK-139). */}
+          <label className="sw-form__stacked">
             <span>Сектор</span>
             <select
               value={destSector}

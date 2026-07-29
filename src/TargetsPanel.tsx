@@ -677,7 +677,14 @@ function TargetRow({
           }}
           onMouseLeave={() => onHoverTarget?.(null)}
           disabled={disabled}
-          title={own ? 'Показать свой корабль' : `Лететь к (${target.x.toFixed(0)}, ${target.y.toFixed(0)})`}
+          // The label is ellipsised when the panel is narrow (TASK-139), so the
+          // tooltip carries it in full — a long contact name is otherwise
+          // unreadable in a 240px column with no way to widen it.
+          title={
+            own
+              ? 'Показать свой корабль'
+              : `${target.label} — лететь к (${target.x.toFixed(0)}, ${target.y.toFixed(0)})`
+          }
         >
           <ObjectMarker picked={target} ships={ships} ownPlayerID={ownPlayerID} ownRace={ownRace} />
           <span className="sw-target-name">{`${labelPrefix}${target.label}`}</span>

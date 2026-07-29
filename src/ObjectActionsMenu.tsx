@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   EntityKind,
   isDockableStaticKind,
+  isMissileTargetKind,
   isStaticTargetKind,
   sendAttack,
   sendCeaseFire,
@@ -147,6 +148,21 @@ export function ObjectActionsMenu({
       : target.kind === 'dock' && isStaticTargetKind(target.ref.kind)
         ? target.ref
         : null;
+  // Missiles reach wider than the laser and the torpedo (TASK-111): besides ships
+  // and destructible statics they hit a gate (a dock-category pick since TASK-110
+  // made gates destructible, but the canvas/panel still surface a gate as its own
+  // 'gate' category) and a loot container, which is destroyed with its cargo.
+  // missileRef is the EntityRef the launch takes for those two extra kinds; the
+  // laser/torpedo items keep using weaponRef and stay off them.
+  const missileRef: EntityRef | null =
+    weaponRef ??
+    (target.kind === 'gate'
+      ? { kind: EntityKind.Gate, id: target.id }
+      : target.kind === 'container'
+        ? { kind: EntityKind.Container, id: target.id }
+        : null);
+  const canLaunchMissile = !!missileRef && (missileRef.kind === EntityKind.Ship || isMissileTargetKind(missileRef.kind));
+
   const isCurrentlyAttacking =
     target.kind === 'ship' &&
     !!ownShipAttackTargetID &&
@@ -266,8 +282,8 @@ export function ObjectActionsMenu({
     run(sendHack(ownShipID, target.ref));
   };
   const doLaunchMissile = () => {
-    if (!weaponRef) return;
-    run(sendLaunchMissile(ownShipID, weaponRef));
+    if (!missileRef) return;
+    run(sendLaunchMissile(ownShipID, missileRef));
   };
   const doLaunchDrones = () => {
     // Drones stay ship-only (TASK-113 C-03) — the server rejects a static target.
@@ -397,14 +413,20 @@ export function ObjectActionsMenu({
           ◇ Прекратить огонь
         </button>
       )}
-      {canTargetWeapon && (
+      {canLaunchMissile && (
         <button
           type="button"
           role="menuitem"
           className="sw-menu__item sw-menu__item--missile"
           onClick={doLaunchMissile}
           disabled={baseDisabled || !hasLauncher}
-          title={!hasLauncher ? 'Нужна пусковая установка (up_launcher)' : undefined}
+          title={
+            !hasLauncher
+              ? 'Нужна пусковая установка (up_launcher)'
+              : target.kind === 'container'
+                ? 'Уничтожить контейнер вместе с грузом'
+                : undefined
+          }
         >
           ◈ Запустить ракету
         </button>

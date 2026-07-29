@@ -22,16 +22,18 @@ export const EntityKind = {
   Pirbase: 5,
   Drone: 6,
   LaserTower: 7,
+  Container: 8,
   Satellite: 11,
   Jammer: 13,
+  Gate: 14,
 } as const;
 
 // isStaticTargetKind mirrors the server's sector.IsStaticTargetKind (TASK-113
 // FR-01): the destructible statics a weapon may lock onto besides ships —
 // stations, shipyards, trade stations, pirbases, laser towers, satellites,
-// jammers. Gates/containers/asteroids are NOT weapon targets (gates excluded
-// until TASK-110). One source of truth for the weapon-button gates so the UI
-// never offers a target the server would reject with ErrInvalidAttackTarget.
+// jammers and, since TASK-110, gates. Containers and asteroids are not statics.
+// One source of truth for the weapon-button gates so the UI never offers a target
+// the server would reject with ErrInvalidAttackTarget.
 export function isStaticTargetKind(kind: number): boolean {
   return (
     kind === EntityKind.Station ||
@@ -40,8 +42,18 @@ export function isStaticTargetKind(kind: number): boolean {
     kind === EntityKind.Pirbase ||
     kind === EntityKind.LaserTower ||
     kind === EntityKind.Satellite ||
-    kind === EntityKind.Jammer
+    kind === EntityKind.Jammer ||
+    kind === EntityKind.Gate
   );
+}
+
+// isMissileTargetKind mirrors the server's sector.IsMissileTargetKind (TASK-111):
+// a missile reaches wider than the laser and the torpedo — every destructible
+// static plus a loot container, which is destroyed with its cargo (denying an
+// enemy their loot). Lasers and torpedoes stay off crates, so they keep using
+// isStaticTargetKind.
+export function isMissileTargetKind(kind: number): boolean {
+  return isStaticTargetKind(kind) || kind === EntityKind.Container;
 }
 
 // isDockableStaticKind reports whether a 'dock'-category target is one a ship

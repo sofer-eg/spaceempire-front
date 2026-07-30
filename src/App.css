@@ -1317,9 +1317,12 @@ html, body, #root {
    its own stacking context, so a fixed/sticky popover mounted inside
    StationView would anchor to this card rather than to the viewport and could
    no longer paint over its siblings. Nothing inside uses `position: fixed`
-   today; the one sticky is the scanner's frozen «Товар» column, which sticks to
-   .sw-table-scroll (a scrollport well inside this container) and is unaffected
-   -- but the next popover will care. */
+   today; the stickies are the scanner's frozen «Товар» column and station-name
+   row, both of which stick to .sw-table-scroll (a scrollport well inside this
+   container) and are unaffected -- but the next popover will care.
+   One thing this container does NOT provide: a block axis. `inline-size` leaves
+   the block axis uncontained, so `cqh` inside resolves against the small
+   viewport, not against the card (see .sw-mscan .sw-table-scroll). */
 .sw-station {
   height: 100%;
   display: flex;
@@ -1433,15 +1436,29 @@ html, body, #root {
    review measured it (computed value was `collapse`). */
 .sw-table.sw-mscan__table { border-collapse: separate; border-spacing: 0; }
 
+/* The matrix scrolls in BOTH axes inside this box. Horizontal was always its
+   job; the height cap is what adds the vertical one, and the only reason for it
+   is the sticky head below. Before the cap, .sw-table-scroll was the nearest
+   scrollport but its height was content-driven (scrollHeight == clientHeight,
+   measured 2320 == 2320 at 1280px), so `position: sticky; top` had nothing to
+   stick to: the row of station names scrolled away with .sw-station__body, a
+   different scroller, and past row ~13 of 65 no column could be identified
+   (TASK-173). The nested vertical scrollbar is the accepted price -- this panel
+   is a товар × станция matrix and is unreadable without labels on both axes.
+   `cqh` here does NOT mean «60% of the card»: .sw-station is `container-type:
+   inline-size`, so the block axis has no query container and cqh falls back to
+   the small viewport height. At every viewport tall enough to play on it is the
+   420px arm of the min() that wins (60cqh passes 420 at 700px of viewport
+   height). It is written as cqh rather than vh so that a later block-axis
+   container would tighten this on its own. */
+.sw-mscan .sw-table-scroll {
+  max-height: min(60cqh, 420px);
+  overflow-y: auto;
+}
+
 /* Frozen «Товар» column. The matrix is ~2.9-3.3k px wide against a 466px card,
    so scrolling to the far stations used to leave rows of bare figures with no
    label in sight: at scrollLeft 2475 the goods cell sat at x -2062 (TASK-142).
-   The sticky axis is the horizontal one only -- .sw-table-scroll is the nearest
-   scrollport and its height is content-driven (scrollHeight == clientHeight), so
-   a `top` offset would have nothing to stick to; the row of station names scrolls
-   away with .sw-station__body, which is a different scroller. Freezing that
-   header too means restructuring the card's vertical scroll, well past the point
-   of a labelled row.
    The cell must paint opaque or the columns sliding underneath show through, and
    the flat --bg-1 cannot follow the card's vertical gradient -- so the column
    also carries a right-hand rule and reads as deliberately pinned rather than as
@@ -1457,6 +1474,57 @@ html, body, #root {
 }
 .sw-mscan__table tbody tr:hover td:first-child {
   background: linear-gradient(rgba(91, 206, 250, 0.04), rgba(91, 206, 250, 0.04)), var(--bg-1);
+}
+
+/* Frozen station-name row, the other axis of the same problem. Opaque for the
+   same reason as the column: the rows sliding underneath would otherwise print
+   through the station names. */
+.sw-mscan__table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg-1);
+}
+/* The «Товар» corner is sticky on BOTH axes, so it has to outrank both of its
+   neighbours at once: left at the column's z-index 1 the head cells passing
+   underneath paint over it, and at the head's 2 it ties and loses on source
+   order. Either way the corner reads as transparent, with a station name printed
+   across «Товар». 3 is the whole fix. */
+.sw-mscan__table thead th:first-child { z-index: 3; }
+
+/* The frozen column half-covers whichever column is passing under it, and the
+   sliver that survives is a TAIL, not a value: at 1280px/max scroll the
+   «Кристаллы» cell «🔴 8134 ×22 →8 134» had 119 of its 128px hidden and painted
+   a lone «4», which reads as a price a player can act on (TASK-173, same class
+   as TASK-140 -- the interface showing something other than what is there).
+   This band dissolves that sliver into the column's own background, so a cut
+   value looks cut instead of looking like a small number.
+   It is gated on the scroll offset, and that is not polish. Painted
+   unconditionally (measured) it costs the RESTING state, where nothing is
+   hidden and there is nothing to dissolve: at scrollLeft 0 the first station's
+   header read «АНЧО» instead of «РАНЧО» and its tier dot went from red to
+   maroon. The scroll timeline ties the band's opacity to the first 24px of
+   horizontal scroll, so it is absent at rest and fully on by the time anything
+   is actually cut. Where scroll timelines are unsupported the shorthand's 0s
+   duration + `both` lands the animation on its end state, i.e. the band simply
+   stays on -- the readable degradation, not a broken one. */
+@keyframes sw-mscan-edge-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.sw-mscan__table th:first-child::after,
+.sw-mscan__table td:first-child::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 100%;
+  width: 24px;
+  pointer-events: none;
+  background: linear-gradient(to right, var(--bg-1) 0 25%, transparent);
+  animation: sw-mscan-edge-fade linear both;
+  animation-timeline: scroll(nearest inline);
+  animation-range: 0 24px;
 }
 .sw-mscan__cell { display: flex; align-items: baseline; gap: 6px; }
 .sw-mscan__tier { display: inline-flex; align-items: baseline; gap: 4px; }
@@ -1589,7 +1657,9 @@ html, body, #root {
 /* Wrapper around each wide table. Scrolling per table (rather than relying on
    .sw-station__body) keeps the two axes independent: rows scroll vertically with
    the rest of the card, columns scroll horizontally only in the table that is
-   actually too wide. */
+   actually too wide. The one exception is the scanner matrix, which also takes
+   the vertical axis so its station-name row can freeze -- see
+   `.sw-mscan .sw-table-scroll` above. */
 .sw-table-scroll { overflow-x: auto; }
 
 /* Row-action cluster inside a table cell -- same layout as .sw-row, but named so

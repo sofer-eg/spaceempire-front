@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useGameContext } from './gameContext';
 import { SectorCanvas, type SelectedTargetRef, type ZoomMode } from './SectorCanvas';
 import { SetCoursePanel } from './SetCoursePanel';
@@ -161,11 +161,23 @@ export function SectorView() {
   // openPanel makes the three panels mutually exclusive — opening one closes any
   // other, so a side drawer and the journal sheet can never overlap.
   const [openPanel, setOpenPanel] = useState<'ship' | 'nav' | 'log' | null>(null);
+  // The toolbar toggle each panel belongs to, so closing can hand focus back to
+  // it (TASK-171 AC #4).
+  const toggleRefs = useRef<Record<'ship' | 'nav' | 'log', HTMLButtonElement | null>>({
+    ship: null, nav: null, log: null,
+  });
   // Escape closes whichever panel is open (listener attached only while one is).
   useEffect(() => {
     if (openPanel === null) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpenPanel(null);
+      if (e.key !== 'Escape') return;
+      // Closing makes the drawer `visibility: hidden` (TASK-171), which makes
+      // whatever inside it had focus unfocusable — the browser then drops focus
+      // on <body> and the next Tab restarts from the top of the document
+      // instead of continuing from the toggle the player opened the drawer
+      // with. Hand focus back to that toggle first.
+      toggleRefs.current[openPanel]?.focus();
+      setOpenPanel(null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -177,6 +189,7 @@ export function SectorView() {
         <button
           type="button"
           className="sw-btn"
+          ref={(el) => { toggleRefs.current.ship = el; }}
           data-active={openPanel === 'ship'}
           aria-pressed={openPanel === 'ship'}
           aria-label="Показать панель корабля"
@@ -187,6 +200,7 @@ export function SectorView() {
         <button
           type="button"
           className="sw-btn"
+          ref={(el) => { toggleRefs.current.nav = el; }}
           data-active={openPanel === 'nav'}
           aria-pressed={openPanel === 'nav'}
           aria-label="Показать панель навигации"
@@ -197,6 +211,7 @@ export function SectorView() {
         <button
           type="button"
           className="sw-btn"
+          ref={(el) => { toggleRefs.current.log = el; }}
           data-active={openPanel === 'log'}
           aria-pressed={openPanel === 'log'}
           aria-label="Показать журнал событий"

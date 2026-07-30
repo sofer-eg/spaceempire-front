@@ -81,6 +81,15 @@ export function MarketScanPanel({ reloadSignal }: Props) {
     return { station: st, label, map };
   });
 
+  // The figures in this matrix stay UNGROUPED (`8134`, not `8 134`) while the
+  // market table above them was grouped by TASK-169. That is a decision, not an
+  // oversight: this table carries one column per tradeable station in the sector
+  // and is already 2.9-3.3k px against a ~466px card (see the sw-table-scroll
+  // comment below), so a no-break space every three digits is paid ~20 times
+  // over here and once there.
+  // Known residue of that split: the level-4 forecast in the same cell IS
+  // grouped, because TASK-140 pinned it to its own tooltip, so a cell can read
+  // «🔴 8134 ×22 →8 134». The tooltip is the readable form for all of them.
   const renderCell = (g: ScanGood | undefined) => {
     if (!g) return <span className="sw-muted">—</span>;
     const tier = TIER[g.priceLevel];

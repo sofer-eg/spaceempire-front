@@ -157,6 +157,20 @@ export function MarketView({ station, shipID, reloadSignal }: Props) {
   // wallet in particular reads as «10 829 372 434», not one 11-digit run
   // (TASK-140). The «Запас» cell shares it with its own title, which was
   // formatted while the cell one line away was not.
+  //
+  // TASK-169 extended that to the «Покупка»/«Продажа» columns, which carry the
+  // widest figures on the screen — the dearest ware on the sector-1 trade station
+  // is `11374833`, an 8-digit run — and were the last raw ones here.
+  //
+  // The price of the trade, measured, not assumed: ru-RU groups with a NO-BREAK
+  // SPACE, so a column gains one character per three digits, and the compact
+  // market table's min-content goes 394 -> 417px. Cards wider than ~419px still
+  // show it with no horizontal scroll (466/466 at a 468px card, 806/806 at 808);
+  // the 396px floor and the 773px full-mode knife-edge hand 23 and 26px to
+  // .sw-table-scroll, which is the mechanism TASK-134 left for exactly this and
+  // clips nothing. The arithmetic lives next to the @container rule in App.css.
+  // Not extended to the scanner matrix, which pays ~20 times over — see
+  // MarketScanPanel.
   const ru = (n: number) => n.toLocaleString('ru-RU');
 
   const onBuy = async (entry: MarketEntry) => {
@@ -262,8 +276,8 @@ export function MarketView({ station, shipID, reloadSignal }: Props) {
             events in Firefox — so the folded stock would be unreachable in
             exactly the modes the review found (TASK-134 AC #6). */}
         <td title={`Запас: ${ru(it.stock)} / ${ru(it.maxStock)}`}>{goodsName(goods, it.typeID)}</td>
-        <td className="sw-mono">{it.sellPrice ?? '—'}</td>
-        <td className="sw-mono">{it.buyPrice ?? '—'}</td>
+        <td className="sw-mono">{it.sellPrice === null ? '—' : ru(it.sellPrice)}</td>
+        <td className="sw-mono">{it.buyPrice === null ? '—' : ru(it.buyPrice)}</td>
         {/* Stock is secondary info: it folds away on a narrow card so «Кол-во»
             and the buy/sell buttons stay on screen (TASK-134). */}
         <td className="sw-mono sw-table__secondary">

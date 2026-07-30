@@ -1647,12 +1647,26 @@ html, body, #root {
    therefore clipped at the cell edge and unreachable, i.e. a docked player could
    neither trade nor bid on a plain 1280px desktop. Two mechanisms fix that, in
    this order:
-     1. compaction (the @container block below) shrinks the table until the
-        price / quantity / action columns fit with NO horizontal scroll;
+     1. compaction (the @container block below) shrinks the table so the
+        price / quantity / action columns fit at most card widths with no
+        horizontal scroll at all;
      2. .sw-table-scroll catches whatever still does not fit, as a visible
         horizontal scrollbar INSIDE the card. That is the only outcome available
         to the scanner matrix, whose column count is the sector's station count
-        (22 in sector 1) and cannot be compacted into 392px. */
+        (22 in sector 1) and cannot be compacted into 392px.
+   Mechanism 1 no longer reaches ALL the way at the narrow end, and that is a
+   priced trade, not drift: grouping the price columns (TASK-169) took the
+   compact table's min-content from ~394 to 417px, so the two card widths that
+   sat flush against their box now hand 23-26px to mechanism 2. Measured on the
+   trade station in sector 1, whose dearest ware is `11 374 833`:
+     card 1108 -> 1106/1106  over 0
+     card  808 -> 806/806    over 0   (full)
+     card  773 -> 797/771    over 26  (full, the knife-edge band below)
+     card  761 -> 759/759    over 0   (compact)
+     card  468 -> 466/466    over 0   (compact)
+     card  396 -> 417/394    over 23  (compact, the floor)
+   Nothing is clipped or unreachable in either band -- that is exactly what
+   mechanism 2 is for -- but do not read the sentence above as «always fits». */
 
 /* Wrapper around each wide table. Scrolling per table (rather than relying on
    .sw-station__body) keeps the two axes independent: rows scroll vertically with
@@ -1766,20 +1780,36 @@ html, body, #root {
    outside the container, and it is 753-760 again.
    The .98 keeps a fractional container width out of a whole-pixel hole; see
    .sw-station for the card widths. */
-@container station (max-width: 769.98px) {
-  /* Secondary INFORMATION folds away -- «Запас» on the market, «Корпус»/«Щит» on
-     the shipyard buy list, «#»/«Лидер» on the auction lot list. Never an action:
-     every button keeps its word label. Each folded value stays readable in the
-     title of an ALWAYS-ENABLED element of the same row (the goods-name / model
-     cell) -- not of the ↑ button, which is disabled on most rows and therefore
-     gets no pointer events at all in Firefox (TASK-134 AC #6). */
+/* Secondary INFORMATION folds away -- «Запас» on the market, «Корпус»/«Щит» on
+   the shipyard buy list, «#»/«Лидер» on the auction lot list. Never an action:
+   every button keeps its word label. Each folded value stays readable in the
+   title of an ALWAYS-ENABLED element of the same row (the goods-name / model
+   cell) -- not of the ↑ button, which is disabled on most rows and therefore
+   gets no pointer events at all in Firefox (TASK-134 AC #6).
+   This fold runs 31px EARLIER than the rest of the compaction, and the gap is
+   the price of grouping the price columns (TASK-169): the full market table's
+   min-content went to 797.6px
+   (125.2 Товар + 96.3 + 89 + 118 Запас + 94 Кол-во + 275.1 Действие), so the
+   773px card that used to fit at 771 was cutting «ПРОДАТЬ» by 26px. Folding
+   «Запас» there returns 118px -- far more than the 26 -- and it is the one column
+   whose value is already duplicated into the row title, so the card keeps its
+   full 12px padding and 12px font instead of compacting a whole size early.
+   Threshold sits ~3px over the 797.6; see the note at the 769.98 query about the
+   card's own scrollbar being invisible to a container query. */
+@container station (max-width: 800.98px) {
   .sw-table__secondary { display: none; }
+}
 
+@container station (max-width: 769.98px) {
   /* Tighten the grid itself: 12px side padding is a third of a narrow column.
-     5px a side is what closes the last gap on the narrowest card -- per-column
-     min-content of the compact market table at 1024px measured
+     5px a side is what used to close the last gap on the narrowest card --
+     per-column min-content of the compact market table at 1024px measured
      104(Товар)+65+58+70+106(Действие) = 404 against a 394px body, and 1px off
-     each of the five visible columns' two sides is exactly those 10px. */
+     each of the five visible columns' two sides was exactly those 10px.
+     It closes most of it now rather than all: with the price columns grouped
+     (TASK-169) the same five columns measure
+     102.7(Товар)+76.2+69.6+68(Кол-во)+100.3(Действие) = 417, so 23px go to
+     .sw-table-scroll. Keep the 5px -- at 12px the deficit is ~93px, not 23. */
   .sw-table { font-size: 11px; }
   .sw-table th,
   .sw-table td { padding: 5px; }
@@ -1817,6 +1847,24 @@ html, body, #root {
   /* «Создать лот» needs nothing here: its track list is intrinsic, so it reflows
      on its own (two columns at 396-468px, four at 684-708px). See
      .sw-auction__create below. */
+}
+
+/* Floor band only. The compact table above fits every card from ~419px up; the
+   two narrowest ones (the 394-401px desktop floor at 1024-1212px of viewport,
+   and a phone) are the ones grouping the price columns pushed over (TASK-169:
+   min-content 394 -> 417 against a 394px box). Left alone, the 23px came off the
+   «Действие» column and «ПРОДАТЬ» was cut mid-word at a plain 1024px desktop --
+   the exact defect TASK-134 was opened for, reachable only by scrolling.
+   Side padding is where the 23px comes back from, because it is the one budget
+   that buys from all five visible columns at once: 5 -> 2px a side is 3px x 2 x 5
+   = 30px, which covers the 23 and leaves the slack the old 5px had. The vertical
+   5px is untouched -- the rows are already two lines deep on wrapped goods names.
+   Not folded into the block above: at 468px and up the 5px padding is what keeps
+   the compact table from reading as a solid block of digits, and that card has
+   49px of slack it does not need to spend. */
+@container station (max-width: 430px) {
+  .sw-table th,
+  .sw-table td { padding-left: 2px; padding-right: 2px; }
 }
 
 /* «До конца» is one line. The old MM:SS never wrapped; «4 ч 21 мин» does, and a

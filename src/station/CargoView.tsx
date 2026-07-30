@@ -130,8 +130,12 @@ function CargoColumn({ title, inv, action, busy, onMove, goods }: ColumnProps) {
     <div className="sw-cargo__col">
       <div className="sw-cargo__head">
         <span className="title">{title}</span>
+        {/* Grouped like every other figure in the UI: a full hold read
+            «249789/50000», which is two 6-digit runs and the one place a player
+            checks before buying (TASK-169). The chip is not in a table column,
+            so the extra separator costs nothing here. */}
         <span className="sw-chip sw-mono">
-          {Math.round(inv.used)}/{Math.round(inv.capacity)}
+          {`${Math.round(inv.used).toLocaleString('ru-RU')}/${Math.round(inv.capacity).toLocaleString('ru-RU')}`}
         </span>
       </div>
       {inv.items.length === 0 ? (

@@ -944,16 +944,23 @@ html, body, #root {
    of its right edge.
    Same remedy as TASK-139 one cell to the left: min-width:0 removes the floor
    and the strip reflows onto a second line instead of running past the column.
-   The chips are nowrap so a break lands BETWEEN chips and never inside a label
-   — «Возле корабля» / «По радару» are action labels and stay whole. Nothing is
-   truncated, so no title-attribute fallback is needed.
+   That reflow is what keeps labels whole — a flex item still refuses to shrink
+   below its own min-content, and wrapping takes the pressure off before any
+   chip is squeezed. The nowrap below is a guard against a future chip long
+   enough to be squeezed anyway, not the mechanism: switching only it off leaves
+   head height, scrollWidth and the set of two-line labels identical at
+   1280/1024/900/420/360. Nothing is truncated either way, so no
+   title-attribute fallback is needed.
    The cost is head height, measured on the undocked fixture against the same
-   page with these three declarations switched back off: 51 -> 65px over
-   1024-1280 (map body 605 -> 591 at 1024), 51 -> 85px at 420 and 110px at 360
-   (see the drawer regime below), unchanged 38px at 900 where the full-width head
-   already fit one line. Before the fix the head held those 51px only by breaking
-   three chip labels mid-phrase AND still overflowing. */
-.sw-mapcard .sw-panel-head .sw-row { flex-wrap: wrap; min-width: 0; row-gap: 4px; }
+   page with the two live declarations above (flex-wrap and min-width) switched
+   back off: 51 -> 65px over 1024-1280 (map body 605 -> 591 at 1024), 51 -> 85px
+   at 420 and ~103-110px at 360 (see the drawer regime below), unchanged 38px at
+   900 where the full-width head already fit one line. Before the fix the head
+   held those 51px only by breaking three chip labels mid-phrase AND still
+   overflowing. Undocked only, on purpose: a docked player gets StationView in
+   this cell (SectorView.tsx) and no map card at all, so there is nothing to
+   measure on that fixture. */
+.sw-mapcard .sw-panel-head .sw-row { flex-wrap: wrap; min-width: 0; }
 .sw-mapcard .sw-panel-head .sw-chip { white-space: nowrap; }
 
 .sw-map-wrap {

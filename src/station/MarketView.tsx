@@ -14,6 +14,7 @@ import {
 } from '../api';
 import { goodsName, goodsSpace, usePlayer, useGameContext } from '../gameContext';
 import { emitLog } from '../eventBus';
+import { formatDuration } from '../duration';
 import { MarketScanPanel } from './MarketScanPanel';
 
 type Props = {
@@ -372,13 +373,16 @@ export function MarketView({ station, shipID, reloadSignal }: Props) {
   );
 
   // The production countdown sits to the right of the «Продукция» heading.
-  // While a cycle runs it shows the time left (M:SS); idle factories show a
-  // muted «ожидание». null when the station has no recipe.
+  // While a cycle runs it shows the time left, in the same shape as the auction
+  // lot list's «До конца» column — formatDuration, not a local M:SS, because the
+  // two can appear on one screen and a cycle longer than an hour used to print
+  // «72:30» next to a column saying «1 ч 12 мин» (TASK-174). Idle factories show
+  // a muted «ожидание». null when the station has no recipe.
   const cycleTimer = () => {
     if (!production) return null;
     let label: string;
     if (production.inProgress) {
-      label = remaining > 0 ? formatMMSS(remaining) : 'обработка…';
+      label = remaining > 0 ? formatDuration(remaining) : 'обработка…';
     } else {
       label = 'ожидание';
     }
@@ -417,11 +421,4 @@ export function MarketView({ station, shipID, reloadSignal }: Props) {
       {hasTradeScanner && <MarketScanPanel reloadSignal={reloadSignal} />}
     </div>
   );
-}
-
-// formatMMSS renders a second count as M:SS for the production-cycle chip.
-function formatMMSS(totalSeconds: number): string {
-  const mins = Math.floor(totalSeconds / 60);
-  const secs = Math.floor(totalSeconds % 60);
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
 }

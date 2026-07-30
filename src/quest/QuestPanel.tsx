@@ -7,6 +7,7 @@ import {
   type ActiveQuest,
   type OfferableQuest,
 } from '../api';
+import { formatDuration } from '../duration';
 
 // QuestPanel renders the player's active quests + the quests they can accept
 // (phase 8.17 v2 — multiple active quests, event-step counters, deadlines,
@@ -38,13 +39,18 @@ function saveDismissed(d: Record<string, boolean>) {
   }
 }
 
+// deadlineLabel formats a quest deadline / offer expiry. The duration itself
+// comes from the shared formatter, so a quest, an auction lot and a production
+// cycle all say the same thing the same way (TASK-174) — this used to be its own
+// third dialect («⏳ 4ч 12м»), and one that stopped at hours, so a three-day
+// deadline read «72ч 0м». What stays local is the two things that are genuinely
+// about quests: the hourglass, and «просрочено» for a deadline already blown —
+// a failed quest is not a lot sitting at 00:00.
 function deadlineLabel(unix: number): string | null {
   if (!unix) return null;
   const secs = unix - Math.floor(Date.now() / 1000);
   if (secs <= 0) return 'просрочено';
-  const h = Math.floor(secs / 3600);
-  const m = Math.floor((secs % 3600) / 60);
-  return h > 0 ? `⏳ ${h}ч ${m}м` : `⏳ ${m}м`;
+  return `⏳ ${formatDuration(secs)}`;
 }
 
 type Props = {

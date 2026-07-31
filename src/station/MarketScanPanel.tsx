@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { fetchMarketScan, friendlyError, type ScanGood, type ScanResponse } from '../api';
 import { goodsName, staticTypeLabel, useGameContext } from '../gameContext';
 
@@ -34,6 +34,7 @@ export function MarketScanPanel({ reloadSignal }: Props) {
   const [scan, setScan] = useState<ScanResponse | null>(null);
   const [status, setStatus] = useState<'loading' | 'ok' | 'error'>('loading');
   const [error, setError] = useState('');
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,6 +54,48 @@ export function MarketScanPanel({ reloadSignal }: Props) {
       cancelled = true;
     };
   }, [reloadSignal]);
+
+  // Feed the two lengths the column snapping in App.css needs and CSS cannot
+  // measure for itself. Both come off the rendered table, so they follow the
+  // compaction switch and any change to the goods list without a second source
+  // of truth:
+  //   --sw-mscan-frozen  width of the pinned «Товар» column, which is the
+  //       longest goods name. It is the offset a snapped column has to clear,
+  //       or snapping parks columns underneath the frozen one.
+  //   --sw-mscan-tail    trailing room, so the LAST column can still reach the
+  //       frozen edge. Snap positions are clamped into the scroll range, so
+  //       without it the final one lands on max scroll and the far end of the
+  //       matrix keeps the straddling column the whole exercise is about. It is
+  //       exactly the room the last column does not fill, which is also the blank
+  //       the far end shows either way; anything more only adds scrollbar the
+  //       snapping will not let anyone rest in. 0 when the matrix fits, where
+  //       inventing overflow would be the regression.
+  // Values are written only when they change: the tail alters the box's content
+  // size, which is what the observer watches, and a blind write would loop.
+  useEffect(() => {
+    const box = scrollRef.current;
+    if (!box) return;
+    const table = box.querySelector('table');
+    const head = box.querySelectorAll('thead th');
+    if (!table || head.length < 2) return;
+    const first = head[0];
+    const last = head[head.length - 1];
+    const set = (name: string, value: string) => {
+      if (box.style.getPropertyValue(name) !== value) box.style.setProperty(name, value);
+    };
+    const sync = () => {
+      const frozen = first.getBoundingClientRect().width;
+      const overflows = table.getBoundingClientRect().width > box.clientWidth + 0.5;
+      const tail = box.clientWidth - frozen - last.getBoundingClientRect().width;
+      set('--sw-mscan-frozen', `${frozen}px`);
+      set('--sw-mscan-tail', overflows ? `${Math.max(0, tail)}px` : '0px');
+    };
+    sync();
+    const observer = new ResizeObserver(sync);
+    observer.observe(box);
+    observer.observe(first);
+    return () => observer.disconnect();
+  }, [scan]);
 
   if (status === 'loading') {
     return <div className="sw-station__loader">Сканирование сектора…</div>;
@@ -89,14 +132,28 @@ export function MarketScanPanel({ reloadSignal }: Props) {
   // over here and once there.
   // Known residue of that split: the level-4 forecast in the same cell IS
   // grouped, because TASK-140 pinned it to its own tooltip, so a cell can read
-  // «🔴 8134 ×22 →8 134». The tooltip is the readable form for all of them.
+  // «🔴 8134 ×22 →8 134». The cell's own tooltip is what makes that residue
+  // payable — it carries the same current price and stock in the grouped form,
+  // so a player comparing the matrix against the grouped market table one
+  // section above has somewhere to read «8 134» here too. It used to say only
+  // «Цена: высокая», which answered a question nobody was asking.
   const renderCell = (g: ScanGood | undefined) => {
     if (!g) return <span className="sw-muted">—</span>;
     const tier = TIER[g.priceLevel];
     const current = g.sellPrice > 0 ? g.sellPrice : g.buyPrice;
     const trend = forecastTrend(current, g.forecastPrice);
+    // Only what this scan level actually shows: at level 1 the tier badge is the
+    // whole cell, and a tooltip quoting a price the player has not unlocked
+    // would hand out the level-2 detail for free.
+    const title = [
+      `Цена: ${tier.label}`,
+      level >= 2 && current > 0 ? `${current.toLocaleString('ru-RU')} cr` : '',
+      level >= 3 ? `запас: ${g.stock.toLocaleString('ru-RU')}` : '',
+    ]
+      .filter(Boolean)
+      .join(' · ');
     return (
-      <div className="sw-mscan__cell" title={`Цена: ${tier.label}`}>
+      <div className="sw-mscan__cell" title={title}>
         <span className="sw-mscan__tier">
           {tier.dot}
           {level >= 2 && (
@@ -137,7 +194,7 @@ export function MarketScanPanel({ reloadSignal }: Props) {
           fit the HUD centre cell. Without its own scroll container the overflow
           fell to .sw-station__body and scrolling to a far station dragged the
           docked station's own market off screen (TASK-134 AC #3). */}
-      <div className="sw-table-scroll">
+      <div className="sw-table-scroll" ref={scrollRef}>
         <table className="sw-table sw-mscan__table">
           <thead>
             <tr>

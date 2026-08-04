@@ -108,9 +108,12 @@ export function QuestPanel({ open, onClose, onCountsChange }: Props) {
   // background tab resumes on the true time rather than on however many
   // intervals the browser chose to deliver. What this does NOT do is repaint on
   // the same frame the panel opens: `now` is then whatever the last poll left,
-  // i.e. up to POLL_MS old, and the first tick corrects it a second later. That
-  // one frame is the price of keeping setState out of the effect body; it is
-  // bounded because poll() runs while the panel is closed too.
+  // and the first tick corrects it a second later. That one frame is the price of
+  // keeping setState out of the effect body. POLL_MS bounds how old it can be
+  // only while the polls are landing — poll() re-syncs from its success callback
+  // and drops failures, so through an outage the opening frame can be as stale as
+  // the outage is long. It is one frame either way, and the tick that follows is
+  // exact regardless, which is why this is not worth a second clock.
   useEffect(() => {
     if (!open) return;
     const id = setInterval(() => setNow(Date.now()), 1000);

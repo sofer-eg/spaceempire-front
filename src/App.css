@@ -1452,13 +1452,16 @@ html, body, #root {
    height). It is written as cqh rather than vh so that a later block-axis
    container would tighten this on its own.
    This is a scroller nested inside another scroller (.sw-station__body), so it
-   also claims its own overscroll: without `contain` a touch flick that runs out
-   of matrix continues into the card body underneath, and the panel the finger
-   started on scrolls away mid-gesture. */
+   also claims its own overscroll, on BOTH axes. Block axis: without `contain` a
+   touch flick that runs out of matrix continues into the card body underneath,
+   and the panel the finger started on scrolls away mid-gesture. Inline axis: the
+   same flick at either end of a ~2.9-3.3k px matrix chains to the document,
+   where a horizontal overscroll is the browser's own back/forward gesture -- and
+   losing the page is a worse outcome than losing your place in it. */
 .sw-mscan .sw-table-scroll {
   max-height: min(60cqh, 420px);
   overflow-y: auto;
-  overscroll-behavior-y: contain;
+  overscroll-behavior: contain;
 }
 
 /* Frozen «Товар» column. The matrix is ~2.9-3.3k px wide against a 466px card,
@@ -1503,41 +1506,68 @@ html, body, #root {
    a lone «4», which reads as a price a player can act on (TASK-173, same class
    as TASK-140 -- the interface showing something other than what is there).
    Column snapping is what removes it, rather than a fade band over the frozen
-   edge. A band was measured first and does not hold: it can only veil a fixed
-   number of pixels, and the sliver is not a fixed width -- at a 900px viewport
-   the straddling columns showed 63-121px of themselves, three-digit tails a 24px
-   band leaves entirely legible. Worse, a band cannot tell a straddling column
-   from a fully visible one, so once the matrix is scrolled at all it dissolves
-   the first characters of a value that is completely there.
+   edge. A band was measured first, while it was in the tree, and does not hold:
+   it can only veil a fixed number of pixels, and the sliver is not a fixed width
+   -- at a 900px viewport the straddling columns showed 63-121px of themselves,
+   three-digit tails a 24px band leaves entirely legible. Worse, a band cannot
+   tell a straddling column from a fully visible one, so once the matrix is
+   scrolled at all it dissolves the first characters of a value that is
+   completely there.
    `inline mandatory` means the scrollport has no resting offset between two
    columns: whatever is at the frozen edge is a column boundary, so a cut value
-   stops existing instead of being made harder to read. The snapport's start edge
-   is pushed past the frozen column by scroll-padding-inline-start, or every snap
-   would park the column it aligned UNDER the frozen one -- which is the same
+   stops existing instead of being made harder to read. (The scrollport's own
+   RIGHT edge still cuts its last column, as any scrollport does -- that class is
+   pre-existing and TASK-173 does not open it. The defect is the cut the frozen
+   column moved INSIDE the table, where it reads as data.) The snapport's start
+   edge is pushed past the frozen column by scroll-padding-inline-start, or every
+   snap would park the column it aligned UNDER the frozen one -- which is the same
    defect with the head cut off instead of the tail. That width is the longest
-   goods name (125.2px full / 102.7px compact, measured), i.e. content-derived
-   and unknowable to CSS, so MarketScanPanel publishes it as --sw-mscan-frozen.
-   --sw-mscan-tail is the other half of «no resting offset»: snap positions are
-   clamped into the scroll range, so without trailing room the LAST of them
-   collapses onto max scroll and the far end keeps a straddling column (the exact
-   offset TASK-173 measured -- at 1280px it showed 9.6 of a 128.3px cell and
-   painted the lone «4»). The panel sizes the tail so the last column reaches the
-   frozen edge instead. It is 0 when the matrix fits, which is why it cannot be a
-   plain `calc(100% - ...)` here: a matrix that fits its card must not be handed
-   a scrollbar.
-   Scroll snapping is not a progressive-enhancement bet the way a scroll-driven
-   animation would have been -- it is in every engine this game runs in, and
-   where it were missing the panel is simply back to its pre-TASK-173 self
-   rather than to something worse. */
+   goods name (125.2px full / 102.4px compact), i.e. content-derived and
+   unknowable to CSS, so MarketScanPanel publishes it as --sw-mscan-frozen.
+   --sw-mscan-tail is the other half of «no resting offset». Snap positions are
+   clamped into the scroll range, so the last one a player can rest at is the
+   natural end of that range -- an arbitrary offset, where a column straddles the
+   frozen edge: with the tail forced to 0, max scroll shows 120.7 of a 157.4px
+   column at a 900px viewport and 11.3 of a 128px one at 1280, the latter being
+   the «🔴 8134 ×22 →8 134» cell painting the lone «4» above. The tail moves max
+   scroll onto the NEXT column boundary and no further, so it is under one column
+   wide by construction: 120.8px at 900, 10.8px at 1280, i.e. 121.1 and 10.5px of
+   blank at the far end (15% and 2% of the card).
+   That blank is the tail's own price, not something the matrix showed anyway --
+   untailed, the far end ends flush with the last column (0.1px / -0.5px).
+   Sizing the tail so the LAST column reaches the frozen edge satisfies the same
+   boundary requirement by way of the far end, and that is what this did until the
+   third review round: 547.6 and 245.8px of tail, 547.1 and 245.5px of blank --
+   68% and 52% of the card -- with the far end down from 4 and 3 whole station
+   columns to 1. Cheaper is better here, and the AC only asks that max scroll BE
+   a boundary.
+   The tail is 0 when the matrix fits, which is why it cannot be a plain
+   `calc(100% - ...)` here: a matrix that fits its card must not be handed a
+   scrollbar.
+   All figures above are one run on the sector-1 matrix (22 stations, cards 808
+   full / 468 compact); live prices and the goods list move them a pixel or two
+   per tick, so re-measure rather than reconcile.
+   The tail is gated on snapping, and the gate is not ceremony: padding with no
+   snap position to reach is dead weight, so an engine without scroll snap would
+   get the straddling column AND the blank. Gated, it is exactly its
+   pre-TASK-173 self instead. scroll-padding-inline-start needs no gate: on its
+   own it changes nothing that is painted. */
 .sw-mscan .sw-table-scroll {
   scroll-snap-type: inline mandatory;
   scroll-padding-inline-start: var(--sw-mscan-frozen, 0px);
-  padding-inline-end: var(--sw-mscan-tail, 0px);
 }
-/* Only the data cells, and not the frozen column's own: a sticky box's snap
-   area travels with it, which would make «wherever we are» a snap position and
-   freeze the scroller. Dropping the first column costs nothing -- the second
-   column's snap position IS scrollLeft 0, so rest is still reachable. */
+@supports (scroll-snap-type: inline mandatory) {
+  .sw-mscan .sw-table-scroll { padding-inline-end: var(--sw-mscan-tail, 0px); }
+}
+/* Only the data cells, and not the frozen column's own -- out of caution, not
+   against a measured hazard. The expectation was that a sticky box's snap area
+   travels with it, making «wherever we are» a snap position and freezing the
+   scroller; measured in Chrome for Testing 147, it does not: aligning the frozen
+   column's cells too leaves every resting offset identical
+   ([[0,0],[300,242],[900,874],[1800,1797],[99999,2714]], asked -> rested, both
+   ways). The exclusion stays for the engines not measured, and it costs nothing
+   either way -- the second column's snap position IS scrollLeft 0, so rest is
+   still reachable. */
 .sw-mscan__table tbody td:not(:first-child) { scroll-snap-align: none start; }
 .sw-mscan__cell { display: flex; align-items: baseline; gap: 6px; }
 .sw-mscan__tier { display: inline-flex; align-items: baseline; gap: 4px; }

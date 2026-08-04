@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { fetchMarketScan, friendlyError, type ScanGood, type ScanResponse } from '../api';
 import { goodsName, staticTypeLabel, useGameContext } from '../gameContext';
 
@@ -62,33 +62,61 @@ export function MarketScanPanel({ reloadSignal }: Props) {
   //   --sw-mscan-frozen  width of the pinned «Товар» column, which is the
   //       longest goods name. It is the offset a snapped column has to clear,
   //       or snapping parks columns underneath the frozen one.
-  //   --sw-mscan-tail    trailing room, so the LAST column can still reach the
-  //       frozen edge. Snap positions are clamped into the scroll range, so
-  //       without it the final one lands on max scroll and the far end of the
-  //       matrix keeps the straddling column the whole exercise is about. It is
-  //       exactly the room the last column does not fill, which is also the blank
-  //       the far end shows either way; anything more only adds scrollbar the
-  //       snapping will not let anyone rest in. 0 when the matrix fits, where
-  //       inventing overflow would be the regression.
+  //   --sw-mscan-tail    trailing room, so that MAX SCROLL is a column boundary
+  //       too. Snap positions are clamped into the scroll range, so every one
+  //       past the natural end of that range collapses onto it -- and that end
+  //       is an arbitrary offset, where a column straddles the frozen edge. The
+  //       tail is the distance from there to the NEXT boundary: the whole of
+  //       what is needed, and under one column wide by construction (measured
+  //       120.8px at a 900px viewport, 10.8px at 1280).
+  //       Sizing it so the LAST column reaches the frozen edge instead -- what
+  //       this did until the third review round -- satisfies the same boundary
+  //       requirement by way of the far end of the matrix, and costs 547.6 /
+  //       245.8px of tail, i.e. 547.1 / 245.5px of blank at the far end: 68% of
+  //       the card at 900 and 52% at 1280, with 1 whole station column in view
+  //       instead of 4 and 3. The blank is the tail's own price either way --
+  //       untailed, the far end ends flush with the last column.
+  //       0 when the matrix fits, where inventing overflow would be the
+  //       regression, and 0 as well on a card too narrow to hold the frozen
+  //       column plus the last one, where no boundary can reach max scroll and
+  //       no tail would help.
+  // Column geometry is read off the head row -- the snap alignment lives on the
+  // data cells, but they share their columns' offsets, and the head is one row
+  // to walk instead of 65.
   // Values are written only when they change: the tail alters the box's content
   // size, which is what the observer watches, and a blind write would loop.
-  useEffect(() => {
+  // A layout effect, not a passive one: published after the first paint, the
+  // frozen width is missing for that frame and mandatory snapping parks column 2
+  // UNDER the frozen column -- measured scrollLeft 103 on the panel's first
+  // frame, corrected 27ms later. Self-healing, but visible.
+  useLayoutEffect(() => {
     const box = scrollRef.current;
     if (!box) return;
     const table = box.querySelector('table');
     const head = box.querySelectorAll('thead th');
     if (!table || head.length < 2) return;
     const first = head[0];
-    const last = head[head.length - 1];
     const set = (name: string, value: string) => {
       if (box.style.getPropertyValue(name) !== value) box.style.setProperty(name, value);
     };
     const sync = () => {
+      const tableRect = table.getBoundingClientRect();
       const frozen = first.getBoundingClientRect().width;
-      const overflows = table.getBoundingClientRect().width > box.clientWidth + 0.5;
-      const tail = box.clientWidth - frozen - last.getBoundingClientRect().width;
+      // Max scroll the matrix would have with no tail. clientWidth includes the
+      // padding, so this figure does not move as the tail does.
+      const plainMax = tableRect.width - box.clientWidth;
+      let tail = 0;
+      for (let i = 1; plainMax > 0.5 && i < head.length; i++) {
+        // Snap position of column i: its start edge, less the frozen column the
+        // snapport's start edge is pushed past.
+        const snap = head[i].getBoundingClientRect().left - tableRect.left - frozen;
+        if (snap >= plainMax - 0.5) {
+          tail = snap - plainMax;
+          break;
+        }
+      }
       set('--sw-mscan-frozen', `${frozen}px`);
-      set('--sw-mscan-tail', overflows ? `${Math.max(0, tail)}px` : '0px');
+      set('--sw-mscan-tail', `${Math.max(0, tail)}px`);
     };
     sync();
     const observer = new ResizeObserver(sync);

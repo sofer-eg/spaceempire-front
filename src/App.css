@@ -2004,7 +2004,16 @@ html, body, #root {
    The market's own figure here is 385.9 -- it is the only one that needed the
    2px, and 415.9 without it. (.sw-market also holds the
    scanner matrix, which keeps the 2px it has always had here -- it is 2.8-3.3k px
-   wide at every card width and scrolls regardless.) */
+   wide at every card width and scrolls regardless.)
+   Read the box figures above as OVERLAY-SCROLLBAR figures. Every one of them was
+   taken headless, where the card body is 394px wide; a browser with classic 15px
+   scrollbars reports the same body at 379, so the 8px of slack this block buys is
+   really a 7px deficit there and «ПРОДАТЬ» keeps a few px past the edge (measured
+   headed at a 1024px viewport: box 379, min-content 386.8, the button 4.9px over).
+   That is not this block's doing -- it was 11px over before TASK-169 and this
+   bought 4 of them back -- but the numbers here do not describe it, so do not read
+   a zero above as «fits everywhere». The 769.98 block says the same thing about
+   its own figures; this one had to as well. */
 @container station (max-width: 430px) {
   .sw-market .sw-table th,
   .sw-market .sw-table td { padding-left: 2px; padding-right: 2px; }

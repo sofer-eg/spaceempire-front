@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { EntityKind } from './api';
+import { staticListOf } from './api';
 import type { Asteroid, Container, DestructibleStatic, Drone, DroneImpact, GoodsRow, LaserBeam, Missile, MissileImpact, Race, SectorStatics, StationType, Torpedo, TorpedoImpact, WorldGate } from './api';
 import type { TrackedShip } from './useWorldState';
 import type { HighlightRef } from './TargetsPanel';
@@ -287,26 +287,16 @@ export function SectorCanvas(props: Props) {
     }
     if (menu.target.kind === 'dock') {
       const ref = menu.target.ref;
-      const list =
-        ref.kind === EntityKind.Station
-          ? props.statics.stations
-          : ref.kind === EntityKind.Shipyard
-            ? props.statics.shipyards
-            : ref.kind === EntityKind.TradeStation
-              ? props.statics.tradeStations
-              : ref.kind === EntityKind.Pirbase
-                ? props.statics.pirbases
-                : // TASK-113 D3: laser towers, satellites and (TASK-131)
-                  // hyper-interference generators are weapon targets, so their
-                  // dock-pick menu must stay open while they exist.
-                  ref.kind === EntityKind.LaserTower
-                  ? props.statics.laserTowers
-                  : ref.kind === EntityKind.Satellite
-                    ? props.statics.satellites
-                    : ref.kind === EntityKind.Jammer
-                      ? props.statics.jammers
-                      : undefined;
-      const found = list?.some(
+      // staticListOf, not a fourth hand-written copy of the kind→list mapping
+      // (TASK-165): this used to be the same seven kinds in a nested ternary and
+      // the same `id && sectorID` predicate as SectorView's resolver, so a static
+      // type taught to one and not the other would light its row and its ring and
+      // then have its canvas menu closed on the next statics frame — list
+      // undefined, found undefined, menu null, «Лететь»/«Атаковать» unclickable.
+      // Laser towers, satellites and (TASK-131) hyper-interference generators
+      // reach a 'dock' pick without being dockable (TASK-113 D3); the helper
+      // returns their lists too, so the menu stays open while they exist.
+      const found = staticListOf(props.statics, ref.kind)?.some(
         (s) => s.id === ref.id && s.sectorID === props.currentSectorID,
       );
       return found ? menu : null;

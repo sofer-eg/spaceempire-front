@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { activateShip, fetchFleet, sellShip, type Ship } from '../api';
+import { activateShip, commandErrorText, fetchFleet, friendlyError, sellShip, type Ship } from '../api';
 
 // useFleet owns the fleet state the Pilot page's «Флот» card renders (TASK-127.1;
 // the floating panel was retired in TASK-127.2). It fetches every ship the player
@@ -34,7 +34,9 @@ export function useFleet(active: boolean, onActivated: () => void): FleetState {
         setShips(list);
         setError(null);
       })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Не удалось загрузить флот'))
+      .catch((err: unknown) =>
+        setError(err instanceof Error ? friendlyError(err) : 'Не удалось загрузить флот'),
+      )
       .finally(() => setLoading(false));
   }, []);
 
@@ -53,7 +55,9 @@ export function useFleet(active: boolean, onActivated: () => void): FleetState {
         onActivated();
         load();
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Не удалось переключить корабль');
+        // friendlyError: switching the active ship moves no credits, and re-sending
+        // it sets the same field again (TASK-168 AC #3).
+        setError(err instanceof Error ? friendlyError(err) : 'Не удалось переключить корабль');
       } finally {
         setBusy(0);
       }
@@ -69,7 +73,11 @@ export function useFleet(active: boolean, onActivated: () => void): FleetState {
         onActivated(); // refresh wallet
         load();
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Не удалось продать корабль');
+        // commandErrorText (TASK-168 AC #3): app/sell_ship.go credits the wallet and
+        // DELETEs the hull in one transaction, so a lost ack leaves the outcome in
+        // doubt — the ship may already be sold and paid for, and «Сервер не ответил»
+        // must not read as a refusal.
+        setError(err instanceof Error ? commandErrorText(err) : 'Не удалось продать корабль');
       } finally {
         setBusy(0);
       }

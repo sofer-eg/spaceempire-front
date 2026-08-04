@@ -1,13 +1,20 @@
 // Typed client for the clan endpoints (phase 6.1). Mirrors the netFetch +
-// {error} body convention of src/api.ts; failures throw an Error carrying
-// the server's human-readable message so views can surface it inline.
+// {error} body convention of src/api.ts; failures throw an ApiError carrying the
+// server's human-readable message so views can surface it inline.
+//
+// ApiError, not a plain Error (TASK-168): the message alone is not enough for the
+// mappers. friendlyError words 502/504 as «Сервер не ответил» because a proxy
+// answered instead of the game, and commandErrorText needs the same statuses to
+// warn that a command's outcome is in doubt — both branch on err.status, so
+// dropping it here made the identical 502 read one way on the galaxy map and
+// another on this page.
 //
 // netFetch, not bare fetch (TASK-168): every view here renders e.message
 // directly, so on a dead backend a raw fetch rejection put the English "Failed to
 // fetch" in the Russian interface — reachable just by opening the Кланы tab
 // during a restart. netFetch labels that case NetworkError, whose message is
 // already the Russian line.
-import { netFetch, parseErrorBody } from '../api';
+import { ApiError, netFetch, parseErrorBody } from '../api';
 
 export type ClanSummary = {
   id: number;
@@ -49,13 +56,13 @@ export type ClanDetail = {
 async function getJSON<T>(url: string): Promise<T> {
   const res = await netFetch(url);
   if (!res.ok) {
-    // The route goes to the console, not into the message: every view here shows
-    // e.message verbatim, and «GET /api/clans/mine: …» was machine text in the
-    // player's error slot (TASK-168). postJSON below already threw the bare
-    // message; this is the two of them agreeing.
+    // The route goes to the console, not into the message: the views here hand the
+    // failure to friendlyError, which shows the message, so «GET /api/clans/mine: …»
+    // in it was machine text in the player's error slot (TASK-168). postJSON below
+    // throws the same shape; this is the two of them agreeing.
     const msg = await parseErrorBody(res);
     console.error('clan request failed', url, res.status, msg);
-    throw new Error(msg);
+    throw new ApiError(res.status, msg);
   }
   return (await res.json()) as T;
 }
@@ -67,7 +74,7 @@ async function postJSON<T>(url: string, body?: unknown): Promise<T> {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) {
-    throw new Error(await parseErrorBody(res));
+    throw new ApiError(res.status, await parseErrorBody(res));
   }
   return (await res.json()) as T;
 }

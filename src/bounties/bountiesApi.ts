@@ -1,7 +1,8 @@
 // Typed client for the bounty endpoints (phase 6.3). Mirrors the netFetch +
 // {error} body convention of src/clans/clansApi.ts, including why the transport
-// is netFetch rather than bare fetch (TASK-168).
-import { netFetch, parseErrorBody } from '../api';
+// is netFetch rather than bare fetch and why failures carry the status in an
+// ApiError rather than a plain Error (TASK-168).
+import { ApiError, netFetch, parseErrorBody } from '../api';
 
 export type Bounty = {
   id: number;
@@ -31,7 +32,7 @@ export async function fetchTopBounties(): Promise<Bounty[]> {
     // Route in the console, message on screen — same reasoning as clansApi.getJSON.
     const msg = await parseErrorBody(res);
     console.error('bounty request failed', res.status, msg);
-    throw new Error(msg);
+    throw new ApiError(res.status, msg);
   }
   return (await res.json()) as Bounty[];
 }
@@ -43,7 +44,7 @@ export async function setBounty(req: SetBountyRequest): Promise<{ id: number }> 
     body: JSON.stringify(req),
   });
   if (!res.ok) {
-    throw new Error(await parseErrorBody(res));
+    throw new ApiError(res.status, await parseErrorBody(res));
   }
   return (await res.json()) as { id: number };
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { friendlyError } from '../api';
 import { fetchClans, type ClanSummary } from './clansApi';
 
 // ClansView lists every clan with its member count. A row opens the
@@ -18,7 +19,7 @@ export function ClansView() {
         if (alive) setClans(cs);
       })
       .catch((e) => {
-        if (alive) setError(e instanceof Error ? e.message : String(e));
+        if (alive) setError(friendlyError(e));
       });
     return () => {
       alive = false;

@@ -6,7 +6,7 @@
 // rejects as NetworkError instead of a bare TypeError. AuthError still carries
 // every answer the server did give; LoginPage.messageFor words the no-answer case
 // off NetworkError.
-import { netFetch, parseErrorBody } from '../api';
+import { ApiError, netFetch, parseErrorBody } from '../api';
 
 export type Player = {
   playerID: number;
@@ -22,14 +22,17 @@ export type AuthErrorKind =
   | 'unauthenticated'
   | 'network';
 
-export class AuthError extends Error {
+// Extends ApiError rather than Error (TASK-168) so LoginPage can hand the statuses
+// it does not word itself to friendlyError and get the same line every other screen
+// shows for them — notably «Сервер не ответил (502)» for a proxy answering instead
+// of the game. status is inherited; re-declaring it here would define the field
+// again after super() and blank it.
+export class AuthError extends ApiError {
   kind: AuthErrorKind;
-  status: number;
   constructor(kind: AuthErrorKind, status: number, message: string) {
-    super(message);
+    super(status, message);
     this.name = 'AuthError';
     this.kind = kind;
-    this.status = status;
   }
 }
 

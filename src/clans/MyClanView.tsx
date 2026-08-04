@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { fetchPlayers, type PlayerSummary } from '../api';
+import { friendlyError, fetchPlayers, type PlayerSummary } from '../api';
 import {
   inviteToClan,
   kickMember,
@@ -60,7 +60,11 @@ export function MyClanView({ clan, ownPlayerID, onChanged }: Props) {
       await fn();
       onChanged();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      // friendlyError, not commandErrorText: invite / accept / kick / leave / role
+      // move no credits, and each is idempotent enough that a retry after a lost ack
+      // is refused rather than doubled (a second invite hits the invitation unique
+      // key, a second kick finds no membership) — TASK-168 AC #3.
+      setError(friendlyError(e));
     } finally {
       setBusy(false);
     }

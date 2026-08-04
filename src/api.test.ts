@@ -22,6 +22,7 @@ import {
   jumpDriveErrorText,
   netFetch,
   parseErrorBody,
+  STATIC_LIST_KIND,
   staticListOf,
   type SectorStatics,
 } from './api.ts';
@@ -409,11 +410,22 @@ test('netFetch wraps a fetch rejection in NetworkError and passes a response thr
 
 // --- staticListOf (TASK-165) -------------------------------------------------
 // The kind→list mapping used to be hand-copied into SectorView (panel row +
-// canvas ring) and ObjectLayer (marker position), and the copies drifted on
-// every new static type. These assertions pin the whole table, not just the
-// jammer that was missing, so the next added type fails here rather than
-// silently losing its selected highlight.
-const STATICS: SectorStatics = {
+// canvas ring), ObjectLayer (marker position) and SectorCanvas (keeping a canvas
+// menu open), and the copies drifted on every new static type.
+//
+// The expected set is not written out here — it is read from api.ts's
+// STATIC_LIST_KIND, which is `Record<keyof SectorStatics, number>` and therefore
+// as complete as tsc can force it to be. That makes the two gates bite in
+// sequence when a static type is added: `npm run build` fails first (api.ts owes
+// the new list a kind), and once the kind is named `npm test` fails here (the
+// fixture below owes it a list). Listing the kinds by hand — what this test did
+// first — guarded neither step: a kind that neither the helper nor the fixture
+// knew about was invisible in both directions, and a review mutation adding
+// `mines?: Jammer[]` to SectorStatics plus `Mine: 15` to EntityKind left all 54
+// tests green. tsconfig.app.json excludes src/**/*.test.ts, so a type-level trick
+// inside this file (a Required<SectorStatics> fixture, say) would not have been
+// checked by any gate at all.
+const STATICS: Required<SectorStatics> = {
   stations: [{ id: 1, sectorID: 1, x: 0, y: 0, hp: 1, shield: 0, race: 1, built: true, type: 7 }],
   shipyards: [{ id: 2, sectorID: 1, x: 0, y: 0, hp: 1, shield: 0, race: 1, built: true }],
   tradeStations: [{ id: 3, sectorID: 1, x: 0, y: 0, hp: 1, shield: 0, race: 1, built: true, type: 1 }],
@@ -436,23 +448,26 @@ test('staticListOf maps every static EntityKind to its own list', () => {
   assert.equal(staticListOf(STATICS, EntityKind.Jammer), STATICS.jammers);
 });
 
-test('staticListOf covers exactly the kinds SectorStatics has lists for', () => {
-  // isStaticTargetKind is the weapon-target set, which is not the same set:
-  // a gate can be shot at but is delivered in its own /api/world payload, not in
-  // SectorStatics. Asserting both directions keeps the difference deliberate.
-  const inStatics = [
-    EntityKind.Station,
-    EntityKind.Shipyard,
-    EntityKind.TradeStation,
-    EntityKind.Pirbase,
-    EntityKind.LaserTower,
-    EntityKind.Satellite,
-    EntityKind.Jammer,
-  ];
-  assert.deepEqual(
-    Object.values(EntityKind).filter((k) => staticListOf(STATICS, k) !== undefined),
-    inStatics,
-  );
+test('staticListOf resolves every list SectorStatics declares, one kind each', () => {
+  const fields = Object.keys(STATIC_LIST_KIND) as (keyof SectorStatics)[];
+  const resolved = new Set<unknown>();
+  for (const field of fields) {
+    const list = staticListOf(STATICS, STATIC_LIST_KIND[field]);
+    // assert.ok before assert.equal on purpose: a field the fixture has no list
+    // for makes both sides undefined, and an equality check alone would pass a
+    // list nobody can reach.
+    assert.ok(list, `${field}: kind ${STATIC_LIST_KIND[field]} resolved to no list`);
+    assert.equal(list, STATICS[field], `${field} must resolve to its own list`);
+    resolved.add(list);
+  }
+  // Seven fields, seven distinct lists: two fields sharing a kind (the copy-paste
+  // slip this helper exists to prevent) would make one of them return the other's
+  // array, which the equality above catches, and this counts.
+  assert.equal(resolved.size, fields.length);
+
+  // isStaticTargetKind is the weapon-target set, which is not the same set: a gate
+  // can be shot at but is delivered in its own /api/world payload, not in
+  // SectorStatics. Asserting the difference keeps it deliberate.
   assert.equal(staticListOf(STATICS, EntityKind.Gate), undefined, 'gates live in /api/world');
 });
 

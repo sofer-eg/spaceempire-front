@@ -140,7 +140,12 @@ function messageFor(err: unknown, mode: Mode): string {
       case 'unauthenticated':
         return 'Сессия истекла, войдите снова';
       case 'network':
-        return `Ошибка сети (${err.status})`;
+        // Everything the server did answer but the four cases above: 5xx, and any
+        // status auth/api.ts does not classify. friendlyError, not «Ошибка сети»
+        // (TASK-168 S8) — the network is plainly fine when a status arrived, and
+        // parseErrorBody has already put either the backend's own message or
+        // «Сервер вернул ошибку 500.» in err.message, which this used to discard.
+        return friendlyError(err);
     }
   }
   return mode === 'login' ? 'Не удалось войти' : 'Не удалось зарегистрироваться';

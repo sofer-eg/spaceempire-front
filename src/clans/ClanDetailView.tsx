@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { friendlyError } from '../api';
 import { fetchClan, type ClanDetail } from './clansApi';
 
 const roleLabel: Record<string, string> = {
@@ -28,7 +29,7 @@ export function ClanDetailView() {
         if (alive) setClan(c);
       })
       .catch((e) => {
-        if (alive) setError(e instanceof Error ? e.message : String(e));
+        if (alive) setError(friendlyError(e));
       });
     return () => {
       alive = false;

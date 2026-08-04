@@ -504,36 +504,72 @@ export type StaticObject = {
 // isDockableStaticKind for the same reason: a new static type must be taught to
 // the client in exactly one place.
 //
-// It used to be two hand-copied switches (SectorView.selectedStaticList for the
-// panel row + canvas ring, ObjectLayer.staticList for marker positions), and the
-// copies drifted every single time a static type was added — satellites (10.15),
-// laser towers (4.5), jammers (TASK-131). The jammer case is what TASK-165 came
-// from: present in ObjectLayer, absent in SectorView, and because SectorView runs
-// first the ObjectLayer case was dead code and the generator got no selected
-// highlight at all.
+// It used to be four hand-copied mappings over the same seven kinds — three
+// switches (SectorView.selectedStaticList for the panel row + canvas ring,
+// ObjectLayer.staticList for marker positions, CombatHUD.findStatic for the target
+// caption) and a nested ternary in SectorCanvas.visibleMenu that decides whether a
+// canvas object's menu stays open. The copies drifted every single time a static
+// type was added — satellites (10.15), laser towers (4.5), jammers (TASK-131). The
+// jammer case is what TASK-165 came from: present in ObjectLayer, absent in
+// SectorView, and because SectorView runs first the ObjectLayer case was dead code
+// and the generator got no selected highlight at all.
 //
 // An unknown kind returns undefined — Gate and Container reach the navigation
 // panel as targets but are not in SectorStatics, and callers already treat
 // undefined as "nothing to highlight".
-export function staticListOf(statics: SectorStatics, kind: number): StaticObject[] | undefined {
-  switch (kind) {
-    case EntityKind.Station:
-      return statics.stations;
-    case EntityKind.Shipyard:
-      return statics.shipyards;
-    case EntityKind.TradeStation:
-      return statics.tradeStations;
-    case EntityKind.Pirbase:
-      return statics.pirbases;
-    case EntityKind.LaserTower:
-      return statics.laserTowers;
-    case EntityKind.Satellite:
-      return statics.satellites;
-    case EntityKind.Jammer:
-      return statics.jammers;
-    default:
-      return undefined;
-  }
+//
+// "Single" covers resolving one list from one kind, which is what drifted. It does
+// not cover the places that walk all seven fields by name and never branch on a
+// kind: useWorldState.removeStaticsByRefs / mergeStatics / staticsEmpty,
+// ObjectLayer's own render loops, TargetsPanel's row builders,
+// sectorViewport.computeMaxBounds. Those are field walks, and folding them through
+// a kind lookup would need a cast per assignment to convince tsc the element type
+// still matches.
+//
+// The result is readonly because it is not a copy: it is `statics.stations` (or
+// whichever list) handed back under a wider element type, and a push through that
+// alias would put a StaticObject in an array the rest of the SPA reads as
+// Station[]. Every caller only searches it.
+//
+// StaticObject deliberately stops at the fields all seven lists share, which is
+// why gameContext.resolveStation still indexes statics.stations / .shipyards /
+// .tradeStations by hand: it needs ownerID (and pirbases carry angle), and those
+// live on the per-type types, not here. That is a narrower shape, not a caller
+// this helper forgot.
+//
+// STATIC_LIST_KIND is the mapping itself, and it is keyed by the SectorStatics
+// field rather than by the kind for one reason: `Record<keyof SectorStatics, …>`
+// makes tsc demand an entry per declared list, so adding `mines?: Mine[]` to
+// SectorStatics stops THIS file compiling until the kind is named. A switch on the
+// kind could not do that — a missing case just returns undefined, silently, which
+// is exactly how the jammer went missing. Exported because api.test.ts needs the
+// field set at runtime (types are erased before node --test sees it), and node
+// --test is the gate that then demands the new list be reachable.
+export const STATIC_LIST_KIND: Record<keyof SectorStatics, number> = {
+  stations: EntityKind.Station,
+  shipyards: EntityKind.Shipyard,
+  tradeStations: EntityKind.TradeStation,
+  pirbases: EntityKind.Pirbase,
+  laserTowers: EntityKind.LaserTower,
+  satellites: EntityKind.Satellite,
+  jammers: EntityKind.Jammer,
+};
+
+// Inverted once at module load — lookups run per frame (marker resolution, menu
+// visibility), the table is seven entries and never changes.
+const STATIC_LIST_FIELD = new Map<number, keyof SectorStatics>(
+  (Object.entries(STATIC_LIST_KIND) as [keyof SectorStatics, number][]).map(([field, kind]) => [
+    kind,
+    field,
+  ]),
+);
+
+export function staticListOf(
+  statics: SectorStatics,
+  kind: number,
+): readonly StaticObject[] | undefined {
+  const field = STATIC_LIST_FIELD.get(kind);
+  return field === undefined ? undefined : statics[field];
 }
 
 export type StaticsMessage = {
@@ -572,10 +608,13 @@ export async function fetchState(): Promise<Snapshot> {
   return (await res.json()) as Snapshot;
 }
 
-// ApiError with the bare backend message, not requireOk: the clan and bounty
-// pages print e.message straight into their error slot, so a failure here used to
-// read «GET /api/players 500» on screen and requireOk's route label would only
-// have shortened the machine text, not removed it (TASK-168).
+// ApiError with the bare backend message rather than requireOk. Both work here:
+// the only caller is the bounty form's target picker, and since TASK-168 that page
+// maps its failures through friendlyError, which strips requireOk's route label
+// anyway. The shape is kept because it is the one the in-space senders above use;
+// what matters is not the verb but whether the caller maps — see fetchWorld below
+// for the same call decided the other way, and the in-space header for the group
+// where it is not free.
 export async function fetchPlayers(): Promise<PlayerSummary[]> {
   const res = await netFetch('/api/players');
   if (!res.ok) {
@@ -585,20 +624,42 @@ export async function fetchPlayers(): Promise<PlayerSummary[]> {
 }
 
 // --- In-space commands -----------------------------------------------------
-// The senders from here through sendCeaseFire all throw
-// `new ApiError(res.status, await parseErrorBody(res))` — the same shape as
-// sendLaunchMissile / sendLaunchDrone / sendLaunchTorpedo / sendPickupContainer /
-// sendMine below, and deliberately NOT requireOk (TASK-168).
+// Fifteen senders throw `new ApiError(res.status, await parseErrorBody(res))` —
+// the same shape as sendLaunchMissile / sendLaunchDrone / sendLaunchTorpedo /
+// sendPickupContainer / sendMine below, and deliberately NOT requireOk (TASK-168).
+// By name, because "everything from here to sendCeaseFire" is not the rule and
+// reading it that way would undo a decision: sendMove, sendSetCourse, sendJump,
+// sendJumpDrive, sendDock, sendUndock, disembark, setShipAccess, exitShip,
+// activateShip, sellShip, sendAttack, sendCapture, sendHack, sendCeaseFire.
 //
-// They used to read the body with res.text() and put the whole
+// Six requireOk senders sit among them and must stay that way: claimStation
+// (StationView → commandErrorText), getShipAtShipyard (StationView →
+// friendlyError), postShipyard behind buyShip / installEquipment /
+// uninstallEquipment (ShipyardView → commandErrorText) and boardShip (HangarView →
+// friendlyError, plus its own note below — eva.go answers a Russian sentinel
+// there). Each has a caller that maps the failure, and a mapper strips requireOk's
+// route label; that is the whole difference between the two groups, not their
+// position in the file.
+//
+// The fifteen used to read the body with res.text() and put the whole
 // `POST /api/cmd/dock 400: {"error":"out of dock range"}` string in the thrown
-// message, JSON envelope and all, which is what the player saw: their views print
-// err.message raw (ObjectActionsMenu.formatError — which also writes it to the
-// event journal — TargetsPanel.onRowClick, SpacePointMenu, CombatHUD.run,
-// fleet/useFleet). requireOk would fix the envelope but add its own `POST /api/…: `
-// label, and only the station tabs strip that (they run every failure through
-// friendlyError). So these get the bare backend message, and the route stays where
-// it is useful — the browser's network panel.
+// message, JSON envelope and all. Where that string actually reached the player is
+// worth splitting three ways, since only the first group is why this shape is the
+// rule:
+//   - printed raw, envelope and all (7): sendMove, sendJump, sendDock, sendAttack,
+//     sendCapture, sendHack, sendCeaseFire — ObjectActionsMenu.formatError (which
+//     also writes it to the event journal), TargetsPanel.onRowClick, SpacePointMenu
+//     and CombatHUD.run all render err.message with no mapper.
+//   - mapped by the caller (4): sendSetCourse and sendJumpDrive (GalaxyMap /
+//     SetCoursePanel → friendlyError / jumpDriveErrorText), activateShip and
+//     sellShip (fleet/useFleet → friendlyError / commandErrorText). Either shape
+//     would read fine here; they keep this one so the group stays uniform.
+//   - shown to nobody (4): sendUndock, disembark, setShipAccess, exitShip reach only
+//     PilotPanel, which console.errors and puts nothing on screen, so for these the
+//     conversion only cleans up what a developer reads in the console.
+// requireOk would fix the envelope but add its own `POST /api/…: ` label, which the
+// raw-printing views do not strip. So these get the bare backend message, and the
+// route stays where it is useful — the browser's network panel.
 export async function sendMove(
   shipID: number,
   x: number,
@@ -1104,8 +1165,11 @@ export type WorldResponse = {
 };
 
 // Backs useGalaxy, i.e. the galaxy map and the autopilot panel's sector list.
-// requireOk for the same reason as fetchPlayers: useGalaxy's message is rendered
-// as-is, and «GET /api/world 500» is not a sentence (TASK-168).
+// requireOk is safe here because useGalaxy hands the failure to friendlyError
+// (TASK-168 replaced its String(err)), and friendlyError strips the
+// `GET /api/world: ` label requireOk adds. Note the reason is the caller's mapper,
+// not the message being printed: printing err.message as-is is the one thing that
+// makes requireOk unsafe, which is why the raw-printing senders above avoid it.
 export async function fetchWorld(): Promise<WorldResponse> {
   const res = await netFetch('/api/world');
   await requireOk(res, 'GET /api/world');
@@ -1143,12 +1207,14 @@ export class ApiError extends Error {
 //
 // cause carries whatever fetch threw, for the console; message is the line we
 // would show a player. Views that print err.message straight into their own
-// error slot get a Russian line this way without each growing a mapper — but
-// only the ones whose requests come from this module: the fleet panel and the
-// galaxy map. Clans, bounties and the login screen have their own transport
-// built on bare fetch (7 call sites) and never see netFetch, so they still show
-// "Failed to fetch" on a dead connection — TASK-168. friendlyError returns the
-// same constant.
+// error slot get a Russian line this way without each growing a mapper.
+//
+// That now covers the whole SPA. Clans, bounties and the login screen used to keep
+// their own transport on bare fetch — 7 call sites that never reached this wrapper,
+// so opening the Кланы tab during a backend restart read "Failed to fetch" in a
+// Russian interface. TASK-168 moved all three onto netFetch; the only bare `fetch(`
+// left in src/ is the one inside netFetch below, which is what makes that checkable
+// with a grep. friendlyError returns the same constant.
 const NO_CONNECTION_TEXT = 'Нет связи с сервером. Проверьте подключение.';
 
 export class NetworkError extends Error {
@@ -1222,7 +1288,8 @@ function stripRoute(message: string): string {
 //     from Apache, not from the game, and get their own wording (see
 //     UNKNOWN_OUTCOME_STATUSES); every other body-less status arrives already
 //     worded by parseErrorBody, so the `||` below now only catches an explicit
-//     `{"error":""}` from the backend.
+//     `{"error":""}` from the backend. AuthError (auth/api.ts) is a subclass, so
+//     the login screen's unclassified statuses land here too.
 //   - TypeError — a bug in this SPA, not a failure of the request: no sender
 //     here throws one, and netFetch owns the only rejection fetch itself
 //     produces. It used to be read as "no connection"; it now has its own line,
@@ -1265,7 +1332,14 @@ export function friendlyError(err: unknown): string {
 
 // commandErrorText is friendlyError for a request that spends credits or moves
 // goods: market buy/sell, cargo transfer, lot creation, ship purchase and
-// outfitting, insurance, claiming a station.
+// outfitting, insurance, claiming a station and — outside the station, added by
+// TASK-168 — placing a bounty (bounties.Service debits the sponsor's wallet or the
+// clan treasury inside the transaction that inserts it) and selling a ship
+// (app/sell_ship.go credits the wallet and deletes the hull in one transaction).
+//
+// The other mutating commands outside the station move no money and say so at their
+// own call sites: clan create/invite/accept/kick/leave/role, activateShip, and
+// sendSetCourse below.
 //
 // It exists because friendlyError's advice is wrong for those. When no answer
 // arrives the request may still have reached the backend and committed — the

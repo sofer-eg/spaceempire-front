@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useGameContext } from '../gameContext';
-import { fetchPlayers, type PlayerSummary } from '../api';
+import { commandErrorText, fetchPlayers, friendlyError, type PlayerSummary } from '../api';
 import { fetchClans, fetchMyClan, type ClanSummary } from '../clans/clansApi';
 import { fetchTopBounties, setBounty, type Bounty } from './bountiesApi';
 
@@ -41,7 +41,7 @@ export function BountiesPage() {
         setError('');
       })
       .catch((e) => {
-        if (alive) setError(e instanceof Error ? e.message : String(e));
+        if (alive) setError(friendlyError(e));
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -52,7 +52,7 @@ export function BountiesPage() {
   }, [ownPlayerID]);
 
   const onPlaced = useCallback(() => {
-    void reload().catch((e) => setError(e instanceof Error ? e.message : String(e)));
+    void reload().catch((e) => setError(friendlyError(e)));
     void refreshPlayer();
   }, [reload, refreshPlayer]);
 
@@ -160,7 +160,12 @@ function PlaceBountyForm({
       setTargetId(0);
       onPlaced();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      // commandErrorText, not friendlyError (TASK-168 AC #3): a bounty is paid for
+      // on placement — bounties.Service debits the sponsor's wallet (or the clan
+      // treasury) in the same transaction that inserts it. So on a 502 or a dropped
+      // connection the player must not be told the server refused: the award may
+      // already stand and be paid for, and «повторите» buys a second one.
+      setError(commandErrorText(e));
     } finally {
       setBusy(false);
     }

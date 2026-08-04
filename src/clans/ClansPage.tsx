@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { friendlyError } from '../api';
 import { useGameContext } from '../gameContext';
 import { ClansView } from './ClansView';
 import { MyClanView } from './MyClanView';
@@ -32,7 +33,7 @@ export function ClansPage() {
       setInvites(inv);
       setError('');
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(friendlyError(e));
     } finally {
       setLoading(false);
     }
@@ -51,7 +52,7 @@ export function ClansPage() {
         setError('');
       })
       .catch((e) => {
-        if (alive) setError(e instanceof Error ? e.message : String(e));
+        if (alive) setError(friendlyError(e));
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -91,7 +92,7 @@ export function ClansPage() {
                         onClick={() =>
                           void acceptInvite(i.clanId)
                             .then(() => reload())
-                            .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+                            .catch((e) => setError(friendlyError(e)))
                         }
                       >
                         Принять
@@ -126,7 +127,12 @@ function CreateClanForm({ onCreated }: { onCreated: () => void }) {
       setTag('');
       onCreated();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      // friendlyError, not commandErrorText (TASK-168 AC #3): clans.Service.Create
+      // debits nothing, and a retry after a lost ack cannot double-create — the
+      // second insert trips clans_name_key or clan_members_pkey and comes back as
+      // «уже занято» / «уже в клане». So the cautious wording, which tells the
+      // player to check a wallet and a hold, would name what this never touches.
+      setError(friendlyError(e));
     } finally {
       setBusy(false);
     }

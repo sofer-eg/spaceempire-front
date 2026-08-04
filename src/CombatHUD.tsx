@@ -196,8 +196,9 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
             ) : targetStatic ? (
               // A destructible static carries no maxHP on the client (TASK-113
               // NFR-02), so the hull is a numeric readout and only the shield —
-              // which has a max — gets a bar. Absent staticCombat falls through
-              // to the scanner message below (AC-5: never crashes the panel).
+              // which has a max — gets a bar. A static missing from staticCombat
+              // falls through to the third branch below (AC-5: never crashes the
+              // panel).
               <>
                 <div className="sw-vital__head">
                   <span className="sw-vital__label">Корпус</span>
@@ -208,8 +209,27 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
                 )}
               </>
             ) : (
+              // Three different reasons land here, and one line for all three
+              // used to claim the wrong one (TASK-166): a static missing from
+              // staticCombat read as «вне зоны сканера». Measured on this branch
+              // before the split — a laser tower at 85 u and a jammer at 144 u,
+              // both far inside ship 1283's radarRange of 420, both told the
+              // player the target was off the scanner.
+              //
+              // Distance is not the cause and a distance test would not help:
+              // staticCombat only ever holds statics the worker marked dirty
+              // (collectDirtyDestructibles — damaged or recharging), and it is
+              // reset to empty on every welcome frame, so an untouched station
+              // parked 10 u away has no entry either. The scanner claim is
+              // therefore made only where it does follow: a ship target absent
+              // from the AOI ship map (or in another sector) is genuinely outside
+              // the window, because the server sends every ship inside it.
               <span className="sw-mono" style={{ fontSize: 10, color: 'var(--ink-mute)' }}>
-                {targetRef ? 'Цель вне зоны сканера.' : 'Цель не выбрана.'}
+                {!targetRef
+                  ? 'Цель не выбрана.'
+                  : targetIsShip
+                    ? 'Цель вне зоны сканера.'
+                    : 'Состояние цели недоступно.'}
               </span>
             )}
           </div>

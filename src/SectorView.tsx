@@ -15,7 +15,7 @@ import { usePoliceLog } from './usePoliceLog';
 import { useShipCaptureLog } from './useShipCaptureLog';
 import { useStationHackedLog } from './useStationHackedLog';
 import { useQuestOfferLog } from './useQuestOfferLog';
-import { EntityKind, type SectorStatics, type WorldGate } from './api';
+import { EntityKind, staticListOf, type WorldGate } from './api';
 
 const EMPTY_GATES: WorldGate[] = [];
 const EMPTY_SECTOR_NAMES = new Map<number, string>();
@@ -141,7 +141,7 @@ export function SectorView() {
       if (!target || target.sectorID !== ownSectorID) return null;
       return { kind: 'ship', id: ref.id };
     }
-    const list = selectedStaticList(statics, ref.kind);
+    const list = staticListOf(statics, ref.kind);
     const hit = list?.find((s) => s.id === ref.id && s.sectorID === ownSectorID);
     if (!hit) return null;
     return { kind: 'dock', refKind: ref.kind, id: ref.id };
@@ -345,40 +345,6 @@ export function SectorView() {
       />
     </div>
   );
-}
-
-// selectedStaticList picks the statics array a target EntityRef of a static
-// kind lives in. Both consumers of selectedTargetRef (panel row, canvas ring)
-// resolve through it, so a kind missing here silently drops the whole
-// selected-highlight for that object type (TASK-125: satellites and laser
-// towers were absent).
-//
-// It does NOT mirror ObjectLayer.staticList — that one also has Jammer, which
-// is reachable here (TargetsPanel and the map menu both send a Jammer ref) and
-// so has the same missing highlight, plus it makes ObjectLayer's own Jammer
-// case unreachable. Left out deliberately: closing it needs its own live check
-// against a placed jammer, and the real fix is one shared helper rather than a
-// sixth case in a second copy of this switch. Both are TASK-165.
-function selectedStaticList(
-  statics: SectorStatics,
-  refKind: number,
-): { id: number; sectorID: number }[] | undefined {
-  switch (refKind) {
-    case EntityKind.Station:
-      return statics.stations;
-    case EntityKind.Shipyard:
-      return statics.shipyards;
-    case EntityKind.TradeStation:
-      return statics.tradeStations;
-    case EntityKind.Pirbase:
-      return statics.pirbases;
-    case EntityKind.Satellite:
-      return statics.satellites;
-    case EntityKind.LaserTower:
-      return statics.laserTowers;
-    default:
-      return undefined;
-  }
 }
 
 function ZoomToggle({

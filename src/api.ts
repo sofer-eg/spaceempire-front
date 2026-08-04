@@ -483,6 +483,59 @@ export type SectorStatics = {
   jammers?: Jammer[];
 };
 
+// StaticObject is the shape every SectorStatics list shares. Written out rather
+// than derived from the seven types above so staticListOf has one return type to
+// name; `type` is optional because only stations, shipyards and trade stations
+// carry a subtype.
+export type StaticObject = {
+  id: number;
+  sectorID: number;
+  x: number;
+  y: number;
+  hp: number;
+  shield: number;
+  race: number;
+  built: boolean;
+  type?: number;
+};
+
+// staticListOf resolves the SectorStatics list an EntityRef of a static kind
+// lives in — the single mapping from kind to array, next to isStaticTargetKind /
+// isDockableStaticKind for the same reason: a new static type must be taught to
+// the client in exactly one place.
+//
+// It used to be two hand-copied switches (SectorView.selectedStaticList for the
+// panel row + canvas ring, ObjectLayer.staticList for marker positions), and the
+// copies drifted every single time a static type was added — satellites (10.15),
+// laser towers (4.5), jammers (TASK-131). The jammer case is what TASK-165 came
+// from: present in ObjectLayer, absent in SectorView, and because SectorView runs
+// first the ObjectLayer case was dead code and the generator got no selected
+// highlight at all.
+//
+// An unknown kind returns undefined — Gate and Container reach the navigation
+// panel as targets but are not in SectorStatics, and callers already treat
+// undefined as "nothing to highlight".
+export function staticListOf(statics: SectorStatics, kind: number): StaticObject[] | undefined {
+  switch (kind) {
+    case EntityKind.Station:
+      return statics.stations;
+    case EntityKind.Shipyard:
+      return statics.shipyards;
+    case EntityKind.TradeStation:
+      return statics.tradeStations;
+    case EntityKind.Pirbase:
+      return statics.pirbases;
+    case EntityKind.LaserTower:
+      return statics.laserTowers;
+    case EntityKind.Satellite:
+      return statics.satellites;
+    case EntityKind.Jammer:
+      return statics.jammers;
+    default:
+      return undefined;
+  }
+}
+
 export type StaticsMessage = {
   type: 'statics';
   sectorID: number;

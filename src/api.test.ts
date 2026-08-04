@@ -13,6 +13,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ApiError,
+  EntityKind,
   NetworkError,
   commandErrorText,
   friendlyError,
@@ -20,6 +21,8 @@ import {
   isOutcomeUnknown,
   jumpDriveErrorText,
   netFetch,
+  staticListOf,
+  type SectorStatics,
 } from './api.ts';
 
 test('jumpDriveErrorText maps each backend status to a Russian line', () => {
@@ -397,4 +400,66 @@ test('netFetch wraps a fetch rejection in NetworkError and passes a response thr
   } finally {
     globalThis.fetch = original;
   }
+});
+
+// --- staticListOf (TASK-165) -------------------------------------------------
+// The kind→list mapping used to be hand-copied into SectorView (panel row +
+// canvas ring) and ObjectLayer (marker position), and the copies drifted on
+// every new static type. These assertions pin the whole table, not just the
+// jammer that was missing, so the next added type fails here rather than
+// silently losing its selected highlight.
+const STATICS: SectorStatics = {
+  stations: [{ id: 1, sectorID: 1, x: 0, y: 0, hp: 1, shield: 0, race: 1, built: true, type: 7 }],
+  shipyards: [{ id: 2, sectorID: 1, x: 0, y: 0, hp: 1, shield: 0, race: 1, built: true }],
+  tradeStations: [{ id: 3, sectorID: 1, x: 0, y: 0, hp: 1, shield: 0, race: 1, built: true, type: 1 }],
+  pirbases: [{ id: 4, sectorID: 1, x: 0, y: 0, hp: 1, shield: 0, race: 6, built: true, angle: 0 }],
+  laserTowers: [{ id: 5, sectorID: 1, x: 0, y: 0, hp: 1, shield: 0, race: 1, built: true }],
+  satellites: [{ id: 6, sectorID: 1, x: 0, y: 0, hp: 1, shield: 0, race: 1, built: true }],
+  jammers: [{ id: 7, sectorID: 1, x: 120, y: -80, hp: 7500, shield: 4000, race: 1, built: true }],
+};
+
+test('staticListOf maps every static EntityKind to its own list', () => {
+  assert.equal(staticListOf(STATICS, EntityKind.Station), STATICS.stations);
+  assert.equal(staticListOf(STATICS, EntityKind.Shipyard), STATICS.shipyards);
+  assert.equal(staticListOf(STATICS, EntityKind.TradeStation), STATICS.tradeStations);
+  assert.equal(staticListOf(STATICS, EntityKind.Pirbase), STATICS.pirbases);
+  assert.equal(staticListOf(STATICS, EntityKind.LaserTower), STATICS.laserTowers);
+  assert.equal(staticListOf(STATICS, EntityKind.Satellite), STATICS.satellites);
+  // The case TASK-165 came from: reachable from the navigation panel and the map
+  // menu, absent from SectorView's copy of the switch, so the generator got no
+  // row highlight and no ring.
+  assert.equal(staticListOf(STATICS, EntityKind.Jammer), STATICS.jammers);
+});
+
+test('staticListOf covers exactly the kinds SectorStatics has lists for', () => {
+  // isStaticTargetKind is the weapon-target set, which is not the same set:
+  // a gate can be shot at but is delivered in its own /api/world payload, not in
+  // SectorStatics. Asserting both directions keeps the difference deliberate.
+  const inStatics = [
+    EntityKind.Station,
+    EntityKind.Shipyard,
+    EntityKind.TradeStation,
+    EntityKind.Pirbase,
+    EntityKind.LaserTower,
+    EntityKind.Satellite,
+    EntityKind.Jammer,
+  ];
+  assert.deepEqual(
+    Object.values(EntityKind).filter((k) => staticListOf(STATICS, k) !== undefined),
+    inStatics,
+  );
+  assert.equal(staticListOf(STATICS, EntityKind.Gate), undefined, 'gates live in /api/world');
+});
+
+test('staticListOf returns undefined for an unknown kind and for an absent list', () => {
+  // Unknown kind: a ref the panel can hold but SectorStatics has no list for —
+  // both an existing non-static kind and a value no EntityKind uses at all.
+  assert.equal(staticListOf(STATICS, EntityKind.Container), undefined);
+  assert.equal(staticListOf(STATICS, EntityKind.Ship), undefined);
+  assert.equal(staticListOf(STATICS, 99), undefined);
+  assert.equal(staticListOf(STATICS, -1), undefined);
+  // A known kind whose list the server did not send (every SectorStatics field
+  // is optional) — callers must see the same undefined, not a crash.
+  assert.equal(staticListOf({}, EntityKind.Jammer), undefined);
+  assert.equal(staticListOf({ stations: [] }, EntityKind.Station)?.length, 0);
 });

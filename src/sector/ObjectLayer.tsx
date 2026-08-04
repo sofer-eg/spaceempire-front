@@ -10,7 +10,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import type { MutableRefObject } from 'react';
-import { EntityKind } from '../api';
+import { EntityKind, staticListOf } from '../api';
 import type { Asteroid, Container, DestructibleStatic, Drone, GoodsRow, Missile, Race, SectorStatics, StationType, Torpedo, WorldGate } from '../api';
 import type { TrackedShip } from '../useWorldState';
 import type { HighlightRef } from '../TargetsPanel';
@@ -559,7 +559,7 @@ function resolveSelected(p: Props): MarkerPos {
     if (!ship || ship.sectorID !== p.currentSectorID) return null;
     return { x: ship.x, y: ship.y, interp: true, ship };
   }
-  const list = staticList(p, sel.refKind);
+  const list = staticListOf(p.statics, sel.refKind);
   const hit = list?.find((s) => s.id === sel.id && s.sectorID === p.currentSectorID);
   if (!hit) return null;
   return { x: hit.x, y: hit.y, interp: false };
@@ -574,27 +574,6 @@ function resolveHighlight(p: Props): MarkerPos {
     return { x: ship.x, y: ship.y, interp: true, ship };
   }
   return { x: hl.x, y: hl.y, interp: false };
-}
-
-function staticList(p: Props, refKind: number): { id: number; sectorID: number; x: number; y: number }[] | undefined {
-  switch (refKind) {
-    case EntityKind.Station:
-      return p.statics.stations;
-    case EntityKind.Shipyard:
-      return p.statics.shipyards;
-    case EntityKind.TradeStation:
-      return p.statics.tradeStations;
-    case EntityKind.Pirbase:
-      return p.statics.pirbases;
-    case EntityKind.Satellite:
-      return p.statics.satellites;
-    case EntityKind.Jammer:
-      return p.statics.jammers;
-    case EntityKind.LaserTower:
-      return p.statics.laserTowers;
-    default:
-      return undefined;
-  }
 }
 
 function positionMarker(node: SVGGElement | null, pos: MarkerPos, vp: Viewport, w: number, h: number, now: number, tickMs: number) {

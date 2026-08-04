@@ -10,6 +10,7 @@ import {
   sendLaunchDrone,
   sendLaunchMissile,
   sendLaunchTorpedo,
+  staticListOf,
   type CargoInventory,
   type DestructibleStatic,
   type EntityRef,
@@ -457,35 +458,10 @@ function staticTargetLabel(
   stationTypes: StationType[],
   races: Race[],
 ): string {
-  const hit = findStatic(ref, statics);
+  const hit = staticListOf(statics, ref.kind)?.find((s) => s.id === ref.id);
   const base = staticTypeLabel(ref.kind, hit?.type, stationTypes);
   const raceName = hit?.race ? races.find((r) => r.id === hit.race)?.name : undefined;
   return raceName ? `${base} · ${raceName}` : base;
-}
-
-// findStatic locates the static object matching ref so its type/race can label
-// the HUD target. Returns undefined when the static is not in the frame.
-function findStatic(ref: EntityRef, statics: SectorStatics): { type?: number; race: number } | undefined {
-  const byId = <T extends { id: number; race: number; type?: number }>(list: T[] | undefined) =>
-    list?.find((s) => s.id === ref.id);
-  switch (ref.kind) {
-    case EntityKind.Station:
-      return byId(statics.stations);
-    case EntityKind.Shipyard:
-      return byId(statics.shipyards);
-    case EntityKind.TradeStation:
-      return byId(statics.tradeStations);
-    case EntityKind.Pirbase:
-      return byId(statics.pirbases);
-    case EntityKind.LaserTower:
-      return byId(statics.laserTowers);
-    case EntityKind.Satellite:
-      return byId(statics.satellites);
-    case EntityKind.Jammer:
-      return byId(statics.jammers);
-    default:
-      return undefined;
-  }
 }
 
 function cargoCount(cargo: CargoInventory | null, typeID: number): number {

@@ -93,8 +93,10 @@ test('formatTtl survives a date it cannot parse', () => {
 // AuctionView calls formatTtl with one argument, so `now = Date.now()` is
 // production code — but every test above passes NOW explicitly, which leaves a
 // mutant in the default alive: pinned to 0 it measures every lot against the
-// epoch and reports «20669 д 12 ч» (verified), and pinned past the lot's end it
-// reports «00:00». Either way the column is nonsense and nothing above notices.
+// epoch and reports a day count in the twenty-thousands (verified; the exact
+// figure walks with the wall clock, which is why it is not written down), and
+// pinned past the lot's end it reports «00:00». Either way the column is
+// nonsense and nothing above notices.
 // These two read the real clock instead. The 30s of slack keeps the first
 // assertion off a regime boundary: anywhere in 7200-7230s the answer is
 // «2 ч 0 мин», so it cannot flake on how long the run takes.

@@ -2,7 +2,10 @@
 // convention as the other station tabs — and, since the review of TASK-140, the
 // same transport: netFetch so a dead connection is a NetworkError, ApiError so
 // commandErrorText can tell a refused premium from an unanswered one.
-import { ApiError, netFetch } from '../api';
+// parseErrorBody comes from ../api too (TASK-168): this file had a fourth copy of
+// it, and its res.statusText fallback leaked the English HTTP reason phrase into
+// the premium form the same way the market tab did.
+import { ApiError, netFetch, parseErrorBody } from '../api';
 
 export type InsurancePolicy = {
   id: number;
@@ -19,19 +22,10 @@ export type InsurancePolicy = {
 // (coverage = premium × multiplier) — used only for the form's payout preview.
 export const CoveragePreviewMultiplier = 10;
 
-async function errMessage(res: Response): Promise<string> {
-  try {
-    const body = (await res.json()) as { error?: string };
-    return body.error ?? res.statusText;
-  } catch {
-    return res.statusText;
-  }
-}
-
 export async function fetchMyPolicies(): Promise<InsurancePolicy[]> {
   const res = await netFetch('/api/insurance');
   if (!res.ok) {
-    throw new ApiError(res.status, `GET /api/insurance: ${await errMessage(res)}`);
+    throw new ApiError(res.status, `GET /api/insurance: ${await parseErrorBody(res)}`);
   }
   return (await res.json()) as InsurancePolicy[];
 }
@@ -47,7 +41,7 @@ export async function buyInsurance(
     body: JSON.stringify({ shipId, premium, durationDays }),
   });
   if (!res.ok) {
-    throw new ApiError(res.status, await errMessage(res));
+    throw new ApiError(res.status, await parseErrorBody(res));
   }
   return (await res.json()) as { id: number };
 }

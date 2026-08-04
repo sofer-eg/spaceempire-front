@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { sendSetCourse, type InstalledEquipment } from './api';
+import { friendlyError, sendSetCourse, type InstalledEquipment } from './api';
 import { useGalaxy } from './useGalaxy';
 
 type Props = {
@@ -53,7 +53,10 @@ export function SetCoursePanel({ shipID, currentSectorID, equipment }: Props) {
       const res = await sendSetCourse(shipID, destSector, x, y);
       setStatus({ kind: 'ok', hops: res.hops });
     } catch (err) {
-      setStatus({ kind: 'error', message: String(err) });
+      // friendlyError, not String(err) (which prefixed the class name) and not
+      // commandErrorText — see the note on commandErrorText: laying a course
+      // spends nothing, so the in-doubt wording would be false (TASK-168).
+      setStatus({ kind: 'error', message: friendlyError(err) });
     }
   };
 

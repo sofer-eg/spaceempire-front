@@ -1,6 +1,13 @@
-// Typed client for the clan endpoints (phase 6.1). Mirrors the fetch +
+// Typed client for the clan endpoints (phase 6.1). Mirrors the netFetch +
 // {error} body convention of src/api.ts; failures throw an Error carrying
 // the server's human-readable message so views can surface it inline.
+//
+// netFetch, not bare fetch (TASK-168): every view here renders e.message
+// directly, so on a dead backend a raw fetch rejection put the English "Failed to
+// fetch" in the Russian interface — reachable just by opening the Кланы tab
+// during a restart. netFetch labels that case NetworkError, whose message is
+// already the Russian line.
+import { netFetch, parseErrorBody } from '../api';
 
 export type ClanSummary = {
   id: number;
@@ -39,31 +46,28 @@ export type ClanDetail = {
   invitations: ClanInvitation[];
 };
 
-async function errMessage(res: Response): Promise<string> {
-  try {
-    const body = (await res.json()) as { error?: string };
-    return body.error ?? res.statusText;
-  } catch {
-    return res.statusText;
-  }
-}
-
 async function getJSON<T>(url: string): Promise<T> {
-  const res = await fetch(url);
+  const res = await netFetch(url);
   if (!res.ok) {
-    throw new Error(`GET ${url}: ${await errMessage(res)}`);
+    // The route goes to the console, not into the message: every view here shows
+    // e.message verbatim, and «GET /api/clans/mine: …» was machine text in the
+    // player's error slot (TASK-168). postJSON below already threw the bare
+    // message; this is the two of them agreeing.
+    const msg = await parseErrorBody(res);
+    console.error('clan request failed', url, res.status, msg);
+    throw new Error(msg);
   }
   return (await res.json()) as T;
 }
 
 async function postJSON<T>(url: string, body?: unknown): Promise<T> {
-  const res = await fetch(url, {
+  const res = await netFetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) {
-    throw new Error(await errMessage(res));
+    throw new Error(await parseErrorBody(res));
   }
   return (await res.json()) as T;
 }

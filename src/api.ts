@@ -572,14 +572,33 @@ export async function fetchState(): Promise<Snapshot> {
   return (await res.json()) as Snapshot;
 }
 
+// ApiError with the bare backend message, not requireOk: the clan and bounty
+// pages print e.message straight into their error slot, so a failure here used to
+// read «GET /api/players 500» on screen and requireOk's route label would only
+// have shortened the machine text, not removed it (TASK-168).
 export async function fetchPlayers(): Promise<PlayerSummary[]> {
   const res = await netFetch('/api/players');
   if (!res.ok) {
-    throw new Error(`GET /api/players ${res.status}`);
+    throw new ApiError(res.status, await parseErrorBody(res));
   }
   return (await res.json()) as PlayerSummary[];
 }
 
+// --- In-space commands -----------------------------------------------------
+// The senders from here through sendCeaseFire all throw
+// `new ApiError(res.status, await parseErrorBody(res))` — the same shape as
+// sendLaunchMissile / sendLaunchDrone / sendLaunchTorpedo / sendPickupContainer /
+// sendMine below, and deliberately NOT requireOk (TASK-168).
+//
+// They used to read the body with res.text() and put the whole
+// `POST /api/cmd/dock 400: {"error":"out of dock range"}` string in the thrown
+// message, JSON envelope and all, which is what the player saw: their views print
+// err.message raw (ObjectActionsMenu.formatError — which also writes it to the
+// event journal — TargetsPanel.onRowClick, SpacePointMenu, CombatHUD.run,
+// fleet/useFleet). requireOk would fix the envelope but add its own `POST /api/…: `
+// label, and only the station tabs strip that (they run every failure through
+// friendlyError). So these get the bare backend message, and the route stays where
+// it is useful — the browser's network panel.
 export async function sendMove(
   shipID: number,
   x: number,
@@ -592,8 +611,7 @@ export async function sendMove(
     body: JSON.stringify({ shipID, x, y, targetRef }),
   });
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`POST /api/cmd/move ${res.status}: ${body}`);
+    throw new ApiError(res.status, await parseErrorBody(res));
   }
 }
 
@@ -612,8 +630,7 @@ export async function sendSetCourse(
     body: JSON.stringify({ shipID, sectorID, x, y, approach }),
   });
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`POST /api/cmd/set-course ${res.status}: ${body}`);
+    throw new ApiError(res.status, await parseErrorBody(res));
   }
   return (await res.json()) as SetCourseResponse;
 }
@@ -625,8 +642,7 @@ export async function sendJump(shipID: number, gateID: number): Promise<void> {
     body: JSON.stringify({ shipID, gateID }),
   });
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`POST /api/cmd/jump ${res.status}: ${body}`);
+    throw new ApiError(res.status, await parseErrorBody(res));
   }
 }
 
@@ -725,8 +741,7 @@ export async function sendDock(shipID: number, target: EntityRef): Promise<void>
     body: JSON.stringify({ shipID, target }),
   });
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`POST /api/cmd/dock ${res.status}: ${body}`);
+    throw new ApiError(res.status, await parseErrorBody(res));
   }
 }
 
@@ -737,8 +752,7 @@ export async function sendUndock(shipID: number): Promise<void> {
     body: JSON.stringify({ shipID }),
   });
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`POST /api/cmd/undock ${res.status}: ${body}`);
+    throw new ApiError(res.status, await parseErrorBody(res));
   }
 }
 
@@ -766,8 +780,7 @@ export async function boardShip(targetShipID: number): Promise<{ mode: 'control'
 export async function disembark(): Promise<{ shipID: number }> {
   const res = await netFetch('/api/cmd/disembark', { method: 'POST' });
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`POST /api/cmd/disembark ${res.status}: ${body}`);
+    throw new ApiError(res.status, await parseErrorBody(res));
   }
   return (await res.json()) as { shipID: number };
 }
@@ -782,8 +795,7 @@ export async function setShipAccess(shipID: number, open: boolean): Promise<void
     body: JSON.stringify({ shipID, open }),
   });
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`POST /api/cmd/ship-access ${res.status}: ${body}`);
+    throw new ApiError(res.status, await parseErrorBody(res));
   }
 }
 
@@ -798,8 +810,7 @@ export async function exitShip(shipID: number): Promise<{ shipID: number }> {
     body: JSON.stringify({ shipID }),
   });
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`POST /api/cmd/exit-ship ${res.status}: ${body}`);
+    throw new ApiError(res.status, await parseErrorBody(res));
   }
   return (await res.json()) as { shipID: number };
 }
@@ -810,8 +821,7 @@ export async function exitShip(shipID: number): Promise<{ shipID: number }> {
 export async function activateShip(shipID: number): Promise<void> {
   const res = await netFetch(`/api/ship/${shipID}/activate`, { method: 'POST' });
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`POST /api/ship/${shipID}/activate ${res.status}: ${body}`);
+    throw new ApiError(res.status, await parseErrorBody(res));
   }
 }
 
@@ -825,8 +835,7 @@ export async function sellShip(shipyardID: number, shipID: number): Promise<{ ca
     body: JSON.stringify({ shipID }),
   });
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`POST /api/shipyard/${shipyardID}/sell-ship ${res.status}: ${body}`);
+    throw new ApiError(res.status, await parseErrorBody(res));
   }
   return (await res.json()) as { cash: number };
 }
@@ -838,8 +847,7 @@ export async function sendAttack(shipID: number, targetRef: EntityRef): Promise<
     body: JSON.stringify({ shipID, targetRef }),
   });
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`POST /api/cmd/attack ${res.status}: ${body}`);
+    throw new ApiError(res.status, await parseErrorBody(res));
   }
 }
 
@@ -856,8 +864,7 @@ export async function sendCapture(shipID: number, targetRef: EntityRef): Promise
     body: JSON.stringify({ shipID, targetRef }),
   });
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`POST /api/cmd/capture ${res.status}: ${body}`);
+    throw new ApiError(res.status, await parseErrorBody(res));
   }
 }
 
@@ -875,8 +882,7 @@ export async function sendHack(shipID: number, targetRef: EntityRef): Promise<vo
     body: JSON.stringify({ shipID, targetRef }),
   });
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`POST /api/cmd/hack ${res.status}: ${body}`);
+    throw new ApiError(res.status, await parseErrorBody(res));
   }
 }
 
@@ -887,8 +893,7 @@ export async function sendCeaseFire(shipID: number): Promise<void> {
     body: JSON.stringify({ shipID }),
   });
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`POST /api/cmd/cease-fire ${res.status}: ${body}`);
+    throw new ApiError(res.status, await parseErrorBody(res));
   }
 }
 
@@ -1098,11 +1103,12 @@ export type WorldResponse = {
   gates: WorldGate[];
 };
 
+// Backs useGalaxy, i.e. the galaxy map and the autopilot panel's sector list.
+// requireOk for the same reason as fetchPlayers: useGalaxy's message is rendered
+// as-is, and «GET /api/world 500» is not a sentence (TASK-168).
 export async function fetchWorld(): Promise<WorldResponse> {
   const res = await netFetch('/api/world');
-  if (!res.ok) {
-    throw new Error(`GET /api/world ${res.status}`);
-  }
+  await requireOk(res, 'GET /api/world');
   return (await res.json()) as WorldResponse;
 }
 
@@ -1166,13 +1172,33 @@ export async function netFetch(input: string, init?: RequestInit): Promise<Respo
   }
 }
 
-async function parseErrorBody(res: Response): Promise<string> {
+// parseErrorBody pulls the backend's own `error` field out of a non-2xx
+// response. Exported so the clan, bounty and auth clients share it instead of
+// keeping their own copies — the three had drifted to nothing but the same eight
+// lines, and the statusText decision below has to be made once.
+//
+// When there is no usable `error` field the fallback is a Russian line naming the
+// status, NOT res.statusText. The reason phrase is the wrong thing to show twice
+// over: it is English in a Russian UI, it carries nothing the status code does
+// not, and it is not even stable — HTTP/2 has no reason phrase at all, so the
+// same 500 read "Internal Server Error" through the dev proxy and "" in
+// production. That is how the market tab came to say «Не удалось загрузить
+// рынок: Internal Server Error» (TASK-168): a Vite/Apache proxy error page is not
+// JSON, res.json() threw, and the reason phrase went straight to the screen under
+// a Russian prefix.
+export async function parseErrorBody(res: Response): Promise<string> {
   try {
     const body = (await res.json()) as { error?: string };
-    return body.error ?? res.statusText;
+    return body.error ?? statusLine(res.status);
   } catch {
-    return res.statusText;
+    return statusLine(res.status);
   }
+}
+
+// statusLine is the last-resort wording when a failure carries no message of its
+// own. friendlyError repeats it verbatim for the same case, so it lives here.
+function statusLine(status: number): string {
+  return `Сервер вернул ошибку ${status}.`;
 }
 
 // stripRoute drops the "POST /api/…: " prefix requireOk puts in front of the
@@ -1193,9 +1219,10 @@ function stripRoute(message: string): string {
 //     TASK-140.
 //   - ApiError — the backend (or a proxy in front of it) answered non-2xx;
 //     requireOk prefixes the message with the route, stripped here. 502/504 come
-//     from Apache, not from the game, so they carry an English statusText — or
-//     an empty one over HTTP/2, which used to leave the caller's line dangling
-//     after its colon. Both are worded here (see UNKNOWN_OUTCOME_STATUSES).
+//     from Apache, not from the game, and get their own wording (see
+//     UNKNOWN_OUTCOME_STATUSES); every other body-less status arrives already
+//     worded by parseErrorBody, so the `||` below now only catches an explicit
+//     `{"error":""}` from the backend.
 //   - TypeError — a bug in this SPA, not a failure of the request: no sender
 //     here throws one, and netFetch owns the only rejection fetch itself
 //     produces. It used to be read as "no connection"; it now has its own line,
@@ -1224,8 +1251,9 @@ export function friendlyError(err: unknown): string {
       console.error('proxy answered instead of the backend', err.status, err.message);
       return `Сервер не ответил (${err.status}). Попробуйте позже.`;
     }
-    // Empty when the proxy sent no body and HTTP/2 left statusText blank.
-    return stripRoute(err.message) || `Сервер вернул ошибку ${err.status}.`;
+    // Empty only when the backend answered `{"error":""}` — parseErrorBody words
+    // every other body-less failure itself.
+    return stripRoute(err.message) || statusLine(err.status);
   }
   if (err instanceof TypeError) {
     console.error('bug in the SPA while handling a response', err);
@@ -1248,6 +1276,15 @@ export function friendlyError(err: unknown): string {
 // Deliberately NOT applied to sendAuctionBid: the backend only accepts a bid
 // strictly above the current price, so a repeat of a bid that did land is
 // rejected rather than charged twice, and the cautious line would be noise.
+//
+// Deliberately NOT applied to sendSetCourse either, the one mutating command
+// outside the station that TASK-168 AC #3 asks about. Laying a course spends
+// nothing: internal/api/set_course.go only hands the worker a Course, and
+// re-sending it overwrites the same field. So a retry cannot double-charge, and
+// the line above would name a wallet and a hold this command never touches —
+// which is the same defect as TASK-140/166 with the blame moved, an interface
+// stating something that is not so. Both its callers (GalaxyMap, SetCoursePanel)
+// use friendlyError.
 export function commandErrorText(err: unknown): string {
   if (err instanceof NetworkError || (err instanceof ApiError && UNKNOWN_OUTCOME_STATUSES.has(err.status))) {
     console.error('command outcome unknown', err);

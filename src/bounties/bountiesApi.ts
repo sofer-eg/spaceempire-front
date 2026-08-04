@@ -1,5 +1,7 @@
-// Typed client for the bounty endpoints (phase 6.3). Mirrors the fetch +
-// {error} body convention of src/clans/clansApi.ts.
+// Typed client for the bounty endpoints (phase 6.3). Mirrors the netFetch +
+// {error} body convention of src/clans/clansApi.ts, including why the transport
+// is netFetch rather than bare fetch (TASK-168).
+import { netFetch, parseErrorBody } from '../api';
 
 export type Bounty = {
   id: number;
@@ -23,31 +25,25 @@ export type SetBountyRequest = {
   fromClan: boolean;
 };
 
-async function errMessage(res: Response): Promise<string> {
-  try {
-    const body = (await res.json()) as { error?: string };
-    return body.error ?? res.statusText;
-  } catch {
-    return res.statusText;
-  }
-}
-
 export async function fetchTopBounties(): Promise<Bounty[]> {
-  const res = await fetch('/api/bounties');
+  const res = await netFetch('/api/bounties');
   if (!res.ok) {
-    throw new Error(`GET /api/bounties: ${await errMessage(res)}`);
+    // Route in the console, message on screen — same reasoning as clansApi.getJSON.
+    const msg = await parseErrorBody(res);
+    console.error('bounty request failed', res.status, msg);
+    throw new Error(msg);
   }
   return (await res.json()) as Bounty[];
 }
 
 export async function setBounty(req: SetBountyRequest): Promise<{ id: number }> {
-  const res = await fetch('/api/bounties', {
+  const res = await netFetch('/api/bounties', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
   });
   if (!res.ok) {
-    throw new Error(await errMessage(res));
+    throw new Error(await parseErrorBody(res));
   }
   return (await res.json()) as { id: number };
 }

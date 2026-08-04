@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { AuthError } from './api';
+import { NetworkError, friendlyError } from '../api';
 import { useAuth } from './useAuth';
 
 type Mode = 'login' | 'register';
@@ -123,6 +124,11 @@ export function LoginPage() {
 }
 
 function messageFor(err: unknown, mode: Mode): string {
+  // No answer at all — the backend is down or the connection dropped mid-request
+  // (TASK-168, since auth/api.ts moved onto netFetch). Without this branch it fell
+  // through to the generic «Не удалось войти», which is true but tells the player
+  // nothing they can act on: the credentials are fine, the server is not there.
+  if (err instanceof NetworkError) return friendlyError(err);
   if (err instanceof AuthError) {
     switch (err.kind) {
       case 'invalid_credentials':

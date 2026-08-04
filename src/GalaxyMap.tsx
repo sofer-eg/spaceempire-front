@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { jumpDriveErrorText, sendJumpDrive, sendSetCourse, type Race, type WorldSector } from './api';
+import { friendlyError, jumpDriveErrorText, sendJumpDrive, sendSetCourse, type Race, type WorldSector } from './api';
 import { raceColor, raceName } from './gameContext';
 import { useGalaxy } from './useGalaxy';
 
@@ -217,7 +217,13 @@ export function GalaxyMap({ currentSectorID, ownShipID, races, jumpMode = false 
     const cy = (target.bounds.minY + target.bounds.maxY) / 2;
     void sendSetCourse(ownShipID, target.id, cx, cy)
       .then((res) => setStatus({ kind: 'ok', sectorID: target.id, hops: res.hops }))
-      .catch((err: unknown) => setStatus({ kind: 'error', sectorID: target.id, message: String(err) }));
+      // friendlyError, not String(err) (which leaked the class name as
+      // «NetworkError: …») and not commandErrorText — set-course spends nothing,
+      // see the note on commandErrorText for why the cautious wording would be
+      // false here (TASK-168).
+      .catch((err: unknown) =>
+        setStatus({ kind: 'error', sectorID: target.id, message: friendlyError(err) }),
+      );
   };
 
   const centerOnSector = (id: number) => {

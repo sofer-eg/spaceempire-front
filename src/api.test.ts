@@ -21,6 +21,7 @@ import {
   isOutcomeUnknown,
   jumpDriveErrorText,
   netFetch,
+  parseErrorBody,
   staticListOf,
   type SectorStatics,
 } from './api.ts';
@@ -295,8 +296,10 @@ test('friendlyError does not blame the network for a TypeError thrown by our own
 });
 
 // AC #3: 502/504 come from Apache in front of the Go process, so their body is
-// HTML and parseErrorBody falls back to statusText — the English "Bad Gateway"
-// the market tab used to print after its Russian prefix.
+// HTML rather than the usual {"error":…} — the English "Bad Gateway" the market
+// tab used to print after its Russian prefix. (Since TASK-168 parseErrorBody no
+// longer produces that reason phrase at all; these cases construct the message by
+// hand, so they still pin friendlyError's own wording.)
 test('friendlyError words a proxy 502/504 in Russian', () => {
   const badGateway = friendlyError(new ApiError(502, 'POST /api/cmd/trade/buy: Bad Gateway'));
   assert.doesNotMatch(badGateway, /Bad Gateway/);
@@ -306,8 +309,10 @@ test('friendlyError words a proxy 502/504 in Russian', () => {
   assert.match(timeout, /Сервер не ответил \(504\)/);
 });
 
-// Over HTTP/2 statusText is always empty, so parseErrorBody returned "" and the
-// caller's line ended at its colon: «Покупка 50 × Энергоэлементы: ».
+// A body-less failure used to leave the caller's line ending at its colon:
+// «Покупка 50 × Энергоэлементы: ». Reachable now only via an explicit
+// {"error":""} from the backend, since parseErrorBody words the empty case
+// itself — but the guard has to hold either way.
 test('friendlyError never returns an empty line for a body-less error', () => {
   const text = friendlyError(new ApiError(500, 'POST /api/cmd/trade/buy: '));
   assert.notEqual(text.trim(), '');
@@ -462,4 +467,40 @@ test('staticListOf returns undefined for an unknown kind and for an absent list'
   // is optional) — callers must see the same undefined, not a crash.
   assert.equal(staticListOf({}, EntityKind.Jammer), undefined);
   assert.equal(staticListOf({ stations: [] }, EntityKind.Station)?.length, 0);
+});
+
+// --- parseErrorBody (TASK-168) ----------------------------------------------
+// The reason phrase used to be the fallback for every failure with no usable
+// {"error":…} body, which is how the market screen came to read «Не удалось
+// загрузить рынок: Internal Server Error» — a Russian wrapper around an English
+// HTTP reason phrase. It is also not a stable string: HTTP/2 carries no reason
+// phrase, so the same 500 read one way through the dev proxy and blank in
+// production.
+test('parseErrorBody returns the backend message and never an HTTP reason phrase', async () => {
+  // The normal case: the backend's own {"error":…} is what the player should see.
+  assert.equal(
+    await parseErrorBody(new Response('{"error":"вход на этот корабль закрыт"}', { status: 403 })),
+    'вход на этот корабль закрыт',
+  );
+
+  // A proxy error page is not JSON — Vite's dev proxy answers exactly this.
+  const proxied = await parseErrorBody(new Response('Internal Server Error', { status: 500 }));
+  assert.doesNotMatch(proxied, /Internal Server Error/);
+  assert.equal(proxied, 'Сервер вернул ошибку 500.');
+
+  // Valid JSON without an `error` field, and an empty body, land on the same line.
+  assert.equal(await parseErrorBody(new Response('{}', { status: 404 })), 'Сервер вернул ошибку 404.');
+  assert.equal(await parseErrorBody(new Response(null, { status: 502 })), 'Сервер вернул ошибку 502.');
+});
+
+// End to end over the shape requireOk builds: a 500 with a proxy body must reach
+// the view as one Russian sentence, with the route prefix stripped and no reason
+// phrase inside. This is the combination TASK-168 AC #2 is about — the mapper was
+// already reached by MarketView, and still leaked English.
+test('friendlyError turns a body-less backend failure into one Russian sentence', async () => {
+  const msg = await parseErrorBody(new Response('Internal Server Error', { status: 500 }));
+  const text = friendlyError(new ApiError(500, `GET /api/station/1/market: ${msg}`));
+  assert.equal(text, 'Сервер вернул ошибку 500.');
+  assert.doesNotMatch(text, /api\//);
+  assert.doesNotMatch(text, /[A-Za-z]/, 'no English and no route left in the player-facing line');
 });

@@ -1,6 +1,12 @@
 // Typed client for /api/auth/*. The session cookie is HttpOnly + Set by the
 // server, so we never touch document.cookie — the browser carries it on
 // same-origin fetches by default.
+//
+// Transport is netFetch (TASK-168), so a request that never gets an answer
+// rejects as NetworkError instead of a bare TypeError. AuthError still carries
+// every answer the server did give; LoginPage.messageFor words the no-answer case
+// off NetworkError.
+import { netFetch, parseErrorBody } from '../api';
 
 export type Player = {
   playerID: number;
@@ -27,19 +33,8 @@ export class AuthError extends Error {
   }
 }
 
-type ErrorBody = { error?: string };
-
-async function parseErrorBody(res: Response): Promise<string> {
-  try {
-    const body = (await res.json()) as ErrorBody;
-    return body.error ?? res.statusText;
-  } catch {
-    return res.statusText;
-  }
-}
-
 async function postJSON(path: string, body: unknown): Promise<Response> {
-  return fetch(path, {
+  return netFetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -78,7 +73,7 @@ export async function login(loginValue: string, password: string): Promise<Playe
 }
 
 export async function logout(): Promise<void> {
-  const res = await fetch('/api/auth/logout', { method: 'POST' });
+  const res = await netFetch('/api/auth/logout', { method: 'POST' });
   if (!res.ok && res.status !== 204) {
     throw new AuthError('network', res.status, await parseErrorBody(res));
   }
@@ -87,7 +82,7 @@ export async function logout(): Promise<void> {
 // me returns the current player, or null when no valid session cookie is
 // present. Callers use the null result to switch into "show login" mode.
 export async function me(): Promise<Player | null> {
-  const res = await fetch('/api/auth/me');
+  const res = await netFetch('/api/auth/me');
   if (res.status === 401) {
     return null;
   }

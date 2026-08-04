@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { fetchWorld, type WorldResponse } from './api';
+import { fetchWorld, friendlyError, type WorldResponse } from './api';
 
 // Module-level cache: /api/world is static topology — every component that
 // calls this hook gets the same object. First caller triggers the request;
@@ -42,7 +42,11 @@ export function useGalaxy(): GalaxyState {
           if (!cancelled) setState({ status: 'ready', world });
         })
         .catch((err: unknown) => {
-          if (!cancelled) setState({ status: 'error', message: String(err) });
+          // friendlyError, not String(err): /api/world is a read, and String()
+          // prefixed the class name — «NetworkError: Нет связи с сервером…» was
+          // what the galaxy map printed after TASK-140 gave NetworkError a Russian
+          // message (TASK-168).
+          if (!cancelled) setState({ status: 'error', message: friendlyError(err) });
         });
     }
     return () => {

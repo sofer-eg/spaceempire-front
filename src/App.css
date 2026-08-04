@@ -1733,10 +1733,18 @@ html, body, #root {
    that -- but do not delete either compensation on the strength of the zeroes
    above.
    The phone is the one place mechanism 2 still carries the table on its own:
-   a 328px card measures 386/326, over 60. Live prices and stock move the columns
-   as production runs -- three runs of the same probe an hour apart read the trade
-   station at 796.0, 796.6 and 796.8 -- so expect a pixel or two of drift on every
-   figure here, and re-measure rather than reconcile. */
+   a 328px card measures 386/326, over 60.
+   Every figure in this block is one run WITH THE WEBFONT LOADED, and that regime
+   is the thing to state when re-measuring: index.html pulls JetBrains Mono from
+   fonts.googleapis.com with display=swap, so the local mono fallback is what a
+   first paint shows and what a player who cannot reach Google sees all session. A
+   20-zero probe reads 144.016px here (7.2008px per cell at 12px) against 144.5 on
+   that fallback, which is ~0.35% -- 1.5px on the widest table.
+   Live prices cannot produce a sub-pixel difference: every text column is 24px of
+   cell padding plus a WHOLE number of cells (Товар 14, Покупка 10, Продажа 9,
+   Запас 13 at the trade station and 15 at the pirbase), so a price that gains a
+   digit widens its column by one 7.2px cell and never by a fraction of one. A
+   re-read that lands 1.5px wide of these figures has changed font, not tick. */
 
 /* Wrapper around each wide table. Scrolling per table (rather than relying on
    .sw-station__body) keeps the two axes independent: rows scroll vertically with
@@ -1831,16 +1839,19 @@ html, body, #root {
    that head start is the price of grouping the price columns (TASK-169). Full
    min-content per column, both tables in ONE run and one regime -- the table
    cloned outside the query container, where no @container rule matches, so this
-   is FULL mode:
+   is FULL mode, and with the webfont loaded (a 20-zero probe reads 144.016px; see
+   the font note at the end of the block above):
      trade station  124.8 Товар + 96.0 + 88.8 + 117.6 Запас + 94.0 + 274.7 = 796.0
      pirbase        124.8 Товар + 96.0 + 88.8 + 132.0 Запас + 94.0 + 274.7 = 810.4
    Every column but «Запас» is the same number, as it has to be: the pirbase's
    catalog is this trade station's 65 goods plus «Рабы» (checked in the DB), so
    the goods-name column cannot differ between them. Earlier rounds had 125.2 for
    the trade station against 124.8 for the pirbase and read it as a difference; it
-   was drift between two runs. The whole 14.4px gap is «Запас»: the pirbase stocks
-   Рабы with a max_stock of 1 000 000 000, so its widest cell is `0/1 000 000 000`
-   against the trade station's `501/1 000 000`.
+   was the same 14 cells read in two different font regimes (125.2 is the
+   fallback's 14 x 7.225, 124.8 the webfont's 14 x 7.2008, both plus 24px of cell
+   padding). The whole 14.4px gap is «Запас»: the pirbase stocks Рабы with a
+   max_stock of 1 000 000 000, so its widest cell is `0/1 000 000 000` against the
+   trade station's `501/1 000 000`.
    HOW THE PIRBASE IS MEASURED, because it is not a docking: the world holds one
    pirbase (id 1, sector 5) and the test ship sits at trade station 1 in sector 1,
    so the harness serves the pirbase's own station_goods rows into the docked
@@ -1859,12 +1870,15 @@ html, body, #root {
    compaction takes over), and it is the one column already duplicated into the
    row title (see MarketView), so the card keeps its full 12px padding and 12px
    font instead of compacting a size early.
-   Threshold sits 3.6px over the 810.4. That margin is for drift only -- three
-   runs of the same probe an hour apart read the pirbase at 810.4, 811.0 and
-   811.3, and earlier rounds at 811.9 -- so it can be eaten, and the outcome then
-   is mechanism 2 (a few px of scroll inside the table), not a clipped control. It
-   is NOT sized to cover the card's own scrollbar, which is invisible to a
-   container query: see the note at the 769.98 query.
+   Threshold sits 3.6px over the 810.4, and the first claim on that margin is the
+   FONT, not drift: the same probe with fonts.googleapis.com blocked -- the local
+   mono fallback, which is what every first paint shows under display=swap and what
+   a player who cannot reach Google sees all session -- reads the pirbase at 811.9,
+   leaving 2.1px. It can be eaten (a fallback with cells wider than 7.225px, or one
+   more character in the widest «Запас» cell), and the outcome then is mechanism 2
+   (a few px of scroll inside the table), not a clipped control. It is NOT sized to
+   cover the card's own scrollbar, which is invisible to a container query: see the
+   note at the 769.98 query.
    Known consequence, not a bug: a card whose content box lands in 797-813
    (cards 799-815, viewport 1611-1627 in the wide HUD layout) now folds «Запас»
    at a trade station too, where the 796.0px table would just have fitted. Both

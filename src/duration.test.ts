@@ -59,8 +59,11 @@ test('formatDuration shows an elapsed or unusable count as 00:00, never a negati
   assert.equal(formatDuration(Number.POSITIVE_INFINITY), '00:00');
 });
 
-// Fractional seconds reach formatDuration through formatTtl (ms / 1000) and from
-// ProductionInfo.secondsRemaining, so the floor has to live in the formatter.
+// Fractional seconds reach formatDuration through formatTtl, which divides a
+// millisecond difference by 1000, so the floor has to live in the formatter. The
+// other two callers hand it integers -- MarketView seeds its countdown with
+// Math.ceil(prod.secondsRemaining) and the quest panel subtracts unix stamps --
+// so formatTtl is the only path that actually exercises this.
 test('formatDuration floors a fractional count instead of printing a fraction', () => {
   assert.equal(formatDuration(59.9), '00:59');
   assert.equal(formatDuration(3599.9), '59:59');
@@ -85,4 +88,16 @@ test('formatTtl shows an expired lot as 00:00 rather than counting backwards', (
 test('formatTtl survives a date it cannot parse', () => {
   assert.equal(formatTtl('not a date', NOW), '00:00');
   assert.equal(formatTtl('', NOW), '00:00');
+});
+
+// AuctionView calls formatTtl with one argument, so `now = Date.now()` is
+// production code — but every test above passes NOW explicitly, which leaves a
+// mutant in the default alive (a stuck epoch would report every lot as «00:00»
+// and no test would notice). These two read the real clock instead. The 30s of
+// slack keeps the first assertion off a regime boundary: anywhere in 7200-7230s
+// the answer is «2 ч 0 мин», so it cannot flake on how long the run takes.
+test('formatTtl reads the real clock when now is omitted', () => {
+  const iso = (msFromNow: number) => new Date(Date.now() + msFromNow).toISOString();
+  assert.equal(formatTtl(iso(2 * 3600_000 + 30_000)), '2 ч 0 мин');
+  assert.equal(formatTtl(iso(-3600_000)), '00:00');
 });

@@ -46,9 +46,11 @@ function saveDismissed(d: Record<string, boolean>) {
 // deadline read «72ч 0м». What stays local is the two things that are genuinely
 // about quests: the hourglass, and «просрочено» for a deadline already blown —
 // a failed quest is not a lot sitting at 00:00.
-function deadlineLabel(unix: number): string | null {
+// `now` is passed in rather than read here so the caller decides how often the
+// label is allowed to be stale; see the tick below.
+function deadlineLabel(unix: number, now: number): string | null {
   if (!unix) return null;
-  const secs = unix - Math.floor(Date.now() / 1000);
+  const secs = unix - Math.floor(now / 1000);
   if (secs <= 0) return 'просрочено';
   return `⏳ ${formatDuration(secs)}`;
 }
@@ -66,9 +68,22 @@ export function QuestPanel({ open, onClose, onCountsChange }: Props) {
   const [offerable, setOfferable] = useState<OfferableQuest[]>([]);
   const [dismissed, setDismissed] = useState<Record<string, boolean>>(loadDismissed);
   const [busy, setBusy] = useState<string>('');
+  // The clock the deadline chips are measured against. Declared up here because
+  // poll() below re-syncs it; the effect that ticks it, and why it exists at all,
+  // are further down.
+  const [now, setNow] = useState(() => Date.now());
 
   const poll = useCallback(() => {
-    void fetchActiveQuests().then(setActive).catch(() => {});
+    // Re-sync the deadline clock here, in the fetch callback, rather than in an
+    // effect body (react-hooks/set-state-in-effect) — same reason MarketView
+    // seeds its production countdown from its own fetch. This runs whether the
+    // panel is open or not, which bounds how stale `now` can be when it opens.
+    void fetchActiveQuests()
+      .then((qs) => {
+        setActive(qs);
+        setNow(Date.now());
+      })
+      .catch(() => {});
     void fetchOfferableQuests().then(setOfferable).catch(() => {});
   }, []);
 
@@ -77,6 +92,30 @@ export function QuestPanel({ open, onClose, onCountsChange }: Props) {
     const id = setInterval(poll, POLL_MS);
     return () => clearInterval(id);
   }, [poll]);
+
+  // The deadline chip counts in MM:SS below an hour (formatDuration), and most
+  // offers expire well inside one — so the poll above is the wrong clock for it:
+  // at 5s it would step 04:59 -> 04:54 -> 04:49 while presenting itself as a
+  // second-resolution countdown. Worse, poll() swallows its errors and skips the
+  // setState on failure, so a backend hiccup froze the chip on a stale second
+  // while it still looked live. A local tick fixes both: the label is computed
+  // from expiresUnix against this clock, so it keeps counting down truthfully
+  // even when nothing is being fetched. Only while the panel is on screen —
+  // polling continues when it is closed (for the rail badge), rendering need
+  // not. Same shape as MarketView's production chip.
+  //
+  // Every tick re-reads the clock instead of adding 1000, so a throttled
+  // background tab resumes on the true time rather than on however many
+  // intervals the browser chose to deliver. What this does NOT do is repaint on
+  // the same frame the panel opens: `now` is then whatever the last poll left,
+  // i.e. up to POLL_MS old, and the first tick corrects it a second later. That
+  // one frame is the price of keeping setState out of the effect body; it is
+  // bounded because poll() runs while the panel is closed too.
+  useEffect(() => {
+    if (!open) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [open]);
 
   const dismiss = (questId: string) => {
     const next = { ...dismissed, [questId]: true };
@@ -157,7 +196,7 @@ export function QuestPanel({ open, onClose, onCountsChange }: Props) {
       >
         {empty && <span style={{ color: 'var(--muted, #7a8a99)' }}>Нет активных заданий.</span>}
         {visible.map((q) => {
-          const dl = deadlineLabel(q.deadlineUnix);
+          const dl = deadlineLabel(q.deadlineUnix, now);
           const terminal = q.done || q.failed;
           return (
             <div key={q.questId} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -220,7 +259,7 @@ export function QuestPanel({ open, onClose, onCountsChange }: Props) {
           >
             <span style={{ color: 'var(--muted, #7a8a99)', fontSize: 12 }}>Предложения</span>
             {available.map((o) => {
-              const ttl = deadlineLabel(o.expiresUnix);
+              const ttl = deadlineLabel(o.expiresUnix, now);
               return (
                 <div key={o.offerId} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <div className="sw-row" style={{ gap: 6, alignItems: 'baseline' }}>

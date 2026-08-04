@@ -16,7 +16,8 @@
 // regimes, because any one of them alone lies somewhere:
 //   < 1 h    MM:SS   — the only window where seconds matter to a bidder
 //   < 24 h   «4 ч 21 мин»
-//   >= 24 h  «11 д 3 ч»
+//   >= 24 h  «11 д 3 ч»  — an auction lot may run up to a week
+//                          (auction.MaxDuration), so days are not a corner case
 // Zero, negative and non-finite all give «00:00»: counting backwards past the
 // end is never the answer, and NaN fails every comparison below, so it has to be
 // tested for rather than fallen through.

@@ -401,11 +401,3 @@ function auctionStatusLabel(status: number): string {
       return String(status);
   }
 }
-
-// formatTtl (src/duration.ts) renders the time a lot has left. Minutes are not
-// open-ended: a lot may run up to a week (auction.MaxDuration), and unbounded
-// minutes printed «265:45» and «16079:06» for the 4-hour and 11-day cases -- a
-// number no reader converts on sight (TASK-142). Only under an hour is MM:SS,
-// the countdown shape that makes the last minutes readable; above that the unit
-// is named. The market's production chip and the quest panel's deadline share
-// that module now (TASK-174), so the shape is the same on all three screens.

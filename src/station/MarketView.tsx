@@ -165,12 +165,14 @@ export function MarketView({ station, shipID, reloadSignal }: Props) {
   //
   // The price of the trade, measured, not assumed: ru-RU groups with a NO-BREAK
   // SPACE, so a column gains one character per three digits, and the compact
-  // market table's min-content goes 394 -> 417px. Every desktop card still shows
+  // market table's min-content goes 394 -> 416px. Every desktop card still shows
   // the table with no horizontal scroll — but two of them only because App.css
   // pays for it: the 396px floor gets 2px side padding back (394/394 here, and
-  // 417/394 with that rule ablated) and the 773px full-mode card folds «Запас»
-  // early (771/771 here, 797/771 ablated — a pirbase 810/771). The arithmetic
-  // and the thresholds live next to those two @container rules in App.css.
+  // 416/394 with that rule ablated) and the 773px full-mode card folds «Запас»
+  // early (771/771 here, 796/771 ablated — a pirbase 810/771, whose rows are
+  // served into this view rather than docked at; App.css says how). The
+  // arithmetic and the thresholds live next to those two @container rules there,
+  // all of it from one run.
   // Not extended to the scanner matrix, which pays ~20 times over — see
   // MarketScanPanel.
   const ru = (n: number) => n.toLocaleString('ru-RU');

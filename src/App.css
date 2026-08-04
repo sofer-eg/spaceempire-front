@@ -1682,13 +1682,13 @@ html, body, #root {
 /* On the desktop card widths listed at .sw-station above, no StationView table
    fits untouched: the widest one (a market
    Товар|Покупка|Продажа|Запас|Кол-во|Действие) needs 810.4px of min-content at a
-   pirbase and 797.5 at a trade station, the auction lot list 578.4, the trade_up
-   sector scanner 3355.9. (All min-content in FULL mode, re-measured after
-   TASK-169 grouped the price columns. The scanner's painted width in a compacted
-   394px card is a smaller ~2835px, because compaction shrinks its font and
-   padding too -- both figures are real, they just measure different regimes. The
-   auction figure moves with the lots actually on the board; it was taken with
-   the widest goods name in the catalog on it.) The right-hand
+   pirbase and 796.0 at a trade station, the auction lot list 577.5, the trade_up
+   sector scanner 3348.7. (All min-content in FULL mode, in one run -- see the
+   813.98 query below for the regime and for how the pirbase is measured. The
+   scanner's painted width in a compacted 394px card is a smaller ~2835px,
+   because compaction shrinks its font and padding too -- both figures are real,
+   they just measure different regimes. The auction figure moves with the lots
+   actually on the board.) The right-hand
    columns («Кол-во» input, «Купить», «Продать», «Ставка», «Выставить») were
    therefore clipped at the cell edge and unreachable, i.e. a docked player could
    neither trade nor bid on a plain 1280px desktop. Two mechanisms fix that, in
@@ -1702,24 +1702,29 @@ html, body, #root {
         (22 in sector 1) and cannot be compacted into 392px.
    Mechanism 1 still reaches every desktop card width after TASK-169 grouped the
    price columns, but it does so on credit: the no-break space took the compact
-   table's min-content from ~394 to 417px, and two of the widths below were flush
-   against their box. Measured on the trade station in sector 1, whose dearest
-   ware is `11 374 833`, with both compensations live:
-     card 1108 -> 1106/1106  over 0
-     card  808 -> 806/806    over 0   (full)
-     card  773 -> 771/771    over 0   (full, «Запас» folded -- 813.98 below)
+   table's min-content from ~394 to 416px, and two of the widths below were flush
+   against their box. One run, pirbase rows served into the docked market (see
+   below), both compensations live:
+     card 1108 -> 1106/1106  over 0   (full, «Запас» on)
+     card  828 -> 826/826    over 0   (full, «Запас» on)
+     card  816 -> 814/814    over 0   (full, «Запас» on -- the widest fold-free card)
+     card  815 -> 813/813    over 0   (full, «Запас» folded -- 813.98 below)
+     card  808 -> 806/806    over 0   (full, folded)
+     card  773 -> 771/771    over 0   (full, folded)
      card  761 -> 759/759    over 0   (compact)
      card  468 -> 466/466    over 0   (compact)
      card  396 -> 394/394    over 0   (compact floor, 2px sides -- 430 below)
-   The last two zeroes are bought, not free. Ablate the early fold and the 773px
-   card measures 797/771, over 26 (a pirbase 810/771, over 39); ablate the 2px
-   side padding and the 396px floor measures 417/394, over 23. Neither leaves
-   anything clipped -- mechanism 2 is exactly for that -- but do not delete
-   either compensation on the strength of the zeroes above.
+   The last zeroes are bought, not free. In the same run, ablate the early fold
+   and the 773px card measures 796/771, over 25 at a trade station and 810/771,
+   over 39 at a pirbase; ablate the 2px side padding and the 396px floor measures
+   416/394, over 22. Neither leaves anything clipped -- mechanism 2 is exactly for
+   that -- but do not delete either compensation on the strength of the zeroes
+   above.
    The phone is the one place mechanism 2 still carries the table on its own:
-   a 328px card measures 386-387/326, over 60-61. The spread is live prices and
-   stock moving the columns as production runs -- expect a pixel or two of drift
-   on every figure here, and re-measure rather than reconcile. */
+   a 328px card measures 386/326, over 60. Live prices and stock move the columns
+   as production runs -- three runs of the same probe an hour apart read the trade
+   station at 796.0, 796.6 and 796.8 -- so expect a pixel or two of drift on every
+   figure here, and re-measure rather than reconcile. */
 
 /* Wrapper around each wide table. Scrolling per table (rather than relying on
    .sw-station__body) keeps the two axes independent: rows scroll vertically with
@@ -1812,31 +1817,57 @@ html, body, #root {
 
 /* The MARKET's «Запас» folds 44px earlier than the rest of the compaction, and
    that head start is the price of grouping the price columns (TASK-169). Full
-   min-content per column, re-measured with the grouping in:
-     trade station  125.2 Товар + 96.3 + 89.0 + 118.0 Запас + 94.0 + 275.1 = 797.5
+   min-content per column, both tables in ONE run and one regime -- the table
+   cloned outside the query container, where no @container rule matches, so this
+   is FULL mode:
+     trade station  124.8 Товар + 96.0 + 88.8 + 117.6 Запас + 94.0 + 274.7 = 796.0
      pirbase        124.8 Товар + 96.0 + 88.8 + 132.0 Запас + 94.0 + 274.7 = 810.4
-   The pirbase is the wider of the two and by more than it looks: it stocks Рабы
-   with a max_stock of 1 000 000 000, so its «Запас» cell is `0/1 000 000 000` --
-   14px more column than the trade station's `500/1 000 000`. Derive this
-   threshold from THAT table, not from the trade station one can dock at in
-   sector 1: at 800.98 a pirbase measured 810/806 at an 808px card, i.e. the one
-   type this query is supposed to protect was the one it did not.
-   Folding «Запас» returns the whole 118-132px, far more than the 13-39px these
-   cards are short, and it is the one column already duplicated into the row
-   title (see MarketView), so the card keeps its full 12px padding and 12px font
-   instead of compacting a size early.
-   Threshold sits ~3.5px over the 810.4; see the note at the 769.98 query about
-   the card's own scrollbar being invisible to a container query.
-   Known consequence, not a bug: a card whose content box lands in 801-814
-   (cards 803-815, viewport 1615-1627 in the wide HUD layout) now folds «Запас»
-   at a trade station too, where the 797.5px table would just have fitted. That
-   is the same trade the 761-770 band below makes, and the value stays in the row
-   title either way.
+   Every column but «Запас» is the same number, as it has to be: the pirbase's
+   catalog is this trade station's 65 goods plus «Рабы» (checked in the DB), so
+   the goods-name column cannot differ between them. Earlier rounds had 125.2 for
+   the trade station against 124.8 for the pirbase and read it as a difference; it
+   was drift between two runs. The whole 14.4px gap is «Запас»: the pirbase stocks
+   Рабы with a max_stock of 1 000 000 000, so its widest cell is `0/1 000 000 000`
+   against the trade station's `501/1 000 000`.
+   HOW THE PIRBASE IS MEASURED, because it is not a docking: the world holds one
+   pirbase (id 1, sector 5) and the test ship sits at trade station 1 in sector 1,
+   so the harness serves the pirbase's own station_goods rows into the docked
+   market response. That is faithful for a WIDTH: the rows are the real ones out
+   of the database, MarketView renders the same six columns for every docked kind
+   (no pirbase-only column or control), and the figure is a function of the row
+   data. It is not a substitute for a real dock if anything about the pirbase's
+   chrome ever diverges.
+   Derive this threshold from THAT table, not from the trade station one can dock
+   at. Re-run in this round with the old 800.98 put back: an 808px card (content
+   806) does not fold there, and the market measures 806/806 over 0 at the trade
+   station but 812/806, over 6 at the pirbase -- the one type this query is
+   supposed to protect was the one it did not.
+   Folding «Запас» returns the whole 117.6-132px, against a deficit that never
+   exceeds ~40px in the band this query owns (810.4 less the 770 where general
+   compaction takes over), and it is the one column already duplicated into the
+   row title (see MarketView), so the card keeps its full 12px padding and 12px
+   font instead of compacting a size early.
+   Threshold sits 3.6px over the 810.4. That margin is for drift only -- three
+   runs of the same probe an hour apart read the pirbase at 810.4, 811.0 and
+   811.3, and earlier rounds at 811.9 -- so it can be eaten, and the outcome then
+   is mechanism 2 (a few px of scroll inside the table), not a clipped control. It
+   is NOT sized to cover the card's own scrollbar, which is invisible to a
+   container query: see the note at the 769.98 query.
+   Known consequence, not a bug: a card whose content box lands in 797-813
+   (cards 799-815, viewport 1611-1627 in the wide HUD layout) now folds «Запас»
+   at a trade station too, where the 796.0px table would just have fitted. Both
+   ends measured in the sweep: content 814 (card 816) keeps «Запас» and still
+   measures over 0, and by content 796 the trade station's own 796.0 has no slack
+   left either, so from there down the fold is earned at both kinds. That is the
+   same trade the 761-770 band below makes, and the value stays in the row title
+   either way.
    Market-only, and that is deliberate: .sw-table__secondary is also «Корпус» /
-   «Щит» on the shipyard buy list (561px of min-content) and «#» / «Лидер» on the
-   auction lot list (578.4px). Neither is anywhere near its box in this band, so
-   pulling them along would spend readability to solve a problem they do not
-   have. They fold at 769.98 with everything else. */
+   «Щит» on the shipyard buy list and «#» / «Лидер» on the auction lot list
+   (577.5px of min-content in the same run; the shipyard's 561 is from the round
+   that measured it, docked at a shipyard, and was not re-read here). Neither is
+   anywhere near its box in this band, so pulling them along would spend
+   readability to solve a problem they do not have. They fold at 769.98 with
+   everything else. */
 @container station (max-width: 813.98px) {
   .sw-market .sw-table__secondary { display: none; }
 }
@@ -1845,10 +1876,11 @@ html, body, #root {
    FULL table, so a card that can show every column is left alone and one that
    would clip something is compacted. By the time a card is this narrow the
    market has already folded «Запас» at the query above, which is what keeps this
-   number true after TASK-169: the market measures 810.4 - 132 = 678.4 (pirbase)
-   and 797.5 - 118 = 679.5 (trade station) here, against the auction lot list's
-   578.4 and the shipyard buy list's 561.
-   The ~90px over 679.5 is not slack to reclaim. The query sees the CARD's
+   number true after TASK-169: measured in place with «Запас» gone, the market is
+   678.4px -- the same figure at a pirbase and at a trade station, since that
+   column was the only difference between them -- against the auction lot list's
+   577.5 and the shipyard buy list's 561.
+   The ~92px over 678.4 is not slack to reclaim. The query sees the CARD's
    content box, but the table sits inside .sw-station__body, whose vertical
    scrollbar (the body scrolls at every width) comes off that box invisibly to
    the query -- ~15px in a desktop Chrome with classic scrollbars, 0 in headless
@@ -1883,9 +1915,9 @@ html, body, #root {
      each of the five visible columns' two sides was exactly those 10px.
      It no longer closes the last gap on its own: with the price columns grouped
      (TASK-169) the same five columns measure
-     102.7(Товар)+76.2+69.6+68(Кол-во)+100.3(Действие) = 417, i.e. 23px past the
+     102.4(Товар)+76.0+69.4+68(Кол-во)+100.1(Действие) = 415.9, i.e. 22px past the
      394px body at the floor -- the 430px block below is what buys those back.
-     Keep the 5px anyway: at 12px the deficit is ~93px, not 23. */
+     Keep the 5px anyway: at 12px the deficit is ~93px, not 22. */
   .sw-table { font-size: 11px; }
   .sw-table th,
   .sw-table td { padding: 5px; }
@@ -1928,22 +1960,23 @@ html, body, #root {
 /* Floor band only. The compact table above fits every card from ~419px up; the
    two narrowest ones (the 394-401px desktop floor at 1024-1212px of viewport,
    and a phone) are the ones grouping the price columns pushed over (TASK-169:
-   min-content 394 -> 417 against a 394px box). Left alone, the 23px came off the
+   min-content 394 -> 416 against a 394px box). Left alone, the 22px came off the
    «Действие» column and «ПРОДАТЬ» was cut mid-word at a plain 1024px desktop --
    the exact defect TASK-134 was opened for, reachable only by scrolling.
-   Side padding is where the 23px comes back from, because it is the one budget
+   Side padding is where the 22px comes back from, because it is the one budget
    that buys from all five visible columns at once: 5 -> 2px a side is 3px x 2 x 5
-   = 30px, which covers the 23 and leaves the slack the old 5px had. The vertical
+   = 30px, which covers the 22 and leaves the slack the old 5px had. The vertical
    5px is untouched -- the rows are already two lines deep on wrapped goods names.
    Not folded into the block above: at 468px and up the 5px padding is what keeps
    the compact table from reading as a solid block of digits, and that card has
    49px of slack it does not need to spend.
    Market tables only, for the same reason: at this card the auction lot list
    measures 320.7px of compact min-content against the same 394px box (its «мои
-   лоты» table 287.7, the two hold tables 286.2 and 276.3 against 368), so
-   tightening those would spend 30px of readability on slack they already had.
+   лоты» table 287.7, the two hold tables 286.2 and 276.3 against 368 -- all in
+   the same run as the market's figures), so tightening those would spend 30px of
+   readability on slack they already had.
    The market's own figure here is 385.9 -- it is the only one that needed the
-   2px, and 417 without it. (.sw-market also holds the
+   2px, and 415.9 without it. (.sw-market also holds the
    scanner matrix, which keeps the 2px it has always had here -- it is 2.8-3.3k px
    wide at every card width and scrolls regardless.) */
 @container station (max-width: 430px) {

@@ -108,6 +108,15 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
   const inScanner = targetShip != null && targetShip.sectorID === ownSectorID;
   const targetStatic =
     targetRef && !targetIsShip ? staticCombat.get(`${targetRef.kind}:${targetRef.id}`) : undefined;
+  // A static the worker never marked dirty has no staticCombat record, but the
+  // statics frame it did arrive in carries an hp for every static (dto/statics.go
+  // StaticObject) — so the hull is on hand even here, and only the maxima are
+  // not. Looked up solely for that case, hence the !targetStatic gate: while a
+  // combat record exists it is the live one and wins.
+  const targetStaticSnapshot =
+    targetRef && !targetIsShip && !targetStatic
+      ? staticListOf(statics, targetRef.kind)?.find((s) => s.id === targetRef.id)
+      : undefined;
 
   const missiles = cargoCount(ownCargo, MISSILE_GOODS);
   const drones = cargoCount(ownCargo, DRONE_GOODS);
@@ -198,7 +207,7 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
               // A destructible static carries no maxHP on the client (TASK-113
               // NFR-02), so the hull is a numeric readout and only the shield —
               // which has a max — gets a bar. A static missing from staticCombat
-              // falls through to the third branch below (AC-5: never crashes the
+              // falls through to the branches below (AC-5: never crashes the
               // panel).
               <>
                 <div className="sw-vital__head">
@@ -209,6 +218,18 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
                   <MiniBar label="Щиты" value={targetStatic.shield} max={targetStatic.maxShield} variant="" />
                 )}
               </>
+            ) : targetStaticSnapshot ? (
+              // No combat record, so no live vitals — but the hull the statics
+              // frame carried is a real number, and printing «Состояние цели
+              // недоступно.» over it would be the same defect TASK-166 came to fix
+              // one step further in. Numeric, not a bar: neither maxHP nor
+              // maxShield exists in that frame (dto/statics.go), and the shield is
+              // left out entirely because a bare charge with nothing to compare it
+              // against says less than it seems to.
+              <div className="sw-vital__head">
+                <span className="sw-vital__label">Корпус</span>
+                <span className="sw-vital__value sw-mono">{targetStaticSnapshot.hp}</span>
+              </div>
             ) : (
               // Three different reasons land here, and one line for all three
               // used to claim the wrong one (TASK-166): a static missing from
@@ -222,9 +243,17 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
               // (collectDirtyDestructibles — damaged or recharging), and it is
               // reset to empty on every welcome frame, so an untouched station
               // parked 10 u away has no entry either. The scanner claim is
-              // therefore made only where it does follow: a ship target absent
-              // from the AOI ship map (or in another sector) is genuinely outside
-              // the window, because the server sends every ship inside it.
+              // therefore made only for a ship target absent from the AOI ship
+              // map (or in another sector) — the reading the player should get,
+              // since a target the scanner does not carry is one they cannot see.
+              //
+              // Do NOT read it backwards as a statement about distance: absence
+              // from the ship map is not only distance. snapshot.go's
+              // hideStealthed deletes a cloaked hostile from a subscriber's
+              // visible set while it holds fire, keeps energy and stays outside
+              // StealthDetectRange — that ship can sit well inside the radar and
+              // still be missing here. Which is why this line says what the
+              // scanner shows and never a figure for how far away the target is.
               <span className="sw-mono" style={{ fontSize: 10, color: 'var(--ink-mute)' }}>
                 {!targetRef
                   ? 'Цель не выбрана.'

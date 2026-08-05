@@ -976,18 +976,23 @@ export async function sendCeaseFire(shipID: number): Promise<void> {
   }
 }
 
-// sendLaunchMissile fires one homing missile from shipID at targetRef.
+// sendLaunchMissile fires one homing missile of `missileClass` (1 = «Москит» /
+// gt10, 2 = «Оса» / gt11, 3 = «Стрекоза» / gt12, 4 = «Шелкопряд» / gt13,
+// 5 = «Шершень» / gt14) from shipID at targetRef. The class picks both the
+// ammunition row debited and the missile's flight/damage profile
+// (ct_missiles, TASK-175); the server rejects anything outside 1-5 with 400.
 // Returns the server-allocated missile id so the caller can correlate WS
 // frames with its own optimistic state. Throws ApiError on a non-2xx
 // status with the backend's error text.
 export async function sendLaunchMissile(
   shipID: number,
   targetRef: EntityRef,
+  missileClass: number,
 ): Promise<{ missileID: number }> {
   const res = await netFetch('/api/cmd/launch-missile', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ shipID, targetRef }),
+    body: JSON.stringify({ shipID, targetRef, class: missileClass }),
   });
   if (!res.ok) {
     throw new ApiError(res.status, await parseErrorBody(res));

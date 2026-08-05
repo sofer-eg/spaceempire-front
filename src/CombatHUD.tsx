@@ -24,14 +24,30 @@ import { recallDronesReported } from './recallDrones';
 import type { TrackedShip } from './useWorldState';
 
 // Cargo goods that back the launch buttons. Mirror the backend constants
-// api.MissileGoodsType and api.DroneGoodsType, which TASK-167 moved onto the real
+// api.Missile*GoodsType and api.DroneGoodsType, which TASK-167 moved onto the real
 // catalog: 10 «Ракета Москит» (space 1) and 21 «Боевой дрон» (space 290). Before
 // that they were 50/51, goods no station sold and GET /api/goods had never heard
 // of — so the hold listed them as «Товар #50» and a spent magazine could not be
 // refilled. A drone is a big-ship weapon at 290: a starter hull (cargobay 50)
 // cannot carry one, and the button says so.
-const MISSILE_GOODS = 10;
 const DRONE_GOODS = 21;
+
+// The five missile ammunition classes (ct_missiles, TASK-175): class → goods id,
+// display name and hold footprint. Each gets its own button with its own hold
+// count, mirroring the two torpedo buttons below — goods 11-14 were on sale at
+// 67-72 stations each and consumed by nothing until this table existed, the same
+// defect TASK-167 closed for 10.
+//
+// `space` is quoted in the tooltip because it is what decides whether a hull can
+// carry the ammunition at all: a starter cargobay is 50, so even the heaviest
+// missile (3) fits comfortably — unlike the drone's 290.
+const MISSILE_CLASSES = [
+  { cls: 1, goods: 10, name: 'Москит', space: 1 },
+  { cls: 2, goods: 11, name: 'Оса', space: 1 },
+  { cls: 3, goods: 12, name: 'Стрекоза', space: 1 },
+  { cls: 4, goods: 13, name: 'Шелкопряд', space: 2 },
+  { cls: 5, goods: 14, name: 'Шершень', space: 3 },
+] as const;
 // Satellite goods id consumed by one install (phase 10.15). Mirrors
 // api.SatelliteGoodsType.
 const SATELLITE_GOODS = 26;
@@ -99,7 +115,6 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
   const targetStatic =
     targetRef && !targetIsShip ? staticCombat.get(`${targetRef.kind}:${targetRef.id}`) : undefined;
 
-  const missiles = cargoCount(ownCargo, MISSILE_GOODS);
   const drones = cargoCount(ownCargo, DRONE_GOODS);
   const satellites = cargoCount(ownCargo, SATELLITE_GOODS);
   const jammers = cargoCount(ownCargo, JAMMER_GOODS);
@@ -284,14 +299,32 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
                 ◇ Прекратить огонь
               </button>
             )}
-            <WeaponButton
-              glyph="◈"
-              label="Запустить ракету"
-              count={missiles}
-              disabled={pending || !targetRef || missiles === 0}
-              title={!targetRef ? 'Нет цели' : missiles === 0 ? 'Нет ракет в трюме' : undefined}
-              onClick={() => targetRef && run(sendLaunchMissile(ownShip.id, targetRef), true, commandErrorText)}
-            />
+            {/* One button per missile class, each on its own hold count — the same
+                form the two torpedo buttons below use. A single «Запустить ракету»
+                could only ever fire class 1, which is why the other four
+                ammunition types were purchasable and useless (TASK-175). */}
+            {MISSILE_CLASSES.map(({ cls, goods, name, space }) => {
+              const count = cargoCount(ownCargo, goods);
+              return (
+                <WeaponButton
+                  key={cls}
+                  glyph="◈"
+                  label={`Ракета: ${name}`}
+                  count={count}
+                  disabled={pending || !targetRef || count === 0}
+                  title={
+                    !targetRef
+                      ? 'Нет цели'
+                      : count === 0
+                        ? `Нет ракет «${name}» в трюме`
+                        : `Класс ${cls}, объём ${space} — расходует боеприпас «${name}»`
+                  }
+                  onClick={() =>
+                    targetRef && run(sendLaunchMissile(ownShip.id, targetRef, cls), true, commandErrorText)
+                  }
+                />
+              );
+            })}
             <WeaponButton
               glyph="⬡"
               label="Запустить дронов"

@@ -28,9 +28,22 @@ import { relationColor, type Relation } from './sector/shapeData';
 // Torpedo ammunition classes (ЧТЗ doc-1 §3): 2 = «Огненная Буря» (gt23),
 // 3 = «Святая Торпеда» (gt24). The on-canvas menu offers one button per class,
 // gated on the launcher module; the hold-count gate lives in CombatHUD (which
-// has the cargo), mirroring how the missile item here gates on launcher only.
+// has the cargo), mirroring how the missile items here gate on launcher only.
 const TORPEDO_CLASS_FIRESTORM = 2;
 const TORPEDO_CLASS_HOLY = 3;
+
+// Missile ammunition classes (ct_missiles, TASK-175): class → name. One item per
+// class, same as the torpedoes above — the single «Запустить ракету» item this
+// replaces could only fire class 1, so a player working from the canvas could not
+// use the four dearer types at all. Counts are deliberately absent: this menu has
+// no cargo of its own; CombatHUD carries the per-class hold counters.
+const MISSILE_CLASSES = [
+  { cls: 1, name: 'Москит', goods: 10 },
+  { cls: 2, name: 'Оса', goods: 11 },
+  { cls: 3, name: 'Стрекоза', goods: 12 },
+  { cls: 4, name: 'Шелкопряд', goods: 13 },
+  { cls: 5, name: 'Шершень', goods: 14 },
+] as const;
 
 // PickedObject is the unified target type shared by TargetsPanel (rows) and
 // SectorCanvas (click-on-object). It carries everything the action menu
@@ -297,9 +310,9 @@ export function ObjectActionsMenu({
     if (target.kind !== 'dock') return;
     run(sendHack(ownShipID, target.ref));
   };
-  const doLaunchMissile = () => {
+  const doLaunchMissile = (missileClass: number) => {
     if (!missileRef) return;
-    run(sendLaunchMissile(ownShipID, missileRef), commandErrorText);
+    run(sendLaunchMissile(ownShipID, missileRef, missileClass), commandErrorText);
   };
   const doLaunchDrones = () => {
     // Drones stay ship-only (TASK-113 C-03) — the server rejects a static target.
@@ -446,24 +459,26 @@ export function ObjectActionsMenu({
           ◇ Прекратить огонь
         </button>
       )}
-      {canLaunchMissile && (
-        <button
-          type="button"
-          role="menuitem"
-          className="sw-menu__item sw-menu__item--missile"
-          onClick={doLaunchMissile}
-          disabled={baseDisabled || !hasLauncher}
-          title={
-            !hasLauncher
-              ? 'Нужна пусковая установка (up_launcher)'
-              : target.kind === 'container'
-                ? 'Уничтожить контейнер вместе с грузом'
-                : undefined
-          }
-        >
-          ◈ Запустить ракету
-        </button>
-      )}
+      {canLaunchMissile &&
+        MISSILE_CLASSES.map(({ cls, name, goods }) => (
+          <button
+            key={cls}
+            type="button"
+            role="menuitem"
+            className="sw-menu__item sw-menu__item--missile"
+            onClick={() => doLaunchMissile(cls)}
+            disabled={baseDisabled || !hasLauncher}
+            title={
+              !hasLauncher
+                ? 'Нужна пусковая установка (up_launcher)'
+                : target.kind === 'container'
+                  ? `Уничтожить контейнер вместе с грузом — боеприпас «${name}» (gt${goods})`
+                  : `Боеприпас «${name}» (gt${goods}), класс ${cls}`
+            }
+          >
+            ◈ Ракета: {name}
+          </button>
+        ))}
       {target.kind === 'ship' && !isOwnShip && (
         <button
           type="button"

@@ -108,15 +108,6 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
   const inScanner = targetShip != null && targetShip.sectorID === ownSectorID;
   const targetStatic =
     targetRef && !targetIsShip ? staticCombat.get(`${targetRef.kind}:${targetRef.id}`) : undefined;
-  // A static the worker never marked dirty has no staticCombat record, but the
-  // statics frame it did arrive in carries an hp for every static (dto/statics.go
-  // StaticObject) — so the hull is on hand even here, and only the maxima are
-  // not. Looked up solely for that case, hence the !targetStatic gate: while a
-  // combat record exists it is the live one and wins.
-  const targetStaticSnapshot =
-    targetRef && !targetIsShip && !targetStatic
-      ? staticListOf(statics, targetRef.kind)?.find((s) => s.id === targetRef.id)
-      : undefined;
 
   const missiles = cargoCount(ownCargo, MISSILE_GOODS);
   const drones = cargoCount(ownCargo, DRONE_GOODS);
@@ -207,7 +198,7 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
               // A destructible static carries no maxHP on the client (TASK-113
               // NFR-02), so the hull is a numeric readout and only the shield —
               // which has a max — gets a bar. A static missing from staticCombat
-              // falls through to the branches below (AC-5: never crashes the
+              // falls through to the branch below (AC-5: never crashes the
               // panel).
               <>
                 <div className="sw-vital__head">
@@ -218,18 +209,6 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
                   <MiniBar label="Щиты" value={targetStatic.shield} max={targetStatic.maxShield} variant="" />
                 )}
               </>
-            ) : targetStaticSnapshot ? (
-              // No combat record, so no live vitals — but the hull the statics
-              // frame carried is a real number, and printing «Состояние цели
-              // недоступно.» over it would be the same defect TASK-166 came to fix
-              // one step further in. Numeric, not a bar: neither maxHP nor
-              // maxShield exists in that frame (dto/statics.go), and the shield is
-              // left out entirely because a bare charge with nothing to compare it
-              // against says less than it seems to.
-              <div className="sw-vital__head">
-                <span className="sw-vital__label">Корпус</span>
-                <span className="sw-vital__value sw-mono">{targetStaticSnapshot.hp}</span>
-              </div>
             ) : (
               // Three different reasons land here, and one line for all three
               // used to claim the wrong one (TASK-166): a static missing from
@@ -247,13 +226,41 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
               // map (or in another sector) — the reading the player should get,
               // since a target the scanner does not carry is one they cannot see.
               //
+              // «Состояние цели недоступно.» is the honest line for a static, and
+              // printing the hull out of the statics frame instead was tried and
+              // reverted (TASK-166 review). That frame does carry an hp per
+              // object, but it is the layout's number, not the fight's:
+              // publishSnapshotFor hands subscribers cloneStatics(s.statics)
+              // (sector/worker.go) while damage lands in the separate
+              // s.destructibles map, and nothing ever writes hp back into the
+              // layout — it changes only by removing a destroyed object or
+              // appending a new one. Nor does the figure heal itself: hull damage
+              // is never persisted (no UPDATE … SET hp for any static table, so a
+              // restart restores full hp) and hp only ever moves down, since
+              // ChargeShield lifts the shield and applyDamage returns early on
+              // dmg <= 0. So after any reconnect — staticCombat is emptied in
+              // socket.onopen — a station shot to 3000 would read 7500 under the
+              // very «Корпус» label the branch above uses for a live figure, and
+              // stay wrong until something damages or recharges it. Sending live
+              // vitals in the welcome frame (sendStatics reading s.destructibles)
+              // is a backend change and a separate task.
+              //
               // Do NOT read it backwards as a statement about distance: absence
               // from the ship map is not only distance. snapshot.go's
-              // hideStealthed deletes a cloaked hostile from a subscriber's
-              // visible set while it holds fire, keeps energy and stays outside
-              // StealthDetectRange — that ship can sit well inside the radar and
-              // still be missing here. Which is why this line says what the
-              // scanner shows and never a figure for how far away the target is.
+              // hideStealthed (:429-450) deletes a cloaked hostile from a
+              // subscriber's visible set while it holds fire, keeps energy and
+              // sits beyond cfg.StealthDetectRange (default 400,
+              // sector/config.go:233). So the band where a cloaked ship is inside
+              // the player's own radar ring and still absent from this map is
+              // 400 < d ≤ radarRange, and how wide that is depends on the hull:
+              // measured on the live world, ships carry radarRange 380 (1045 of
+              // them), 420 (22), 450 (166) and 500 (60) — empty at 380, up to
+              // 100 u at the top classes. It stops being narrow under a
+              // navigation satellite: snapshot.go:237 raises the subscriber's
+              // radius to SatelliteRevealRadius (10000) and only then calls
+              // hideStealthed, so the band becomes 400 < d ≤ 10000. Which is why
+              // this line says what the scanner shows and never a figure for how
+              // far away the target is.
               <span className="sw-mono" style={{ fontSize: 10, color: 'var(--ink-mute)' }}>
                 {!targetRef
                   ? 'Цель не выбрана.'

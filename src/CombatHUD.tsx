@@ -45,17 +45,6 @@ const TORPEDO_FIRESTORM_GOODS = 23;
 const TORPEDO_HOLY_GOODS = 24;
 const TORPEDO_CLASS_FIRESTORM = 2;
 const TORPEDO_CLASS_HOLY = 3;
-// DRONE_SALVO matches ObjectActionsMenu — one launch action sends a small
-// fixed salvo so the button stays a single click.
-//
-// It is an upper bound, not the count sent: the salvo is clamped to the hold
-// below. The worker clamps Count to what up_drone_control still allows
-// (sector/command.go), but NOT to what the hold carries — the ordnance charges the
-// clamped size as one all-or-nothing debit, so asking for 3 with 1 unit aboard is
-// refused outright ("3 requested, 2 in the hold" is a pinned backend case). At
-// space 290 a drone-capable hull carries single digits of them, so an unclamped
-// request would refuse a launch the player can plainly see they can make.
-const DRONE_SALVO = 3;
 
 type Props = {
   ownShip: TrackedShip;
@@ -318,8 +307,10 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
                       : undefined
               }
               onClick={() =>
-                targetRef &&
-                run(sendLaunchDrone(ownShip.id, targetRef, Math.min(DRONE_SALVO, drones)), true, commandErrorText)
+                // No count: the server launches everything up_drone_control runs,
+                // or as much of it as the hold holds (TASK-176). The drones===0 gate
+                // above is a hint, not the guarantee — the backend owns that now.
+                targetRef && run(sendLaunchDrone(ownShip.id, targetRef), true, commandErrorText)
               }
             />
             <WeaponButton

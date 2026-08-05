@@ -996,17 +996,25 @@ export async function sendLaunchMissile(
   return { missileID: body.missileID };
 }
 
-// sendLaunchDrone launches `count` combat drones from shipID at targetRef.
-// Returns how many were actually spawned. Throws ApiError on a non-2xx.
+// sendLaunchDrone launches a salvo of combat drones from shipID at targetRef and
+// returns how many actually flew.
+//
+// The SERVER decides the salvo size (TASK-176): min(up_drone_control level − drones
+// already out, drones in the hold). There is no count to send — only the worker
+// knows the cap and only its transaction can size the hold. Until then each caller
+// sent a fixed 3 of its own, and the one without access to the cargo (the canvas
+// action menu) got a flat 400 whenever the hold held fewer than that — which, at the
+// drone's space of 290, is the ordinary case.
+//
+// Throws ApiError on a non-2xx; an EMPTY hold is still a 400.
 export async function sendLaunchDrone(
   shipID: number,
   targetRef: EntityRef,
-  count: number,
 ): Promise<{ spawned: number }> {
   const res = await netFetch('/api/cmd/launch-drone', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ shipID, targetRef, count }),
+    body: JSON.stringify({ shipID, targetRef }),
   });
   if (!res.ok) {
     throw new ApiError(res.status, await parseErrorBody(res));

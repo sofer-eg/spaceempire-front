@@ -25,11 +25,6 @@ import { emitLog } from './eventBus';
 import { recallDronesReported } from './recallDrones';
 import { relationColor, type Relation } from './sector/shapeData';
 
-// DRONE_SALVO is how many drones one "launch drones" action sends. A
-// small fixed salvo keeps the action one click; a dedicated count picker
-// can come later.
-const DRONE_SALVO = 3;
-
 // Torpedo ammunition classes (ЧТЗ doc-1 §3): 2 = «Огненная Буря» (gt23),
 // 3 = «Святая Торпеда» (gt24). The on-canvas menu offers one button per class,
 // gated on the launcher module; the hold-count gate lives in CombatHUD (which
@@ -309,7 +304,10 @@ export function ObjectActionsMenu({
   const doLaunchDrones = () => {
     // Drones stay ship-only (TASK-113 C-03) — the server rejects a static target.
     if (target.kind !== 'ship') return;
-    run(sendLaunchDrone(ownShipID, { kind: EntityKind.Ship, id: target.id }, DRONE_SALVO), commandErrorText);
+    // No count: the server launches what up_drone_control runs, clamped to the hold
+    // (TASK-176). This menu has no cargo of its own — which is exactly why it used
+    // to send a fixed salvo of 3 and get a 400 whenever fewer were aboard.
+    run(sendLaunchDrone(ownShipID, { kind: EntityKind.Ship, id: target.id }), commandErrorText);
   };
   const doLaunchTorpedo = (torpedoClass: number) => {
     if (!weaponRef) return;

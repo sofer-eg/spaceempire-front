@@ -33,8 +33,9 @@ const menuGutter = 8;
 
 // CanvasContextMenu floats the ObjectActionsMenu over `.sw-map-wrap`
 // near the picked object. Outside-click and Escape close it. The menu is
-// clamped into the MAP BOX after layout (see shiftUp) so its lower items stay
-// clickable for a pick near the bottom of the map.
+// clamped after layout (see shiftUp) into the MAP BOX and the viewport, whichever
+// ends higher, so its lower items stay clickable for a pick near the bottom of the
+// map.
 export function CanvasContextMenu({
   target,
   ownShipID,
@@ -52,8 +53,8 @@ export function CanvasContextMenu({
 }: Props) {
   const ref = useRef<HTMLDivElement | null>(null);
   // shiftUp is how far the menu has to be pulled up to stay inside the box that
-  // CLIPS it. Measured after layout because the height depends on which items the
-  // target affords — a ship's menu is the tallest.
+  // CLIPS it and inside the viewport. Measured after layout because the height
+  // depends on which items the target affords — a ship's menu is the tallest.
   //
   // Needed since TASK-175 gave missiles one item per ammunition class: the menu grew
   // by ~150 px, and it is positioned bluntly at (px+8, py+8) inside `.sw-map-wrap`
@@ -104,13 +105,15 @@ export function CanvasContextMenu({
     };
   }, [onClose]);
 
-  // Clamp into the clipper once the real height is known. Only ever pulls the menu
-  // UP, and never above the map box's own top edge, so a pick with room below keeps
-  // the plain (px+8, py+8) anchor it always had.
+  // Clamp into clipper ∩ viewport once the real height is known. Only ever pulls
+  // the menu UP, and never above the map box's own top edge, so a pick with room
+  // below keeps the plain (px+8, py+8) anchor it always had.
   //
-  // Both measurements are independent of the shift already applied — the menu's own
-  // offsetHeight and the clipper's clientHeight — so nothing has to be un-done
-  // before measuring, and the result can be computed OUTSIDE the setState updater.
+  // Every measurement is independent of the shift already applied — the menu's own
+  // offsetHeight, and the clipper's clientHeight and viewport offset, which an
+  // absolutely positioned child of an `overflow: hidden` box cannot move — so
+  // nothing has to be un-done before measuring, and the result can be computed
+  // OUTSIDE the setState updater.
   // (The previous version read the DOM inside the updater to subtract its own
   // `prev`, making the reducer impure — and StrictMode calls a reducer twice, which
   // doubled the correction: 329 px of shift applied for the 165 px it computed at
@@ -126,7 +129,15 @@ export function CanvasContextMenu({
       const clipper = el.offsetParent; // .sw-map-wrap — positioned + overflow:hidden
       if (!clipper) return;
       const top = py + menuOffset;
-      const overflow = top + el.offsetHeight + menuGutter - clipper.clientHeight;
+      // Two edges can take the bottom item away, and the nearer one wins: the
+      // clipper's own bottom (it hides what is past it) and the viewport's (the
+      // document does not scroll, so what is past it cannot be reached either).
+      // In the drawer regime `.sw-map-wrap` itself hangs below the viewport —
+      // measured 664 against a 640-tall window — so clamping into the box alone
+      // left the last item off-screen and unclickable.
+      const clipperTop = clipper.getBoundingClientRect().top;
+      const limit = Math.min(clipper.clientHeight, window.innerHeight - clipperTop);
+      const overflow = top + el.offsetHeight + menuGutter - limit;
       setShiftUp(Math.max(0, Math.min(overflow, top)));
     };
     measure();

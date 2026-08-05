@@ -24,20 +24,24 @@ import { MISSILE_CLASSES } from './missileClasses';
 import { recallDronesReported } from './recallDrones';
 import type { TrackedShip } from './useWorldState';
 
-// Cargo goods that back the launch buttons. Mirror the backend constants
-// api.Missile*GoodsType and api.DroneGoodsType, which TASK-167 moved onto the real
-// catalog: 10 «Ракета Москит» (space 1) and 21 «Боевой дрон» (space 290). Before
-// that they were 50/51, goods no station sold and GET /api/goods had never heard
-// of — so the hold listed them as «Товар #50» and a spent magazine could not be
-// refilled. A drone is a big-ship weapon at 290: a starter hull (cargobay 50)
-// cannot carry one, and the button says so.
+// Cargo good that backs the drone button. Mirrors the backend constant
+// api.DroneGoodsType, which TASK-167 moved onto the real catalog: 21 «Боевой дрон»
+// (space 290). Before that the drone and the missile were 50/51, goods no station
+// sold and GET /api/goods had never heard of — so the hold listed them as
+// «Товар #50» and a spent magazine could not be refilled. A drone is a big-ship
+// weapon at 290: a starter hull (cargobay 50) cannot carry one, and the button says
+// so.
 const DRONE_GOODS = 21;
 
-// Each of the five missile classes (MISSILE_CLASSES, ct_missiles) gets its own
-// button with its own hold count, mirroring the two torpedo buttons below — goods
-// 11-14 were on sale at 67-72 stations each and consumed by nothing until TASK-175,
-// the same defect TASK-167 closed for 10. The table is shared with
-// ObjectActionsMenu, which offers the same five items on the canvas.
+// Each of the five missile classes gets its own button with its own hold count,
+// mirroring the two torpedo buttons below — goods 11-14 were on sale at 67-72
+// stations each and consumed by nothing until TASK-175, the same defect TASK-167
+// closed for 10. The class→goods table itself lives in ./missileClasses
+// (MISSILE_CLASSES, from ct_missiles) and is shared with ObjectActionsMenu, which
+// offers the same five items on the canvas; its backend counterpart is
+// domain.MissileGoodsTypes — the api package keeps a constant for class 1 only
+// (api.MissileGoodsType), so there is nothing per-class to mirror from there.
+
 // Satellite goods id consumed by one install (phase 10.15). Mirrors
 // api.SatelliteGoodsType.
 const SATELLITE_GOODS = 26;

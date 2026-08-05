@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   EntityKind,
+  commandErrorText,
   isDockableStaticKind,
   isMissileTargetKind,
   isStaticTargetKind,
@@ -234,7 +235,18 @@ export function ObjectActionsMenu({
     !!target.ownerID &&
     target.ownerID === ownPlayerID;
 
-  const run = (action: Promise<unknown>) => {
+  // toText lets one action word its own failures, the same hook CombatHUD.run has.
+  // Only the actions that move something pass one: the three ordnance launches
+  // charge the magazine as a single all-or-nothing debit, and pickup / dismantle
+  // put goods into the hold, so on a 502 or a dropped connection the command may
+  // have applied and «Сервер вернул ошибку 502.» would read as a refusal (TASK-168
+  // AC #3). Unlike CombatHUD.run this menu does not re-read the hold after a
+  // failure — it has no ownCargo of its own, only onCargoChanged, which dismantle
+  // calls on success — so the text is the only thing the player has to go on here.
+  // Everything else (move, dock, jump, attack, capture, hack, cease-fire, mine)
+  // records an intent and moves nothing, and keeps the raw backend message: it is
+  // more specific than any line we could write for it.
+  const run = (action: Promise<unknown>, toText: (err: unknown) => string = formatError) => {
     setPending(true);
     setError(null);
     action
@@ -244,7 +256,7 @@ export function ObjectActionsMenu({
       })
       .catch((err: unknown) => {
         setPending(false);
-        const msg = formatError(err);
+        const msg = toText(err);
         setError(msg);
         emitLog({ category: 'system', kind: 'danger', message: msg });
       });
@@ -292,16 +304,16 @@ export function ObjectActionsMenu({
   };
   const doLaunchMissile = () => {
     if (!missileRef) return;
-    run(sendLaunchMissile(ownShipID, missileRef));
+    run(sendLaunchMissile(ownShipID, missileRef), commandErrorText);
   };
   const doLaunchDrones = () => {
     // Drones stay ship-only (TASK-113 C-03) — the server rejects a static target.
     if (target.kind !== 'ship') return;
-    run(sendLaunchDrone(ownShipID, { kind: EntityKind.Ship, id: target.id }, DRONE_SALVO));
+    run(sendLaunchDrone(ownShipID, { kind: EntityKind.Ship, id: target.id }, DRONE_SALVO), commandErrorText);
   };
   const doLaunchTorpedo = (torpedoClass: number) => {
     if (!weaponRef) return;
-    run(sendLaunchTorpedo(ownShipID, weaponRef, torpedoClass));
+    run(sendLaunchTorpedo(ownShipID, weaponRef, torpedoClass), commandErrorText);
   };
   const doRecallDrones = () => {
     run(recallDronesReported(ownShipID));
@@ -317,11 +329,12 @@ export function ObjectActionsMenu({
           message: `${target.label}: объект демонтирован, груз вернулся в трюм.`,
         });
       }),
+      commandErrorText,
     );
   };
   const doPickup = () => {
     if (target.kind !== 'container') return;
-    run(sendPickupContainer(ownShipID, target.id));
+    run(sendPickupContainer(ownShipID, target.id), commandErrorText);
   };
   const doMine = () => {
     if (target.kind !== 'asteroid') return;

@@ -623,13 +623,16 @@ export async function fetchState(): Promise<Snapshot> {
   return (await res.json()) as Snapshot;
 }
 
-// ApiError with the bare backend message rather than requireOk. Both work here:
-// the only caller is the bounty form's target picker, and since TASK-168 that page
-// maps its failures through friendlyError, which strips requireOk's route label
-// anyway. The shape is kept because it is the one the in-space senders above use;
-// what matters is not the verb but whether the caller maps — see fetchWorld below
-// for the same call decided the other way, and the in-space header for the group
-// where it is not free.
+// ApiError with the bare backend message rather than requireOk. Both work here,
+// and not because of a mapper: of the three callers only one maps at all.
+// bounties/BountiesPage (:21, :34) hands the board load to friendlyError;
+// GameLayout (:83) console.errors and shows nothing, because the rail's login map
+// is optional decoration; clans/MyClanView (:38) swallows it outright so the invite
+// dropdown just stays empty. So the shape here is the in-space senders' shape, kept
+// for uniformity with them, and it costs the one mapping caller nothing because
+// friendlyError strips requireOk's route label anyway. See fetchWorld below for the
+// same call decided the other way, and the in-space header for the group where the
+// choice is not free.
 export async function fetchPlayers(): Promise<PlayerSummary[]> {
   const res = await netFetch('/api/players');
   if (!res.ok) {
@@ -1352,9 +1355,31 @@ export function friendlyError(err: unknown): string {
 // clan treasury inside the transaction that inserts it) and selling a ship
 // (app/sell_ship.go credits the wallet and deletes the hull in one transaction).
 //
-// The other mutating commands outside the station move no money and say so at their
-// own call sites: clan create/invite/accept/kick/leave/role, activateShip, and
-// sendSetCourse below.
+// One rule, no per-screen exceptions: every mutating command outside the station
+// that moves credits, goods or a hull is on this mapper. Besides the two above that
+// is the ordnance — sendLaunchMissile / sendLaunchDrone / sendLaunchTorpedo, whose
+// magazine is charged as one all-or-nothing debit — and sendPickupContainer and
+// sendDismantleStatic, which both put goods into the hold. All five map at their
+// call sites through the toText hook (CombatHUD.run, ObjectActionsMenu.run);
+// sendInstallSatellite / sendInstallJammer have installErrorText, which words the
+// same in-doubt case one command at a time (TASK-149).
+//
+// This paragraph used to claim the rest «move no money and say so at their own call
+// sites» while listing only the clan commands, activateShip and sendSetCourse — the
+// five ordnance/cargo senders above were simply missing from it, and none of them
+// said anything at its call site: they went through run() with no toText and printed
+// the raw backend message. A 502 on «Запустить ракету» read «Сервер вернул ошибку
+// 502.», i.e. the server refused, and a second click spent a second missile.
+//
+// The commands genuinely left out move neither credits nor goods, and that was
+// checked rather than assumed: sendSetCourse (internal/api/set_course.go only hands
+// the worker a Course), sendMine (internal/api/mine.go only stores MiningTarget —
+// the drilling, the energy gate and the ore are per-tick in the worker),
+// activateShip, sendMove, sendDock, sendUndock, sendJump, sendAttack, sendCapture,
+// sendHack, sendCeaseFire, disembark, exitShip, setShipAccess — all record an intent
+// the worker acts on later, and internal/sector/docking.go and jump*.go touch no
+// wallet — plus the clan commands (create/invite/accept/kick/leave/role), which
+// debit nothing and are refused on a repeat by a unique key.
 //
 // It exists because friendlyError's advice is wrong for those. When no answer
 // arrives the request may still have reached the backend and committed — the
@@ -1368,18 +1393,27 @@ export function friendlyError(err: unknown): string {
 //
 // Deliberately NOT applied to sendSetCourse either, the one mutating command
 // outside the station that TASK-168 AC #3 asks about. Laying a course spends
-// nothing: internal/api/set_course.go only hands the worker a Course, and
-// re-sending it overwrites the same field. So a retry cannot double-charge, and
-// the line above would name a wallet and a hold this command never touches —
-// which is the same defect as TASK-140/166 with the blame moved, an interface
-// stating something that is not so. Both its callers (GalaxyMap, SetCoursePanel)
-// use friendlyError.
+// nothing (internal/api/set_course.go only hands the worker a Course) and
+// re-sending it overwrites the same field, so friendlyError's "try again" is the
+// correct advice and nothing of the player's is in doubt. That is the only test
+// applied, to this command and to every other candidate: does it move credits,
+// goods or a hull — i.e. can the panel still honestly imply nothing happened. (A
+// double charge is the worst case of failing that test, not the test itself: a
+// repeated pickup or a repeated sell answers 404, but the first attempt may have
+// moved the goods, and that is enough.) It used to be argued partly on the wording
+// ("would name a wallet and a hold this command never touches"), which held
+// sendSetCourse to a stricter standard than setBounty and sellShip were let in
+// under: the line named a hold neither of them touches either. It no longer names
+// any resource, precisely because this mapper is shared by commands that move
+// different things — a wallet, a hold, a hull, a bounty board — and naming one set
+// made it false for the rest. Both sendSetCourse callers (GalaxyMap,
+// SetCoursePanel) use friendlyError.
 export function commandErrorText(err: unknown): string {
   if (err instanceof NetworkError || (err instanceof ApiError && UNKNOWN_OUTCOME_STATUSES.has(err.status))) {
     console.error('command outcome unknown', err);
     return (
-      'Ответ не получен, исход неизвестен. Команда могла пройти, а кредиты и товар — списаться. ' +
-      'Проверьте кошелёк и трюм, прежде чем повторять.'
+      'Ответ не получен, исход неизвестен. Команда могла пройти — вместе со списанием ' +
+      'или начислением. Проверьте, что изменилось, прежде чем повторять.'
     );
   }
   return friendlyError(err);

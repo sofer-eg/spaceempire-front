@@ -129,9 +129,18 @@ function CreateClanForm({ onCreated }: { onCreated: () => void }) {
     } catch (e) {
       // friendlyError, not commandErrorText (TASK-168 AC #3): clans.Service.Create
       // debits nothing, and a retry after a lost ack cannot double-create — the
-      // second insert trips clans_name_key or clan_members_pkey and comes back as
-      // «уже занято» / «уже в клане». So the cautious wording, which tells the
-      // player to check a wallet and a hold, would name what this never touches.
+      // second insert trips clans_name_key, clans_tag_key or clan_members_pkey
+      // (internal/social/clans/repository.go:144-149).
+      //
+      // What it comes back as is NOT Russian, and this comment used to quote «уже
+      // занято» / «уже в клане» as though it were. The sentinels are English —
+      // "clans: name already taken", "clans: tag already taken", "clans: player
+      // already in a clan" (clans/errors.go:12-17) — the handler answers 409 with
+      // err.Error() verbatim (clans/server.go:266-274), and friendlyError passes a
+      // non-502/504 ApiError through unchanged. So this screen still shows English
+      // on a name collision and AC #2 is not closed here: whether to Russianise the
+      // clan sentinels (backend) or key on them (client, as jumpDriveErrorText does)
+      // is a decision outside this task, but it is open, not done.
       setError(friendlyError(e));
     } finally {
       setBusy(false);

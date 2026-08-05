@@ -328,9 +328,19 @@ test('friendlyError never returns an empty line for a body-less error', () => {
 test('commandErrorText says the outcome is unknown instead of inviting a retry', () => {
   const dropped = commandErrorText(new NetworkError(new TypeError('Failed to fetch')));
   assert.match(dropped, /исход неизвестен/i);
-  assert.match(dropped, /Проверьте кошелёк и трюм/);
+  assert.match(dropped, /Проверьте, что изменилось/);
   assert.doesNotMatch(dropped, /повторите\./i);
   assert.doesNotMatch(dropped, /Failed to fetch/);
+  // The line names no particular resource, and that is load-bearing rather than
+  // vague: this one mapper is shared by market buy/sell and cargo transfer (wallet
+  // and hold), setBounty (wallet or clan treasury), sellShip (wallet and a hull),
+  // claimStation, insurance, and the ordnance launches / pickup / dismantle (hold
+  // only). It used to end «Проверьте кошелёк и трюм», which was false for every
+  // consumer that touches no hold — and the same wording was then used as a reason
+  // to keep sendSetCourse off the mapper, holding it to a standard its own users
+  // did not meet.
+  assert.doesNotMatch(dropped, /кошел[её]к/i);
+  assert.doesNotMatch(dropped, /трюм/i);
 
   // A proxy answering for a backend that died mid-deploy is the same situation.
   for (const status of [502, 504]) {
@@ -394,9 +404,13 @@ test('netFetch wraps a fetch rejection in NetworkError and passes a response thr
     assert.equal(err.cause, cause);
     // isOutcomeUnknown (install commands) keeps treating it as in-doubt.
     assert.equal(isOutcomeUnknown(err), true);
-    // Views outside the station tabs (clans, bounties, fleet, the galaxy map)
-    // render err.message with no mapper at all, so the message itself has to be
-    // the Russian line — not "Failed to fetch" under a new name.
+    // Some views still render err.message with no mapper at all —
+    // ObjectActionsMenu.formatError (which also writes it to the journal),
+    // TargetsPanel.onRowClick, SpacePointMenu, CombatHUD.run for the commands that
+    // pass no toText, PilotPanel's console — so the message itself has to be the
+    // Russian line, not "Failed to fetch" under a new name. (Clans, bounties, fleet
+    // and the galaxy map were the examples here until TASK-168 put all four on a
+    // mapper; they no longer make the point.)
     assert.equal(err.message, friendlyError(err));
     assert.match(err.message, /Нет связи с сервером/);
 

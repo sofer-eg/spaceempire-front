@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   EntityKind,
+  commandErrorText,
   installErrorText,
   isStaticTargetKind,
   sendCeaseFire,
@@ -122,7 +123,14 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
 
   // toText lets a command translate its own failures (TASK-149: the install-*
   // commands need installErrorText, whose 504 line must not invite a blind
-  // retry). Commands that pass nothing keep showing the raw backend message.
+  // retry). The four launch buttons pass commandErrorText for the same reason at
+  // one remove: a magazine is charged as one all-or-nothing debit, so on a 502 the
+  // shot may well have been fired and paid for, and «Сервер вернул ошибку 502.» —
+  // which is what they printed before — reads as a refusal and invites a second
+  // one. Re-reading the hold below is not a substitute: it shows the count, not
+  // whether this click is the reason it dropped. Cease-fire and recall pass
+  // nothing: they move no goods, and the raw backend message is the most specific
+  // thing there is to say.
   const run = (action: Promise<unknown>, refresh: boolean, toText?: (err: unknown) => string) => {
     setPending(true);
     setError(null);
@@ -293,7 +301,7 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
               count={missiles}
               disabled={pending || !targetRef || missiles === 0}
               title={!targetRef ? 'Нет цели' : missiles === 0 ? 'Нет ракет в трюме' : undefined}
-              onClick={() => targetRef && run(sendLaunchMissile(ownShip.id, targetRef), true)}
+              onClick={() => targetRef && run(sendLaunchMissile(ownShip.id, targetRef), true, commandErrorText)}
             />
             <WeaponButton
               glyph="⬡"
@@ -310,7 +318,8 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
                       : undefined
               }
               onClick={() =>
-                targetRef && run(sendLaunchDrone(ownShip.id, targetRef, Math.min(DRONE_SALVO, drones)), true)
+                targetRef &&
+                run(sendLaunchDrone(ownShip.id, targetRef, Math.min(DRONE_SALVO, drones)), true, commandErrorText)
               }
             />
             <WeaponButton
@@ -327,7 +336,10 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
                       ? 'Нет торпед «Огненная Буря» (gt23)'
                       : undefined
               }
-              onClick={() => targetRef && run(sendLaunchTorpedo(ownShip.id, targetRef, TORPEDO_CLASS_FIRESTORM), true)}
+              onClick={() =>
+                targetRef &&
+                run(sendLaunchTorpedo(ownShip.id, targetRef, TORPEDO_CLASS_FIRESTORM), true, commandErrorText)
+              }
             />
             <WeaponButton
               glyph="☄"
@@ -343,7 +355,9 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
                       ? 'Нет торпед «Святая Торпеда» (gt24)'
                       : undefined
               }
-              onClick={() => targetRef && run(sendLaunchTorpedo(ownShip.id, targetRef, TORPEDO_CLASS_HOLY), true)}
+              onClick={() =>
+                targetRef && run(sendLaunchTorpedo(ownShip.id, targetRef, TORPEDO_CLASS_HOLY), true, commandErrorText)
+              }
             />
             <button
               type="button"

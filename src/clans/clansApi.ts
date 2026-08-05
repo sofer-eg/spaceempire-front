@@ -2,18 +2,23 @@
 // {error} body convention of src/api.ts; failures throw an ApiError carrying the
 // server's human-readable message so views can surface it inline.
 //
-// ApiError, not a plain Error (TASK-168): the message alone is not enough for the
-// mappers. friendlyError words 502/504 as «Сервер не ответил» because a proxy
-// answered instead of the game, and commandErrorText needs the same statuses to
-// warn that a command's outcome is in doubt — both branch on err.status, so
-// dropping it here made the identical 502 read one way on the galaxy map and
-// another on this page.
+// ApiError, not a plain Error (TASK-168): the message alone is not enough for
+// friendlyError, which words 502/504 as «Сервер не ответил» — a proxy answered
+// instead of the game — and can only tell those apart by branching on err.status.
+// Raising a plain Error dropped the status, so the identical 502 read one way on
+// the galaxy map and another on this page. Only friendlyError is meant here:
+// commandErrorText branches on the same statuses but no clan call reaches it, and
+// none should — the clan operations debit nothing (see the note in ClansPage).
 //
-// netFetch, not bare fetch (TASK-168): every view here renders e.message
-// directly, so on a dead backend a raw fetch rejection put the English "Failed to
-// fetch" in the Russian interface — reachable just by opening the Кланы tab
-// during a restart. netFetch labels that case NetworkError, whose message is
-// already the Russian line.
+// netFetch, not bare fetch (TASK-168): a raw fetch rejection is a TypeError whose
+// message is the English "Failed to fetch", and opening the Кланы tab during a
+// backend restart put it straight into the Russian interface. netFetch labels that
+// case NetworkError instead — the classification friendlyError needs, and a message
+// that is already the Russian line. Note the classification is the point now, not
+// the message: every consumer here goes through friendlyError (ClansPage :36, :55,
+// :95, :135; ClansView :22; ClanDetailView :32; MyClanView :67), which the first
+// version of this comment predated when it said the views «render e.message
+// directly».
 import { ApiError, netFetch, parseErrorBody } from '../api';
 
 export type ClanSummary = {

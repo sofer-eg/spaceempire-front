@@ -51,7 +51,9 @@ export function BountiesPage() {
     };
   }, [ownPlayerID]);
 
-  const onPlaced = useCallback(() => {
+  // onSettled, not onPlaced: the form calls it after any outcome, including the
+  // ones where nothing was placed. See the note in PlaceBountyForm.submit.
+  const onSettled = useCallback(() => {
     void reload().catch((e) => setError(friendlyError(e)));
     void refreshPlayer();
   }, [reload, refreshPlayer]);
@@ -66,7 +68,7 @@ export function BountiesPage() {
             players={players.filter((p) => p.playerID !== ownPlayerID)}
             clans={clans}
             isLeader={isLeader}
-            onPlaced={onPlaced}
+            onSettled={onSettled}
           />
           <TopBountiesBoard bounties={bounties} />
         </>
@@ -118,12 +120,12 @@ function PlaceBountyForm({
   players,
   clans,
   isLeader,
-  onPlaced,
+  onSettled,
 }: {
   players: PlayerSummary[];
   clans: ClanSummary[];
   isLeader: boolean;
-  onPlaced: () => void;
+  onSettled: () => void;
 }) {
   const [targetKind, setTargetKind] = useState<'player' | 'clan'>('player');
   const [targetId, setTargetId] = useState(0);
@@ -158,7 +160,6 @@ function PlaceBountyForm({
       });
       setAmount('');
       setTargetId(0);
-      onPlaced();
     } catch (e) {
       // commandErrorText, not friendlyError (TASK-168 AC #3): a bounty is paid for
       // on placement — bounties.Service debits the sponsor's wallet (or the clan
@@ -167,6 +168,14 @@ function PlaceBountyForm({
       // already stand and be paid for, and «повторите» buys a second one.
       setError(commandErrorText(e));
     } finally {
+      // Reload the board and the wallet after any outcome, not just a placement.
+      // On an unknown outcome the award may already stand, and the line above sends
+      // the player to check what changed — so the board behind the form has to be
+      // the board as it is now, not as it was before the click. The form keeps its
+      // own error slot, and reload() clears only the page's, so the message stays
+      // on screen; the inputs are deliberately not cleared here either, since a
+      // decided refusal (400 «not enough cash») is worth correcting and resending.
+      onSettled();
       setBusy(false);
     }
   };

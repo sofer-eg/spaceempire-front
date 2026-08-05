@@ -291,8 +291,11 @@ export function SectorCanvas(props: Props) {
       // (TASK-165): this used to be the same seven kinds in a nested ternary and
       // the same `id && sectorID` predicate as SectorView's resolver, so a static
       // type taught to one and not the other would light its row and its ring and
-      // then have its canvas menu closed on the next statics frame — list
-      // undefined, found undefined, menu null, «Лететь»/«Атаковать» unclickable.
+      // then get no canvas menu at all — list undefined, found undefined, menu
+      // null, «Лететь»/«Атаковать» never on screen. Not "closed on the next
+      // statics frame", as this comment first put it: visibleMenu is a useMemo
+      // with `menu` among its deps, so it runs in the same render that sets
+      // `menu`, and the right-click simply looks dead.
       // Laser towers, satellites and (TASK-131) hyper-interference generators
       // reach a 'dock' pick without being dockable (TASK-113 D3); the helper
       // returns their lists too, so the menu stays open while they exist.

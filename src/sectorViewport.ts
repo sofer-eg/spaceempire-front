@@ -47,8 +47,14 @@ export function radarFitHalfSide(radarRange: number): number {
   return Math.max(radarRange * RADAR_FIT_PADDING, MIN_HALF_MAX);
 }
 
-// computeMaxBounds returns the world-space square that just contains
-// every static AND gate of the given sector, padded by PADDING_MAX.
+// computeMaxBounds returns the world-space square that just contains the
+// sector's permanent landmarks — stations, shipyards, trade stations and
+// pirbases — AND its gates, padded by PADDING_MAX. Deliberately not all seven
+// SectorStatics lists: laser towers, satellites and jammers are destructible and
+// player-deployable, and Max is the default zoom recomputed from props.statics
+// every frame, so folding them in would re-frame the sector whenever one is
+// installed or shot down. A deployable outside this box is off-canvas at Max
+// zoom; Near, fit-to-radar (TASK-122) and the navigation row reach it.
 // Gates are folded in via their near-side coords (posAX/Y when the gate's
 // sectorA is this sector, else posBX/Y) — they typically sit at the sector
 // edges, so omitting them both clipped the outermost gate off the Max view

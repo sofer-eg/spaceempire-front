@@ -485,8 +485,10 @@ export type SectorStatics = {
 
 // StaticObject is the shape every SectorStatics list shares. Written out rather
 // than derived from the seven types above so staticListOf has one return type to
-// name; `type` is optional because only stations, shipyards and trade stations
-// carry a subtype.
+// name; `type` is optional because only stations and trade stations carry a
+// subtype. Not shipyards — Shipyard has no `type` field at all, which is why
+// gameContext.resolveStation passes `undefined` rather than `hit?.type` in its
+// Shipyard branch.
 export type StaticObject = {
   id: number;
   sectorID: number;
@@ -508,8 +510,9 @@ export type StaticObject = {
 // switches (SectorView.selectedStaticList for the panel row + canvas ring,
 // ObjectLayer.staticList for marker positions, CombatHUD.findStatic for the target
 // caption) and a nested ternary in SectorCanvas.visibleMenu that decides whether a
-// canvas object's menu stays open. The copies drifted every single time a static
-// type was added — satellites (10.15), laser towers (4.5), jammers (TASK-131). The
+// canvas object's menu opens at all and then stays open. The copies drifted every
+// single time a static type was added — satellites (10.15), laser towers (4.5),
+// jammers (TASK-131). The
 // jammer case is what TASK-165 came from: present in ObjectLayer, absent in
 // SectorView, and because SectorView runs first the ObjectLayer case was dead code
 // and the generator got no selected highlight at all.
@@ -521,10 +524,21 @@ export type StaticObject = {
 // "Single" covers resolving one list from one kind, which is what drifted. It does
 // not cover the places that walk all seven fields by name and never branch on a
 // kind: useWorldState.removeStaticsByRefs / mergeStatics / staticsEmpty,
-// ObjectLayer's own render loops, TargetsPanel's row builders,
-// sectorViewport.computeMaxBounds. Those are field walks, and folding them through
-// a kind lookup would need a cast per assignment to convince tsc the element type
-// still matches.
+// ObjectLayer's marker table and its render loops, TargetsPanel's row builders.
+// Those are field walks, and folding them through a kind lookup would need a cast
+// per assignment to convince tsc the element type still matches.
+//
+// sectorViewport.computeMaxBounds used to be listed with them and does NOT belong
+// there: it folds four lists — stations, shipyards, tradeStations, pirbases — plus
+// gates, and has never seen laserTowers, satellites or jammers. Left as it is on
+// purpose. Max is the default zoom and computeViewport recomputes its box from
+// props.statics every frame, so folding in a destructible tower or a
+// player-deployed satellite would re-frame the whole sector the moment one is
+// deployed or shot down. The price is that a deployable outside that box sits
+// off-canvas at Max zoom, and Near / fit-to-radar (TASK-122) or the navigation
+// row are how it is reached. Worth stating because the line above reads as a
+// checklist: nobody should tick computeMaxBounds off as "this one already walks
+// all seven, add mine next to them" — there was never a seventh field in it.
 //
 // The result is readonly because it is not a copy: it is `statics.stations` (or
 // whichever list) handed back under a wider element type, and a push through that
@@ -533,9 +547,10 @@ export type StaticObject = {
 //
 // StaticObject deliberately stops at the fields all seven lists share, which is
 // why gameContext.resolveStation still indexes statics.stations / .shipyards /
-// .tradeStations by hand: it needs ownerID (and pirbases carry angle), and those
-// live on the per-type types, not here. That is a narrower shape, not a caller
-// this helper forgot.
+// .tradeStations by hand: it needs ownerID, which lives on the per-type types and
+// not here. Its fourth branch, Pirbase, indexes no list at all — a pirbase has no
+// ownerID to look up — so resolveStation is a narrower shape, not a caller this
+// helper forgot.
 //
 // STATIC_LIST_KIND is the mapping itself, and it is keyed by the SectorStatics
 // field rather than by the kind for one reason: `Record<keyof SectorStatics, …>`

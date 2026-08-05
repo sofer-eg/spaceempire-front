@@ -11,7 +11,6 @@ import {
   sendDock,
   sendHack,
   sendJump,
-  sendLaunchDrone,
   sendLaunchMissile,
   sendCapture,
   sendLaunchTorpedo,
@@ -22,6 +21,7 @@ import {
   type InstalledEquipment,
 } from './api';
 import { emitLog } from './eventBus';
+import { launchDronesReported } from './launchDrones';
 import { recallDronesReported } from './recallDrones';
 import { relationColor, type Relation } from './sector/shapeData';
 
@@ -306,8 +306,9 @@ export function ObjectActionsMenu({
     if (target.kind !== 'ship') return;
     // No count: the server launches what up_drone_control runs, clamped to the hold
     // (TASK-176). This menu has no cargo of its own — which is exactly why it used
-    // to send a fixed salvo of 3 and get a 400 whenever fewer were aboard.
-    run(sendLaunchDrone(ownShipID, { kind: EntityKind.Ship, id: target.id }), commandErrorText);
+    // to send a fixed salvo of 3 and get a 400 whenever fewer were aboard — and the
+    // journal line is how the player learns how many actually flew.
+    run(launchDronesReported(ownShipID, { kind: EntityKind.Ship, id: target.id }), commandErrorText);
   };
   const doLaunchTorpedo = (torpedoClass: number) => {
     if (!weaponRef) return;

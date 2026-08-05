@@ -8,7 +8,6 @@ import {
   sendCeaseFire,
   sendInstallJammer,
   sendInstallSatellite,
-  sendLaunchDrone,
   sendLaunchMissile,
   sendLaunchTorpedo,
   staticListOf,
@@ -20,6 +19,7 @@ import {
   type StationType,
 } from './api';
 import { shipDisplayName, staticTypeLabel } from './gameContext';
+import { launchDronesReported } from './launchDrones';
 import { recallDronesReported } from './recallDrones';
 import type { TrackedShip } from './useWorldState';
 
@@ -309,8 +309,9 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
               onClick={() =>
                 // No count: the server launches everything up_drone_control runs,
                 // or as much of it as the hold holds (TASK-176). The drones===0 gate
-                // above is a hint, not the guarantee — the backend owns that now.
-                targetRef && run(sendLaunchDrone(ownShip.id, targetRef), true, commandErrorText)
+                // above is a hint, not the guarantee — the backend owns that now, and
+                // launchDronesReported journals how many actually flew.
+                targetRef && run(launchDronesReported(ownShip.id, targetRef), true, commandErrorText)
               }
             />
             <WeaponButton

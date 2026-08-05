@@ -22,6 +22,7 @@ import {
 } from './api';
 import { emitLog } from './eventBus';
 import { launchDronesReported } from './launchDrones';
+import { MISSILE_CLASSES } from './missileClasses';
 import { recallDronesReported } from './recallDrones';
 import { relationColor, type Relation } from './sector/shapeData';
 
@@ -32,18 +33,11 @@ import { relationColor, type Relation } from './sector/shapeData';
 const TORPEDO_CLASS_FIRESTORM = 2;
 const TORPEDO_CLASS_HOLY = 3;
 
-// Missile ammunition classes (ct_missiles, TASK-175): class → name. One item per
-// class, same as the torpedoes above — the single «Запустить ракету» item this
-// replaces could only fire class 1, so a player working from the canvas could not
-// use the four dearer types at all. Counts are deliberately absent: this menu has
-// no cargo of its own; CombatHUD carries the per-class hold counters.
-const MISSILE_CLASSES = [
-  { cls: 1, name: 'Москит', goods: 10 },
-  { cls: 2, name: 'Оса', goods: 11 },
-  { cls: 3, name: 'Стрекоза', goods: 12 },
-  { cls: 4, name: 'Шелкопряд', goods: 13 },
-  { cls: 5, name: 'Шершень', goods: 14 },
-] as const;
+// One missile item per ammunition class (MISSILE_CLASSES, ct_missiles), same as the
+// torpedoes above — the single «Запустить ракету» item this replaces could only fire
+// class 1, so a player working from the canvas could not use the four dearer types at
+// all (TASK-175). Hold counts are deliberately absent: this menu has no cargo of its
+// own; CombatHUD carries the per-class counters.
 
 // PickedObject is the unified target type shared by TargetsPanel (rows) and
 // SectorCanvas (click-on-object). It carries everything the action menu

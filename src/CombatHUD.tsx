@@ -20,6 +20,7 @@ import {
 } from './api';
 import { shipDisplayName, staticTypeLabel } from './gameContext';
 import { launchDronesReported } from './launchDrones';
+import { MISSILE_CLASSES } from './missileClasses';
 import { recallDronesReported } from './recallDrones';
 import type { TrackedShip } from './useWorldState';
 
@@ -32,22 +33,11 @@ import type { TrackedShip } from './useWorldState';
 // cannot carry one, and the button says so.
 const DRONE_GOODS = 21;
 
-// The five missile ammunition classes (ct_missiles, TASK-175): class → goods id,
-// display name and hold footprint. Each gets its own button with its own hold
-// count, mirroring the two torpedo buttons below — goods 11-14 were on sale at
-// 67-72 stations each and consumed by nothing until this table existed, the same
-// defect TASK-167 closed for 10.
-//
-// `space` is quoted in the tooltip because it is what decides whether a hull can
-// carry the ammunition at all: a starter cargobay is 50, so even the heaviest
-// missile (3) fits comfortably — unlike the drone's 290.
-const MISSILE_CLASSES = [
-  { cls: 1, goods: 10, name: 'Москит', space: 1 },
-  { cls: 2, goods: 11, name: 'Оса', space: 1 },
-  { cls: 3, goods: 12, name: 'Стрекоза', space: 1 },
-  { cls: 4, goods: 13, name: 'Шелкопряд', space: 2 },
-  { cls: 5, goods: 14, name: 'Шершень', space: 3 },
-] as const;
+// Each of the five missile classes (MISSILE_CLASSES, ct_missiles) gets its own
+// button with its own hold count, mirroring the two torpedo buttons below — goods
+// 11-14 were on sale at 67-72 stations each and consumed by nothing until TASK-175,
+// the same defect TASK-167 closed for 10. The table is shared with
+// ObjectActionsMenu, which offers the same five items on the canvas.
 // Satellite goods id consumed by one install (phase 10.15). Mirrors
 // api.SatelliteGoodsType.
 const SATELLITE_GOODS = 26;

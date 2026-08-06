@@ -23,6 +23,8 @@ import {
   netFetch,
   parseErrorBody,
   STATIC_LIST_KIND,
+  staticCombatMap,
+  staticKey,
   staticListOf,
   type SectorStatics,
 } from './api.ts';
@@ -532,4 +534,30 @@ test('friendlyError turns a body-less backend failure into one Russian sentence'
   assert.equal(text, 'Сервер вернул ошибку 500.');
   assert.doesNotMatch(text, /api\//);
   assert.doesNotMatch(text, /[A-Za-z]/, 'no English and no route left in the player-facing line');
+});
+
+// --- staticCombatMap (TASK-186) ----------------------------------------------
+// The `statics` welcome frame now carries the live hull/shield of every static
+// next to the spawn layout, and the client seeds its combat map from it instead
+// of clearing. The key format is the contract: CombatHUD and ObjectLayer both
+// look live vitals up as `${kind}:${id}` written out by hand, so a change here
+// silently blanks the hull readout and every shield bar on the canvas.
+test('staticCombatMap indexes a welcome frame by kind:id', () => {
+  const jammer = { ref: { kind: EntityKind.Jammer, id: 7 }, hp: 3000, shield: 200, maxShield: 4000 };
+  const station = { ref: { kind: EntityKind.Station, id: 7 }, hp: 7500, shield: 0, maxShield: 500 };
+  const map = staticCombatMap([jammer, station]);
+
+  assert.equal(map.size, 2);
+  // Same id, different kind — the key must keep them apart, which is why it is
+  // not the bare id.
+  assert.equal(map.get(`${EntityKind.Jammer}:7`), jammer);
+  assert.equal(map.get(`${EntityKind.Station}:7`), station);
+  assert.equal(map.get(staticKey(jammer.ref)), jammer);
+});
+
+test('staticCombatMap yields an empty map when the frame omits destructibles', () => {
+  // A sector with no statics sends no list at all (omitempty on the wire), and
+  // the seeding path must not throw on it.
+  assert.equal(staticCombatMap(undefined).size, 0);
+  assert.equal(staticCombatMap([]).size, 0);
 });

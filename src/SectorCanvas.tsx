@@ -35,9 +35,10 @@ export type SelectedTargetRef =
 type Props = {
   ships: Map<number, TrackedShip>;
   statics: SectorStatics;
-  // staticCombat is the live HP/Shield of damaged/recharging statics, keyed
-  // by `${kind}:${id}` (phase 6.2b). The overlay paints a shield bar over any
-  // static present here whose shield is below max.
+  // staticCombat is the live HP/Shield of the sector's statics, keyed by
+  // `${kind}:${id}` (phase 6.2b, seeded from the welcome frame in TASK-186).
+  // The overlay paints a shield bar over any static present here whose shield
+  // is below max — so a full shield still draws nothing.
   staticCombat: Map<string, DestructibleStatic>;
   tickIntervalMs: number;
   ownPlayerID: number;

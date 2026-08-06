@@ -362,6 +362,10 @@ export type Snapshot = {
   // big-radar window (phase 10.20 L2). The client merges them into its statics
   // map; statics that left arrive in staticsRemoved.
   staticsAdded?: SectorStatics;
+  // destructibles is the live combat state of every static in the sector,
+  // returned by GET /api/state next to `statics` (TASK-186). The hp inside
+  // `statics` is the spawn layout; this is what the object has left.
+  destructibles?: DestructibleStatic[];
 };
 
 // DestructibleStatic is the live combat state of one static object — the
@@ -373,6 +377,28 @@ export type DestructibleStatic = {
   shield: number;
   maxShield: number;
 };
+
+// staticKey keys the static-combat map by kind+id (phase 6.2b). Lives here
+// because both producers of that map are here now: the welcome frame's full set
+// (staticCombatMap) and the per-tick staticsUpdated/staticsRemoved delta in
+// useWorldState.
+export const staticKey = (r: EntityRef): string => `${r.kind}:${r.id}`;
+
+// staticCombatMap indexes a `statics` frame's destructibles list for lookup by
+// `${kind}:${id}` — the key CombatHUD and ObjectLayer read live hull/shield
+// under. A missing list yields an empty map, which is what a sector with no
+// statics sends.
+//
+// The frame is authoritative and total for its sector: the server sends it on
+// subscribe and again on every jump, and it carries every live static. So the
+// client seeds this map from it instead of clearing (TASK-186) — before that,
+// a reload or a jump there and back left the map empty and the HUD had nothing
+// but the spawn layout to print.
+export function staticCombatMap(list: DestructibleStatic[] | undefined): Map<string, DestructibleStatic> {
+  const out = new Map<string, DestructibleStatic>();
+  for (const d of list ?? []) out.set(staticKey(d.ref), d);
+  return out;
+}
 
 // Static dockable objects of a sector — stations (factories), shipyards,
 // trade stations and pirbases. Sent once over WS as a dedicated `statics`
@@ -608,6 +634,11 @@ export type StaticsMessage = {
   dockRange: number;
   gateRange: number;
   statics: SectorStatics;
+  // destructibles is the live hull/shield of every static in the sector, in the
+  // same shape the per-tick staticsUpdated delta uses. `statics` above is the
+  // spawn layout: its hp is what the object was built with, so it is the bar's
+  // denominator, never its value (TASK-186).
+  destructibles?: DestructibleStatic[];
 };
 
 export type PlayerSummary = {

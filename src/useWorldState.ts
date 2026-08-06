@@ -21,10 +21,7 @@ import type {
   Torpedo,
   TorpedoImpact,
 } from './api';
-import { wsURL } from './api';
-
-// staticKey keys the static-combat map by kind+id (phase 6.2b).
-const staticKey = (r: EntityRef): string => `${r.kind}:${r.id}`;
+import { staticCombatMap, staticKey, wsURL } from './api';
 
 // removeStaticsByRefs returns a SectorStatics with the given (destroyed)
 // objects filtered out, so a killed station/tower stops being rendered.
@@ -212,10 +209,10 @@ export type WorldState = {
   // body is drilled). Phase 10.3.6.
   asteroids: Map<number, Asteroid>;
 
-  // staticCombat is the live HP/Shield of statics that have taken damage or
-  // recharged, keyed by `${kind}:${id}`. Patched from the staticsUpdated /
-  // staticsRemoved delta; destroyed statics are also dropped from `statics`.
-  // Phase 6.2b.
+  // staticCombat is the live HP/Shield of the sector's statics, keyed by
+  // `${kind}:${id}`. Seeded whole from the `statics` frame (TASK-186) and then
+  // patched from the staticsUpdated / staticsRemoved delta; destroyed statics
+  // are also dropped from `statics`. Phase 6.2b.
   staticCombat: Map<string, DestructibleStatic>;
 
   // policeScanSeq increments on every police_scan frame (phase 9.4); the
@@ -309,7 +306,8 @@ export function useWorldState(): WorldState {
   // "mutate, then setState with a fresh map" pattern as containersRef.
   const asteroidsRef = useRef<Map<number, Asteroid>>(new Map());
   // staticCombatRef stores live static HP/Shield between snapshots, keyed by
-  // `${kind}:${id}`. Reset on (re)connect and on a sector change. Phase 6.2b.
+  // `${kind}:${id}`. Re-seeded from every `statics` frame — (re)connect and
+  // sector change both send one (TASK-186). Phase 6.2b.
   const staticCombatRef = useRef<Map<string, DestructibleStatic>>(new Map());
   // shipsSectorRef remembers which sector the current `ships` map was built
   // for. On a backend-driven re-subscribe (gate jump) the statics frame
@@ -396,18 +394,26 @@ export function useWorldState(): WorldState {
             torpedosRef.current = new Map();
             containersRef.current = new Map();
             asteroidsRef.current = new Map();
-            staticCombatRef.current = new Map();
             shipsSectorRef.current = msg.sectorID;
           } else if (shipsSectorRef.current === 0 && msg.sectorID !== 0) {
             shipsSectorRef.current = msg.sectorID;
           }
+          // Seed the live static combat state from the frame (TASK-186). Not
+          // gated on sectorChanged: this frame is total for its sector and only
+          // ever arrives at a full-reset moment — subscribe, or a jump — and it
+          // is the one message that carries live hull/shield at that moment.
+          // Clearing the map here instead (what this did before) is why a reload,
+          // or a jump to the neighbour and back, left the HUD with nothing but
+          // the spawn layout and no way to tell it from the current state. The
+          // per-tick staticsUpdated delta below merges into this seed.
+          staticCombatRef.current = staticCombatMap(msg.destructibles);
           setState((s) => ({
             ...s,
             ships: sectorChanged ? shipsRef.current : s.ships,
             sectorID: msg.sectorID || s.sectorID,
             statics: msg.statics ?? {},
             asteroids: sectorChanged ? asteroidsRef.current : s.asteroids,
-            staticCombat: sectorChanged ? staticCombatRef.current : s.staticCombat,
+            staticCombat: staticCombatRef.current,
             tickIntervalMs: msg.tickIntervalMs > 0 ? msg.tickIntervalMs : s.tickIntervalMs,
             sectorBoundsRadius: msg.sectorBoundsRadius > 0 ? msg.sectorBoundsRadius : s.sectorBoundsRadius,
             nearZoomRadius: msg.nearZoomRadius > 0 ? msg.nearZoomRadius : s.nearZoomRadius,

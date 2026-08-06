@@ -108,6 +108,22 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
   const inScanner = targetShip != null && targetShip.sectorID === ownSectorID;
   const targetStatic =
     targetRef && !targetIsShip ? staticCombat.get(`${targetRef.kind}:${targetRef.id}`) : undefined;
+  // Denominator of the static's hull bar (TASK-186). A static carries no
+  // maximum-hull column anywhere — not on domain.DestructibleStatic, not in the
+  // DB — but the hp in the layout frame IS the de-facto maximum: hull damage to
+  // a static is never persisted and hull never regenerates (the shield is the
+  // only pool that moves up), so the spawn figure is the highest the object has
+  // ever had. Two limits come with that. A server restart puts the live value
+  // back at this maximum, because static combat state is RAM-only (same
+  // limitation as sector/static_combat.go). And if repair (TASK-67) or damage
+  // persistence ever lands, this stops being a maximum and the wire owes the
+  // client a real maxHP. Absent for a gate — gates are world topology, not
+  // sector layout, so staticListOf has no list for them — and the hull then
+  // prints as a bare figure.
+  const targetStaticMaxHP =
+    targetRef && !targetIsShip
+      ? staticListOf(statics, targetRef.kind)?.find((s) => s.id === targetRef.id)?.hp
+      : undefined;
 
   const drones = cargoCount(ownCargo, DRONE_GOODS);
   const satellites = cargoCount(ownCargo, SATELLITE_GOODS);
@@ -201,16 +217,23 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
                 <MiniBar label="Щиты" value={targetShip.shield} max={targetShip.maxShield} variant="" />
               </>
             ) : targetStatic ? (
-              // A destructible static carries no maxHP on the client (TASK-113
-              // NFR-02), so the hull is a numeric readout and only the shield —
-              // which has a max — gets a bar. A static missing from staticCombat
-              // falls through to the branch below (AC-5: never crashes the
-              // panel).
+              // Live hull and shield of a destructible static, both out of the
+              // same live combat state: the welcome frame seeds it with every
+              // live static in the sector and the per-tick delta keeps it current
+              // (TASK-186). The hull gets a bar against the layout's spawn hp
+              // (see targetStaticMaxHP) and falls back to a bare figure when
+              // there is no layout entry to divide by. A static missing from
+              // staticCombat still falls through to the branch below, so the
+              // panel cannot crash on one (TASK-113 AC-5).
               <>
-                <div className="sw-vital__head">
-                  <span className="sw-vital__label">Корпус</span>
-                  <span className="sw-vital__value sw-mono">{targetStatic.hp}</span>
-                </div>
+                {targetStaticMaxHP && targetStaticMaxHP > 0 ? (
+                  <MiniBar label="Корпус" value={targetStatic.hp} max={targetStaticMaxHP} variant="danger" />
+                ) : (
+                  <div className="sw-vital__head">
+                    <span className="sw-vital__label">Корпус</span>
+                    <span className="sw-vital__value sw-mono">{targetStatic.hp}</span>
+                  </div>
+                )}
                 {targetStatic.maxShield > 0 && (
                   <MiniBar label="Щиты" value={targetStatic.shield} max={targetStatic.maxShield} variant="" />
                 )}
@@ -223,33 +246,18 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
               // both far inside ship 1283's radarRange of 420, both told the
               // player the target was off the scanner.
               //
-              // Distance is not the cause and a distance test would not help:
-              // staticCombat only ever holds statics the worker marked dirty
-              // (collectDirtyDestructibles — damaged or recharging), and it is
-              // reset to empty on every welcome frame, so an untouched station
-              // parked 10 u away has no entry either. The scanner claim is
+              // Distance was never the cause and a distance test would not have
+              // helped: staticCombat used to hold only the statics the worker had
+              // marked dirty (collectDirtyDestructibles — damaged or recharging)
+              // and was reset to empty on every welcome frame, so an untouched
+              // station parked 10 u away had no entry either. Since TASK-186 the
+              // welcome frame carries the sector's full live combat state, so
+              // every static of this sector reaches the branch above; what still
+              // lands here is one that left the big-radar window, which drops it
+              // from the layout and the combat map together. The scanner claim is
               // therefore made only for a ship target absent from the AOI ship
               // map (or in another sector) — the reading the player should get,
               // since a target the scanner does not carry is one they cannot see.
-              //
-              // «Состояние цели недоступно.» is the honest line for a static, and
-              // printing the hull out of the statics frame instead was tried and
-              // reverted (TASK-166 review). That frame does carry an hp per
-              // object, but it is the layout's number, not the fight's:
-              // publishSnapshotFor hands subscribers cloneStatics(s.statics)
-              // (sector/worker.go) while damage lands in the separate
-              // s.destructibles map, and nothing ever writes hp back into the
-              // layout — it changes only by removing a destroyed object or
-              // appending a new one. Nor does the figure heal itself: hull damage
-              // is never persisted (no UPDATE … SET hp for any static table, so a
-              // restart restores full hp) and hp only ever moves down, since
-              // ChargeShield lifts the shield and applyDamage returns early on
-              // dmg <= 0. So after any reconnect — staticCombat is emptied in
-              // socket.onopen — a station shot to 3000 would read 7500 under the
-              // very «Корпус» label the branch above uses for a live figure, and
-              // stay wrong until something damages or recharges it. Sending live
-              // vitals in the welcome frame (sendStatics reading s.destructibles)
-              // is a backend change and a separate task.
               //
               // Do NOT read it backwards as a statement about distance: absence
               // from the ship map is not only distance. snapshot.go's

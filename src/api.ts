@@ -401,9 +401,16 @@ export function staticCombatMap(list: DestructibleStatic[] | undefined): Map<str
 }
 
 // Static dockable objects of a sector — stations (factories), shipyards,
-// trade stations and pirbases. Sent once over WS as a dedicated `statics`
-// frame right after subscribe, and embedded in HTTP /api/state. None of
-// the fields mutate during a session in phase 3.1.
+// trade stations and pirbases. Sent over WS as a dedicated `statics` frame right
+// after subscribe and again on every sector change, and embedded in HTTP
+// /api/state.
+//
+// These are the sector's LAYOUT: the position/type/owner fields hold for the
+// session, and `hp`/`shield` here are the values the object was built with — not
+// what it has left. The live figures ride in the same frame's `destructibles`
+// and in the per-tick staticsUpdated delta (TASK-186); a destroyed object leaves
+// the layout through staticsRemoved. So read `hp` here only as the bar's
+// denominator, never as the target's current hull.
 
 export type Station = {
   id: number;

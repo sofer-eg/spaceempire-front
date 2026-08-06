@@ -10,6 +10,7 @@ import {
   sendInstallSatellite,
   sendLaunchMissile,
   sendLaunchTorpedo,
+  staticKey,
   staticListOf,
   type CargoInventory,
   type DestructibleStatic,
@@ -106,8 +107,7 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
   const targetIsShip = targetRef?.kind === EntityKind.Ship;
   const targetShip = targetIsShip ? ships.get(targetRef.id) : undefined;
   const inScanner = targetShip != null && targetShip.sectorID === ownSectorID;
-  const targetStatic =
-    targetRef && !targetIsShip ? staticCombat.get(`${targetRef.kind}:${targetRef.id}`) : undefined;
+  const targetStatic = targetRef && !targetIsShip ? staticCombat.get(staticKey(targetRef)) : undefined;
   // Denominator of the static's hull bar (TASK-186). A static carries no
   // maximum-hull column anywhere — not on domain.DestructibleStatic, not in the
   // DB — but the hp in the layout frame IS the de-facto maximum: hull damage to

@@ -21,7 +21,8 @@ import type {
   Torpedo,
   TorpedoImpact,
 } from './api';
-import { staticCombatMap, staticKey, wsURL } from './api';
+import { staticKey, wsURL } from './api';
+import { applyStaticsFrame } from './staticsFrame';
 
 // removeStaticsByRefs returns a SectorStatics with the given (destroyed)
 // objects filtered out, so a killed station/tower stops being rendered.
@@ -398,28 +399,22 @@ export function useWorldState(): WorldState {
           } else if (shipsSectorRef.current === 0 && msg.sectorID !== 0) {
             shipsSectorRef.current = msg.sectorID;
           }
-          // Seed the live static combat state from the frame (TASK-186). Not
-          // gated on sectorChanged: this frame is total for its sector and only
-          // ever arrives at a full-reset moment — subscribe, or a jump — and it
-          // is the one message that carries live hull/shield at that moment.
-          // Clearing the map here instead (what this did before) is why a reload,
-          // or a jump to the neighbour and back, left the HUD with nothing but
-          // the spawn layout and no way to tell it from the current state. The
-          // per-tick staticsUpdated delta below merges into this seed.
-          staticCombatRef.current = staticCombatMap(msg.destructibles);
-          setState((s) => ({
-            ...s,
-            ships: sectorChanged ? shipsRef.current : s.ships,
-            sectorID: msg.sectorID || s.sectorID,
-            statics: msg.statics ?? {},
-            asteroids: sectorChanged ? asteroidsRef.current : s.asteroids,
-            staticCombat: staticCombatRef.current,
-            tickIntervalMs: msg.tickIntervalMs > 0 ? msg.tickIntervalMs : s.tickIntervalMs,
-            sectorBoundsRadius: msg.sectorBoundsRadius > 0 ? msg.sectorBoundsRadius : s.sectorBoundsRadius,
-            nearZoomRadius: msg.nearZoomRadius > 0 ? msg.nearZoomRadius : s.nearZoomRadius,
-            dockRange: msg.dockRange > 0 ? msg.dockRange : s.dockRange,
-            gateRange: msg.gateRange > 0 ? msg.gateRange : s.gateRange,
-          }));
+          // The fold — including the seeding of staticCombat from the frame
+          // (TASK-186) — lives in applyStaticsFrame so it can be tested; see the
+          // module for why the seed is not gated on sectorChanged. Re-pointing
+          // the ref at the map the fold just built is the only effect here, and
+          // it has to happen inside the updater because that is where the new
+          // state exists; a StrictMode double-invoke recomputes the same map from
+          // the same frame, so the ref and the state stay the one object.
+          setState((s) => {
+            const next = applyStaticsFrame(
+              s,
+              msg,
+              sectorChanged ? { ships: shipsRef.current, asteroids: asteroidsRef.current } : null,
+            );
+            staticCombatRef.current = next.staticCombat;
+            return next;
+          });
           return;
         }
         if ((msg as { type?: string }).type === 'police_scan') {

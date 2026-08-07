@@ -126,12 +126,14 @@ test('jumpDriveErrorText disambiguates the two 409 branches by code', () => {
     jumpDriveErrorText(new ApiError(409, 'корабль пристыкован', ERROR_CODE.shipDocked)),
     'Нельзя прыгнуть пристыкованным — сначала отстыкуйтесь.',
   );
-  // An uncoded 409 — an older backend, a proxy — falls to the docked branch, the
-  // one that costs a player nothing to read when it is wrong.
-  assert.equal(
-    jumpDriveErrorText(new ApiError(409, 'конфликт')),
-    'Нельзя прыгнуть пристыкованным — сначала отстыкуйтесь.',
-  );
+  // An unrecognised 409 — an SPA newer than its backend, a 409 the backend adds
+  // later, a proxy — gets neither line. Falling through to «вы пристыкованы» is
+  // the TASK-131 defect itself: it is a specific claim about the ship, and it is
+  // wrong for every 409 that is not the docked one.
+  const neutral409 = 'Прыжок отклонён: сейчас корабль прыгнуть не может.';
+  assert.equal(jumpDriveErrorText(new ApiError(409, 'конфликт')), neutral409);
+  assert.equal(jumpDriveErrorText(new ApiError(409, 'нечто новое', 'jump_blocked_by_something_new')), neutral409);
+  assert.doesNotMatch(neutral409, /пристыков|помех/);
 });
 
 test('jumpDriveErrorText disambiguates the two 422 branches by code', () => {
@@ -139,10 +141,18 @@ test('jumpDriveErrorText disambiguates the two 422 branches by code', () => {
     jumpDriveErrorText(new ApiError(422, 'генератор щита повреждён или отсутствует', ERROR_CODE.shieldRequired)),
     'Нужен исправный генератор щита.',
   );
+  // jump_drive_required is read, not inferred: the backend has always written it
+  // (back/internal/api/jump_drive.go), and until this review the SPA reached the
+  // same line by "not shield_required", which is the 409 mistake in another pair.
   assert.equal(
-    jumpDriveErrorText(new ApiError(422, 'на корабле нет прыжкового двигателя (up_jump_drive)', 'jump_drive_required')),
+    jumpDriveErrorText(new ApiError(422, 'на корабле нет прыжкового двигателя (up_jump_drive)', ERROR_CODE.jumpDriveRequired)),
     'На корабле нет прыжкового двигателя (up_jump_drive).',
   );
+  // Two different things to go and fix, so an unrecognised 422 is handed neither
+  // — it names both.
+  const neutral422 = 'Прыжок отклонён: корабль не готов к прыжку — проверьте прыжковый двигатель и щит.';
+  assert.equal(jumpDriveErrorText(new ApiError(422, 'нельзя')), neutral422);
+  assert.equal(jumpDriveErrorText(new ApiError(422, 'нечто новое', 'crew_required')), neutral422);
 });
 
 test('jumpDriveErrorText disambiguates the two 400 branches by code', () => {
@@ -390,11 +400,37 @@ test('jumpDriveErrorText branches on the code, not on the message wording', () =
   );
 
   // And the old coupling is really gone: the English sentinels that used to
-  // drive these branches now decide nothing.
-  assert.equal(jumpDriveErrorText(new ApiError(409, 'jump blocked by antijump field')), docked);
+  // drive these branches now decide nothing. They carry no code either, so they
+  // land on the neutral line rather than on the other half of the pair.
+  assert.equal(
+    jumpDriveErrorText(new ApiError(409, 'jump blocked by antijump field')),
+    'Прыжок отклонён: сейчас корабль прыгнуть не может.',
+  );
+  assert.notEqual(jumpDriveErrorText(new ApiError(409, 'jump blocked by antijump field')), docked);
   assert.equal(
     jumpDriveErrorText(new ApiError(422, 'shield generator damaged or missing')),
-    'На корабле нет прыжкового двигателя (up_jump_drive).',
+    'Прыжок отклонён: корабль не готов к прыжку — проверьте прыжковый двигатель и щит.',
+  );
+});
+
+// TASK-185 review: every other assertion in this file compares ERROR_CODE with
+// itself, so renaming a value here would keep all of them green while the
+// backend — which spells the same strings out in its own constants — stops being
+// understood. Its twin is TestUnit_ErrorCodeWireValues in back/internal/api;
+// the two pin the wire contract from either end, and changing a value has to
+// fail on both sides at once.
+test('ERROR_CODE spells the wire values the backend writes', () => {
+  assert.deepEqual(
+    { ...ERROR_CODE },
+    {
+      sectorBusy: 'sector_busy',
+      shipDocked: 'ship_docked',
+      jumpBlockedAntijump: 'jump_blocked_antijump',
+      jumpDriveRequired: 'jump_drive_required',
+      shieldRequired: 'shield_required',
+      jumpForbiddenSector: 'jump_forbidden_sector',
+      cargoInsufficient: 'cargo_insufficient',
+    },
   );
 });
 

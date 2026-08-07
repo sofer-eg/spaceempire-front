@@ -250,9 +250,20 @@ export function ObjectActionsMenu({
   // more specific than any line we could write for it. Since TASK-185 that message
   // is Russian — «слишком далеко для стыковки», not «out of dock range» — and the
   // 5xx branch no longer hands a Go error through either (the handlers log it and
-  // answer one line), so «keeps the backend message» no longer means «shows the
-  // player English». That is what makes this the right default here rather than a
-  // compromise: the panel and the journal both print it.
+  // answer one line), so «keeps the backend message» is no longer the same thing
+  // as «shows the player English». That is what makes this the right default here
+  // rather than a compromise: the panel and the journal both print it.
+  //
+  // With one exception, and it is not a small one: 401. The auth middleware
+  // refuses ahead of every handler with {"error":"not authenticated"}
+  // (back/internal/auth/middleware.go), TASK-185 left auth out of scope, and
+  // formatError has no branch for it — so an expired session still prints that
+  // English line into both the panel and the journal here. The two mappers that
+  // do have a 401 branch (jumpDriveErrorText, installErrorText, both answering
+  // ERR_SESSION_EXPIRED) cover the galaxy map and the install buttons, not this
+  // menu. Deliberately not patched with a one-line `case 401` in formatError:
+  // TASK-198 russifies auth at the source, and this branch would be dead the day
+  // it lands.
   const run = (action: Promise<unknown>, toText: (err: unknown) => string = formatError) => {
     setPending(true);
     setError(null);

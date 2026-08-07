@@ -1373,23 +1373,36 @@ export async function parseErrorPayload(res: Response): Promise<{ message: strin
 }
 
 // ERROR_CODE is the vocabulary the backend writes on the statuses it overloads
-// (back/internal/api/error_code.go — the constants there are the source, these
-// are the six the SPA acts on):
+// (back/internal/api/error_code.go — the constants there are the source, and
+// these seven are all of them):
 //
-//   409 jump-drive  jumpBlockedAntijump, else the ship is docked
-//   422 jump-drive  shieldRequired,      else no up_jump_drive fitted
-//   400 jump-drive  jumpForbiddenSector, else the destination is invalid
-//   503 jump-drive  sectorBusy,          else the handoff is unwired
-//   400 install-*   shipDocked | cargoInsufficient, else a malformed request
-//   503 install-*   sectorBusy,          else the installer is unwired
+//   409 jump-drive  jumpBlockedAntijump | shipDocked
+//   422 jump-drive  shieldRequired      | jumpDriveRequired
+//   400 jump-drive  jumpForbiddenSector, else the destination is invalid (uncoded)
+//   503 jump-drive  sectorBusy,          else the handoff is unwired (uncoded)
+//   400 install-*   shipDocked | cargoInsufficient, else a bad request (uncoded)
+//   503 install-*   sectorBusy,          else the installer is unwired (uncoded)
 //
-// Each pair is tested positively on the branch the player can act on, so an
-// unrecognised body — a new sentinel, a proxy's own error page — falls to the
-// cautious side instead of inheriting «попробуйте ещё раз».
+// Every branch is chosen by its own code, never by elimination. Where the
+// backend leaves an outcome uncoded there is exactly one per status, and it is
+// the one with no advice of its own — a malformed body, a process wired without
+// a handoff or an installer — so a body carrying no code, or a code this SPA
+// does not know, lands there and is worded as the fallback it is.
+//
+// The alternative is what TASK-131 cost: the 409 pair used to be told apart by
+// "not antijump ⇒ docked", so a jammed jump told the player to undock a ship
+// that was already flying. An SPA deployed ahead of its backend, or a 409 added
+// later on the backend, brings that back the moment a branch is inferred rather
+// than matched.
+//
+// The literals are the wire contract, spelled out on both sides: the twin
+// assertion is TestUnit_ErrorCodeWireValues in back/internal/api. Renaming one
+// is a change in two repositories.
 export const ERROR_CODE = {
   sectorBusy: 'sector_busy',
   shipDocked: 'ship_docked',
   jumpBlockedAntijump: 'jump_blocked_antijump',
+  jumpDriveRequired: 'jump_drive_required',
   shieldRequired: 'shield_required',
   jumpForbiddenSector: 'jump_forbidden_sector',
   cargoInsufficient: 'cargo_insufficient',
@@ -1642,18 +1655,35 @@ export function jumpDriveErrorText(err: unknown): string {
     case 403:
       return ERR_NOT_YOUR_SHIP;
     case 409:
-      // Overloaded status: jump_blocked_antijump → hyper-interference jams the
-      // jump (a powered up_antijump ship, TASK-100.3.8, or a deployed
-      // «Генератор гипер-помех», TASK-131), otherwise the ship is docked.
-      return err.code === ERROR_CODE.jumpBlockedAntijump
-        ? 'Гипер-помехи глушат прыжок: рядом генератор гипер-помех или корабль с полем подавления.'
-        : 'Нельзя прыгнуть пристыкованным — сначала отстыкуйтесь.';
+      // Overloaded status, and the backend codes BOTH outcomes:
+      // jump_blocked_antijump → hyper-interference jams the jump (a powered
+      // up_antijump ship, TASK-100.3.8, or a deployed «Генератор гипер-помех»,
+      // TASK-131); ship_docked → the ship has to undock first.
+      //
+      // Each is matched on its own code and neither is inferred from the other's
+      // absence. That inference is precisely the TASK-131 defect — «not antijump
+      // ⇒ docked» told a jammed pilot to undock a flying ship — and it comes
+      // back for free the moment this SPA meets a 409 it does not recognise: an
+      // older backend that codes nothing, a sentinel added there after this
+      // build shipped. The fallback below claims only what every 409 shares.
+      if (err.code === ERROR_CODE.jumpBlockedAntijump) {
+        return 'Гипер-помехи глушат прыжок: рядом генератор гипер-помех или корабль с полем подавления.';
+      }
+      if (err.code === ERROR_CODE.shipDocked) return 'Нельзя прыгнуть пристыкованным — сначала отстыкуйтесь.';
+      console.error('jump drive: unrecognised 409', err.code, err.message);
+      return 'Прыжок отклонён: сейчас корабль прыгнуть не может.';
     case 422:
-      // Overloaded status: shield_required → damaged/missing shield generator,
-      // otherwise the ship simply has no up_jump_drive fitted.
-      return err.code === ERROR_CODE.shieldRequired
-        ? 'Нужен исправный генератор щита.'
-        : 'На корабле нет прыжкового двигателя (up_jump_drive).';
+      // Overloaded status, both outcomes coded, same reasoning as the 409 above:
+      // shield_required → the generator is damaged or missing (the jump drains
+      // the shield), jump_drive_required → no up_jump_drive is fitted at all.
+      // Two different things to go and do, so an unrecognised 422 must not be
+      // handed either of them — it names both instead.
+      if (err.code === ERROR_CODE.shieldRequired) return 'Нужен исправный генератор щита.';
+      if (err.code === ERROR_CODE.jumpDriveRequired) {
+        return 'На корабле нет прыжкового двигателя (up_jump_drive).';
+      }
+      console.error('jump drive: unrecognised 422', err.code, err.message);
+      return 'Прыжок отклонён: корабль не готов к прыжку — проверьте прыжковый двигатель и щит.';
     case 429:
       return 'Прыжковый двигатель ещё не готов — идёт перезарядка.';
     case 400:
@@ -1689,10 +1719,18 @@ export function jumpDriveErrorText(err: unknown): string {
       console.error('jump drive: unrecognised 503', err.message);
       return 'Прыжок сейчас недоступен на стороне сервера. Ничего не потрачено, но повтор сейчас не поможет — попробуйте позже.';
     default:
-      // A 5xx body is the worker's own error string, handed through raw
-      // (back/internal/api/jump_drive.go:77-78), so an English «publish jump
-      // event: context deadline exceeded» would otherwise land in the Russian
-      // map footer. Keep it in the console, show Russian.
+      // A 5xx body no longer carries a diagnosis. It used to be the worker's own
+      // error string handed through raw, which is how «publish jump event:
+      // context deadline exceeded» reached this Russian map footer; since
+      // TASK-185 the handler calls writeInternalError (back/internal/api/
+      // error_code.go), which logs that error server-side and answers the one
+      // line «внутренняя ошибка сервера». So err.message here is now that
+      // constant, and the console.error below records the status and the moment,
+      // not the cause — the cause is in the server log, under «space command
+      // failed» with the route and the player beside it. Keep the branch anyway:
+      // a 5xx that never reached the handler (a proxy's error page, a panic
+      // caught upstream) still arrives with a body of its own, and it is no more
+      // showable than the Go error was.
       //
       // And the line stops short of asserting failure, exactly as
       // installErrorText's 500 branch does. executeJump saves the ship row
@@ -1840,9 +1878,16 @@ export function installErrorText(err: unknown, kind: InstallKind): string {
       console.error('install command: unrecognised 503', err.message);
       return 'Установка сейчас недоступна на стороне сервера. Не повторяйте вслепую — сначала проверьте трюм и радар.';
     default:
-      // A 5xx body is a raw server-side message (install_satellite.go passes the
-      // repository error straight through), so it can leak a Postgres error into
-      // the combat HUD. Keep it in the console for debugging, show Russian.
+      // A 5xx body used to be a raw server-side message — install_satellite.go
+      // passed the repository error straight through, so a Postgres error could
+      // land in the combat HUD. TASK-185 replaced those branches with
+      // writeInternalError (back/internal/api/error_code.go): the error goes to
+      // the server log with the route and the player on it, and the body is the
+      // single line «внутренняя ошибка сервера». The console.error below
+      // therefore prints that constant, and is worth keeping only for the status
+      // and the timing; the diagnosis is server-side now. The branch itself
+      // stays because a 5xx from anything but the handler — a proxy page, an
+      // upstream panic — still brings its own body, in English or in HTML.
       //
       // The wording stops short of asserting failure: the worker runs the
       // install under a RepoTimeout context (back/internal/sector/satellite.go),

@@ -160,8 +160,10 @@ export function CombatHUD({ ownShip, ships, logins, races, statics, staticCombat
         // on refreshTick — so the counters on these buttons would otherwise keep
         // the pre-command stock exactly when it is most likely wrong: after a
         // lost ack (the command may have applied and spent the goods), and after
-        // a 400 «no X in cargo», where the server has just said outright that the
-        // hold disagrees with the chip. Unconditional rather than gated on the
+        // a 400 «в трюме нет ракет» / «в трюме нет торпед» (back/internal/api/
+        // launch_missile.go, launch_torpedo.go — Russian since TASK-185), where
+        // the server has just said outright that the hold disagrees with the
+        // chip. Unconditional rather than gated on the
         // failure kind because it is one setState and two GETs, and `pending`
         // already caps how often it can fire (TASK-149).
         if (refresh) onCargoChanged();

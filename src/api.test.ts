@@ -74,14 +74,23 @@ test('jumpDriveErrorText separates a busy sector from an unavailable handoff', (
   }
 });
 
-// TASK-157, the polarity TASK-149 fixed for the install commands. The handler
-// answers 504 once s.cfg.AckTimeout expires (jump_drive.go:82-83) — by then the
-// JumpDriveCommand is in the worker's inbox and may already have applied, so the
-// old line («Команда не успела выполниться, попробуйте ещё раз») asserted an
-// outcome nobody knows. 502 is Apache answering for a backend that died after
-// forwarding, and a dropped connection is the commonest of the three.
+// TASK-157, the polarity TASK-149 fixed for the install commands. Why 504, 502
+// and a dropped connection all mean "the command may already have applied" is
+// stated once, on UNKNOWN_OUTCOME_STATUSES in api.ts; what this test pins is
+// that the jump's line words that instead of asserting a failure, as the wording
+// it replaced («Команда не успела выполниться, попробуйте ещё раз») did.
 test('jumpDriveErrorText words a lost ack as an unknown outcome, not as a failure', () => {
   const timeout = jumpDriveErrorText(new ApiError(504, 'command timeout'));
+  // The exact line, so a rewrite that keeps every property below but breaks the
+  // sentence — «Прыжок мог состояться» drifting away from «Посмотрите, где он»,
+  // for instance — has to be made deliberately rather than slipping through.
+  assert.equal(
+    timeout,
+    'Ответ не получен, исход неизвестен. Прыжок мог состояться — карта сама отметит ' +
+      'корабль в новом секторе. Посмотрите, где он, прежде чем повторять.',
+  );
+  // The properties that carry the polarity, kept separate from the golden string
+  // so a reworded line still has to satisfy them.
   assert.match(timeout, /исход неизвестен/i);
   assert.match(timeout, /Прыжок мог состояться/);
   assert.doesNotMatch(timeout, /попробуйте ещё раз/i);
@@ -90,7 +99,7 @@ test('jumpDriveErrorText words a lost ack as an unknown outcome, not as a failur
   // credits, so sending the player to their hold would be noise. What is in
   // doubt is which sector the ship is in.
   assert.doesNotMatch(timeout, /трюм/i);
-  assert.match(timeout, /в каком секторе|где он/i);
+  assert.match(timeout, /где он/i);
 
   const badGateway = jumpDriveErrorText(new ApiError(502, 'Bad Gateway'));
   assert.equal(badGateway, timeout);
@@ -154,6 +163,45 @@ test('jumpDriveErrorText disambiguates the two 400 branches by sentinel text', (
 
 test('jumpDriveErrorText echoes the raw message for an unmapped ApiError status', () => {
   assert.equal(jumpDriveErrorText(new ApiError(418, "I'm a teapot")), "I'm a teapot");
+});
+
+// jump_drive.go:77-78 answers 500 with the worker's own error string, and that
+// string is not a promise that nothing happened: executeJump saves the ship row
+// naming the target sector before publishing the handoff event
+// (sector/handoff.go:155), a publish that misses its deadline is routine since
+// TASK-148, and the compensating re-save is best-effort (handoff.go:189-210).
+test('jumpDriveErrorText hides raw 5xx bodies without asserting the jump failed', () => {
+  const text = jumpDriveErrorText(new ApiError(500, 'publish jump event: context deadline exceeded'));
+  assert.doesNotMatch(text, /publish jump event|deadline/i);
+  // May not flatly deny the jump, and may not invite a blind repeat either: what
+  // is in doubt is which sector the ship is in, so the line hedges and points at
+  // the map.
+  assert.match(text, /Скорее всего/);
+  assert.doesNotMatch(text, /попробуйте ещё раз/i);
+  assert.match(text, /где корабль/i);
+  // A jump debits no goods and no credits — the hold has nothing to do with it.
+  assert.doesNotMatch(text, /трюм/i);
+
+  // Not the lost-ack line: 500 is a rarer, differently-worded member of the same
+  // in-doubt class (TASK-157 AC #1).
+  assert.notEqual(text, jumpDriveErrorText(new ApiError(504, 'command timeout')));
+  // Every other 5xx the switch does not word lands on the same cautious line.
+  assert.equal(jumpDriveErrorText(new ApiError(507, 'Insufficient Storage')), text);
+});
+
+// An expired session is answered by the auth middleware
+// (back/internal/auth/middleware.go:39) before the handler runs, so «not
+// authenticated» used to reach the Russian map footer verbatim. Same literal as
+// installErrorText's — both read it from ERR_SESSION_EXPIRED.
+test('jumpDriveErrorText words an expired session in Russian', () => {
+  assert.equal(
+    jumpDriveErrorText(new ApiError(401, 'not authenticated')),
+    'Сессия истекла — войдите в игру заново.',
+  );
+  assert.equal(
+    jumpDriveErrorText(new ApiError(401, 'not authenticated')),
+    installErrorText(new ApiError(401, 'not authenticated'), 'jammer'),
+  );
 });
 
 // This used to assert `String(err)`, i.e. it pinned the leak: a NetworkError

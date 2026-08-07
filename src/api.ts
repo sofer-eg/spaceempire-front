@@ -768,7 +768,11 @@ export async function sendJump(shipID: number, gateID: number): Promise<void> {
 // picks only the sector, not a position. Throws ApiError on a non-2xx so the
 // caller can pass it to jumpDriveErrorText for a Russian, human-readable line —
 // and note that 502/504 mean "outcome unknown", not "nothing happened": the
-// command may already be in the worker's inbox. Never show err.message raw.
+// command may already be in the worker's inbox. A caller must not print
+// err.message itself; the mapper is the one place that decides the wording, and
+// it still returns the backend's English message verbatim for the statuses it
+// does not word (TASK-185 territory), so a raw body reaches the screen only
+// where nobody has chosen a line for it yet.
 export async function sendJumpDrive(shipID: number, targetSectorID: number): Promise<void> {
   const res = await netFetch('/api/cmd/jump-drive', {
     method: 'POST',
@@ -1473,28 +1477,29 @@ export function commandErrorText(err: unknown): string {
 }
 
 // Lines shared by jumpDriveErrorText and installErrorText below. Both mappers
-// word the same three backend outcomes identically (404 ship not found, 403
-// foreign ship, ErrInboxFull), and keeping the literals in one place stops them
-// drifting apart the next time one of the two gets reworded.
+// word the same four backend outcomes identically (404 ship not found, 403
+// foreign ship, ErrInboxFull, and the 401 auth middleware answers on an expired
+// session), and keeping the literals in one place stops them drifting apart the
+// next time one of the two gets reworded.
 const ERR_SHIP_NOT_FOUND = 'Корабль не найден.';
 const ERR_NOT_YOUR_SHIP = 'Это не ваш корабль.';
 const ERR_SECTOR_BUSY = 'Сектор занят, попробуйте ещё раз.';
+const ERR_SESSION_EXPIRED = 'Сессия истекла — войдите в игру заново.';
 
 // JUMP_UNKNOWN_OUTCOME_TEXT is the line for a jump whose answer never arrived.
-// What "unknown" means for THIS command, checked against the handler and the
-// worker (TASK-157 AC #1):
+// The in-doubt cases for THIS command, checked against the handler and the
+// worker (TASK-157 AC #1), are 502, 504, a dropped connection — and 500:
 //
-//   - 504 is issued by the handler itself once s.cfg.AckTimeout expires
-//     (back/internal/api/jump_drive.go:82-83). By then the JumpDriveCommand is
-//     already in the worker's inbox and may have been applied on the very next
-//     tick — the handler stopped waiting, it did not cancel anything. The old
-//     line here, «Команда не успела выполниться, попробуйте ещё раз», asserted
-//     the opposite; that is the TASK-140 class of defect, not a wording taste.
-//   - 502 is Apache answering for a Go process that died after the request was
-//     forwarded (restart, deploy, panic) — see UNKNOWN_OUTCOME_STATUSES, which
-//     owns both statuses for every mapper here.
+//   - 502 and 504 are stated once, with their causes, on
+//     UNKNOWN_OUTCOME_STATUSES; this line only words them for the jump. The
+//     wording it replaced, «Команда не успела выполниться, попробуйте ещё раз»,
+//     asserted a failure nobody knows about — that is the TASK-140 class of
+//     defect, not a matter of wording taste.
 //   - a NetworkError is the commonest of the three and never reaches the status
 //     switch at all: netFetch rejects, the POST may still have landed.
+//   - 500 belongs to the same class and is worded separately, in the switch's
+//     default branch — see it for why a server-side error can still leave the
+//     ship in the target sector.
 //
 // What a jump that DID go through leaves behind
 // (back/internal/sector/jumpdrive.go:138-145): the shield is zeroed and
@@ -1541,6 +1546,11 @@ export function jumpDriveErrorText(err: unknown): string {
   if (!(err instanceof ApiError)) return friendlyError(err);
   const msg = err.message.toLowerCase();
   switch (err.status) {
+    case 401:
+      // The session cookie expired: back/internal/auth/middleware.go answers
+      // «not authenticated» before the handler runs, and without this branch
+      // that English sentinel landed in the Russian map footer verbatim.
+      return ERR_SESSION_EXPIRED;
     case 404:
       return ERR_SHIP_NOT_FOUND;
     case 403:
@@ -1574,11 +1584,11 @@ export function jumpDriveErrorText(err: unknown): string {
       //     enqueued and the worker is merely behind, so «попробуйте ещё раз»
       //     is exactly right.
       //   "handoff unavailable" — ErrHandoffUnavailable, a worker built without
-      //     topology or bus (back/internal/sector/jumpdrive.go:69-70, ahead of
-      //     every gate that could be the player's fault: dock, module, shield,
-      //     cooldown). That is how the process was wired; it will answer the
-      //     same until it is restarted differently, so inviting a retry is
-      //     advice that can never come true.
+      //     topology or bus (back/internal/sector/jumpdrive.go:69-70 — after the
+      //     ship lookup and the ownership check, but ahead of every gate the
+      //     player could act on: dock, module, shield, cooldown). That is how
+      //     the process was wired; it will answer the same until it is restarted
+      //     differently, so inviting a retry is advice that can never come true.
       // Tested positively on the retryable sentinel rather than on the fault,
       // for installErrorText's reason: a reworded sentinel or a proxy's own
       // generic "Service Unavailable" must land on the cautious side, not
@@ -1592,6 +1602,26 @@ export function jumpDriveErrorText(err: unknown): string {
       console.error('jump drive: unrecognised 503', err.message);
       return 'Прыжок сейчас недоступен на стороне сервера. Ничего не потрачено, но повтор сейчас не поможет — попробуйте позже.';
     default:
+      // A 5xx body is the worker's own error string, handed through raw
+      // (back/internal/api/jump_drive.go:77-78), so an English «publish jump
+      // event: context deadline exceeded» would otherwise land in the Russian
+      // map footer. Keep it in the console, show Russian.
+      //
+      // And the line stops short of asserting failure, exactly as
+      // installErrorText's 500 branch does. executeJump saves the ship row
+      // naming the TARGET sector *before* it publishes the handoff event
+      // (back/internal/sector/handoff.go:155); since TASK-148 the publish has a
+      // deadline, so back-pressure failing it is a routine outcome, and the
+      // compensating re-save that follows is best-effort and may itself fail
+      // (handoff.go:189-210). A 500 can therefore mean the ship is already
+      // recorded as gone from here. Nothing of the player's was spent — this
+      // command debits no goods and no credits — but which sector the ship is
+      // in is precisely what is in doubt, so the line sends them to the map
+      // rather than promising a free retry.
+      if (err.status >= 500) {
+        console.error('jump drive failed', err.status, err.message);
+        return 'Сервер вернул ошибку. Скорее всего прыжок не состоялся — но посмотрите на карте, где корабль, прежде чем повторять.';
+      }
       return err.message;
   }
 }
@@ -1613,7 +1643,11 @@ const INSTALL_NOUNS: Record<InstallKind, { nominative: string; genitive: string 
 // their own command, and adding one here must not require touching a mapper.
 //
 //   504 — the POST reached the worker's inbox and the HTTP wait for the ack
-//         expired; the command is queued or already applied.
+//         expired; the command is queued or already applied. The handler issues
+//         it itself once s.cfg.AckTimeout runs out (back/internal/api/
+//         jump_drive.go:82-83 and its siblings): it stopped waiting, it did not
+//         cancel anything. This is the one statement of that fact — the mappers
+//         and their tests point here instead of repeating it.
 //   502 — in production Apache fronts the Go process
 //         (deploy/spaceempire.online.conf proxies / to 127.0.0.1:8081) and
 //         answers 502 when the backend drops the connection *after* the request
@@ -1696,7 +1730,7 @@ export function installErrorText(err: unknown, kind: InstallKind): string {
   const msg = err.message.toLowerCase();
   switch (err.status) {
     case 401:
-      return 'Сессия истекла — войдите в игру заново.';
+      return ERR_SESSION_EXPIRED;
     case 404:
       return ERR_SHIP_NOT_FOUND;
     case 403:

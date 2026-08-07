@@ -43,14 +43,62 @@ test('jumpDriveErrorText maps each backend status to a Russian line', () => {
     jumpDriveErrorText(new ApiError(429, 'jump drive not ready')),
     'Прыжковый двигатель ещё не готов — идёт перезарядка.',
   );
-  assert.equal(
-    jumpDriveErrorText(new ApiError(503, 'sector busy / handoff unavailable')),
-    'Сектор занят, попробуйте ещё раз.',
-  );
-  assert.equal(
-    jumpDriveErrorText(new ApiError(504, 'command timeout')),
-    'Команда не успела выполниться, попробуйте ещё раз.',
-  );
+  assert.equal(jumpDriveErrorText(new ApiError(503, 'sector busy')), 'Сектор занят, попробуйте ещё раз.');
+});
+
+// TASK-157: 503 arrives from two places in back/internal/api/jump_drive.go, and
+// only one of them is worth retrying — ErrInboxFull (:42-45, refused at the
+// door) against ErrHandoffUnavailable (:75-76, raised by a worker built with no
+// topology/bus, back/internal/sector/jumpdrive.go:69-70). The second is a
+// process-wide misconfiguration: «попробуйте ещё раз» is advice that can never
+// come true. Positive test on the retryable sentinel, as installErrorText does,
+// so a proxy's own 503 body lands on the cautious side too.
+test('jumpDriveErrorText separates a busy sector from an unavailable handoff', () => {
+  const busy = jumpDriveErrorText(new ApiError(503, 'sector busy'));
+  assert.equal(busy, 'Сектор занят, попробуйте ещё раз.');
+
+  const unavailable = jumpDriveErrorText(new ApiError(503, 'handoff unavailable'));
+  assert.notEqual(unavailable, busy);
+  assert.doesNotMatch(unavailable, /попробуйте ещё раз/i);
+  assert.match(unavailable, /недоступен на стороне сервера/);
+  // Both branches are decided before the shield is drained and the cooldown
+  // stamped (back/internal/sector/jumpdrive.go:138-145), so neither may borrow
+  // the in-doubt wording: nothing of the player's was spent.
+  assert.doesNotMatch(unavailable, /исход неизвестен/i);
+  assert.match(unavailable, /Ничего не потрачено/);
+
+  // An unrecognised body — a reworded sentinel, or a proxy's generic page —
+  // must read like the misconfigured case, not like the retryable one.
+  for (const body of ['Service Unavailable', 'sector: handoff not wired']) {
+    assert.equal(jumpDriveErrorText(new ApiError(503, body)), unavailable, `503 «${body}»`);
+  }
+});
+
+// TASK-157, the polarity TASK-149 fixed for the install commands. The handler
+// answers 504 once s.cfg.AckTimeout expires (jump_drive.go:82-83) — by then the
+// JumpDriveCommand is in the worker's inbox and may already have applied, so the
+// old line («Команда не успела выполниться, попробуйте ещё раз») asserted an
+// outcome nobody knows. 502 is Apache answering for a backend that died after
+// forwarding, and a dropped connection is the commonest of the three.
+test('jumpDriveErrorText words a lost ack as an unknown outcome, not as a failure', () => {
+  const timeout = jumpDriveErrorText(new ApiError(504, 'command timeout'));
+  assert.match(timeout, /исход неизвестен/i);
+  assert.match(timeout, /Прыжок мог состояться/);
+  assert.doesNotMatch(timeout, /попробуйте ещё раз/i);
+  assert.doesNotMatch(timeout, /не успела/i);
+  // Not installUnknownOutcomeText's wording: a jump debits no goods and no
+  // credits, so sending the player to their hold would be noise. What is in
+  // doubt is which sector the ship is in.
+  assert.doesNotMatch(timeout, /трюм/i);
+  assert.match(timeout, /в каком секторе|где он/i);
+
+  const badGateway = jumpDriveErrorText(new ApiError(502, 'Bad Gateway'));
+  assert.equal(badGateway, timeout);
+  assert.doesNotMatch(badGateway, /Bad Gateway/);
+
+  const dropped = jumpDriveErrorText(new NetworkError(new TypeError('Failed to fetch')));
+  assert.equal(dropped, timeout);
+  assert.doesNotMatch(dropped, /Failed to fetch/);
 });
 
 // TASK-131: 409 is overloaded by the backend — ErrShipDocked ("ship is docked")
@@ -108,8 +156,20 @@ test('jumpDriveErrorText echoes the raw message for an unmapped ApiError status'
   assert.equal(jumpDriveErrorText(new ApiError(418, "I'm a teapot")), "I'm a teapot");
 });
 
-test('jumpDriveErrorText stringifies non-ApiError inputs', () => {
-  assert.equal(jumpDriveErrorText(new Error('boom')), 'Error: boom');
+// This used to assert `String(err)`, i.e. it pinned the leak: a NetworkError
+// reached the galaxy-map footer as «NetworkError: Нет связи с сервером…», class
+// name and all. TASK-168 removed exactly that from the set-course branch eight
+// lines below in GalaxyMap.tsx and left the jump branch alone; TASK-157 finishes
+// it by routing everything that is not an ApiError through friendlyError (the
+// dropped connection is handled before the switch — see the test above).
+test('jumpDriveErrorText words non-ApiError failures through friendlyError', () => {
+  const bug = new TypeError("Cannot read properties of null (reading 'lots')");
+  assert.equal(jumpDriveErrorText(bug), friendlyError(bug));
+  assert.match(jumpDriveErrorText(bug), /Ошибка в интерфейсе игры/);
+
+  // A plain Error keeps its message, but without the «Error: » prefix String()
+  // put in front of it.
+  assert.equal(jumpDriveErrorText(new Error('boom')), 'boom');
   assert.equal(jumpDriveErrorText('plain string failure'), 'plain string failure');
 });
 

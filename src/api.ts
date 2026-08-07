@@ -766,7 +766,9 @@ export async function sendJump(shipID: number, gateID: number): Promise<void> {
 // sendJumpDrive fires the seamless up_jump_drive jump (TASK-100.3.7): the ship
 // is thrown into a random point near the centre of targetSectorID — the player
 // picks only the sector, not a position. Throws ApiError on a non-2xx so the
-// caller can pass it to jumpDriveErrorText for a Russian, human-readable line.
+// caller can pass it to jumpDriveErrorText for a Russian, human-readable line —
+// and note that 502/504 mean "outcome unknown", not "nothing happened": the
+// command may already be in the worker's inbox. Never show err.message raw.
 export async function sendJumpDrive(shipID: number, targetSectorID: number): Promise<void> {
   const res = await netFetch('/api/cmd/jump-drive', {
     method: 'POST',
@@ -1478,6 +1480,38 @@ const ERR_SHIP_NOT_FOUND = 'Корабль не найден.';
 const ERR_NOT_YOUR_SHIP = 'Это не ваш корабль.';
 const ERR_SECTOR_BUSY = 'Сектор занят, попробуйте ещё раз.';
 
+// JUMP_UNKNOWN_OUTCOME_TEXT is the line for a jump whose answer never arrived.
+// What "unknown" means for THIS command, checked against the handler and the
+// worker (TASK-157 AC #1):
+//
+//   - 504 is issued by the handler itself once s.cfg.AckTimeout expires
+//     (back/internal/api/jump_drive.go:82-83). By then the JumpDriveCommand is
+//     already in the worker's inbox and may have been applied on the very next
+//     tick — the handler stopped waiting, it did not cancel anything. The old
+//     line here, «Команда не успела выполниться, попробуйте ещё раз», asserted
+//     the opposite; that is the TASK-140 class of defect, not a wording taste.
+//   - 502 is Apache answering for a Go process that died after the request was
+//     forwarded (restart, deploy, panic) — see UNKNOWN_OUTCOME_STATUSES, which
+//     owns both statuses for every mapper here.
+//   - a NetworkError is the commonest of the three and never reaches the status
+//     switch at all: netFetch rejects, the POST may still have landed.
+//
+// What a jump that DID go through leaves behind
+// (back/internal/sector/jumpdrive.go:138-145): the shield is zeroed and
+// LastJumpAt stamped BEFORE executeJump, and rolled back only if executeJump
+// itself fails. So the ship is in the target sector with a flat shield and a
+// running cooldown (3600 s at module level 1, 1800 s at level 2), and a blind
+// retry is answered 429 «двигатель ещё не готов» rather than jumping again.
+//
+// Deliberately NOT installUnknownOutcomeText's wording: this path debits no
+// goods and no credits, so pointing the player at their hold would be noise.
+// The one thing in doubt is which sector the ship is in — and the galaxy map
+// marks that itself as soon as the WS handoff lands, which is why the line says
+// to look before repeating rather than offering a retry.
+const JUMP_UNKNOWN_OUTCOME_TEXT =
+  'Ответ не получен, исход неизвестен. Прыжок мог состояться — карта сама отметит ' +
+  'корабль в новом секторе. Посмотрите, где он, прежде чем повторять.';
+
 // jumpDriveErrorText turns a sendJumpDrive failure into a Russian, human-
 // readable line for the galaxy-map footer / Journal (TASK-129). It branches on
 // the HTTP status ApiError carries and — for the three statuses the backend
@@ -1488,10 +1522,23 @@ const ERR_SECTOR_BUSY = 'Сектор занят, попробуйте ещё р
 // (TASK-131 — before that the jammed case read as "you are docked"). The backend
 // does not distinguish these by status alone, so keying on the English wording
 // ("shield" / "blocked") is a deliberate, documented coupling to those
-// sentinels (see the error table in TASK-129). Non-ApiError inputs (a thrown
-// Error, a rejected non-Error value) fall back to String(err).
+// sentinels (see the error table in TASK-129).
+//
+// The in-doubt case is asked first, exactly as installErrorText does and in the
+// same shape as commandErrorText, so the set of unanswered statuses stays stated
+// once in UNKNOWN_OUTCOME_STATUSES (TASK-157). Everything that is not an
+// ApiError goes to friendlyError afterwards: it used to be String(err), which
+// put the class name on screen as «NetworkError: Нет связи с сервером…» — the
+// leak TASK-168 removed from the set-course branch eight lines below this
+// mapper's own caller (GalaxyMap.tsx) and left here.
 export function jumpDriveErrorText(err: unknown): string {
-  if (!(err instanceof ApiError)) return String(err);
+  if (err instanceof NetworkError || (err instanceof ApiError && UNKNOWN_OUTCOME_STATUSES.has(err.status))) {
+    console.error('jump drive: outcome unknown', err);
+    return JUMP_UNKNOWN_OUTCOME_TEXT;
+  }
+  // A TypeError from our own .then chain, or a non-Error rejection: friendlyError
+  // words both and strips a route prefix if one got in.
+  if (!(err instanceof ApiError)) return friendlyError(err);
   const msg = err.message.toLowerCase();
   switch (err.status) {
     case 404:
@@ -1520,14 +1567,30 @@ export function jumpDriveErrorText(err: unknown): string {
         ? 'Прыжок из этого сектора запрещён.'
         : 'Недопустимый сектор назначения.';
     case 503:
-      // Unconditional, unlike installErrorText, which only says «сектор занят»
-      // on the explicit sentinel and treats every other 503 cautiously. Left as
-      // it was on purpose: a jump costs shield and a recharge, not ≈1.13M cr, so
-      // the two mappers are allowed different discipline here even though they
-      // now share the constant. Follow-up against TASK-129 tracks revisiting it.
-      return ERR_SECTOR_BUSY;
-    case 504:
-      return 'Команда не успела выполниться, попробуйте ещё раз.';
+      // Two backend faults behind one status, and only the first is worth a
+      // retry (TASK-157 — this branch used to answer ERR_SECTOR_BUSY to both):
+      //   "sector busy" — ErrInboxFull, refused at the door
+      //     (back/internal/api/jump_drive.go:42-45). The command was never
+      //     enqueued and the worker is merely behind, so «попробуйте ещё раз»
+      //     is exactly right.
+      //   "handoff unavailable" — ErrHandoffUnavailable, a worker built without
+      //     topology or bus (back/internal/sector/jumpdrive.go:69-70, ahead of
+      //     every gate that could be the player's fault: dock, module, shield,
+      //     cooldown). That is how the process was wired; it will answer the
+      //     same until it is restarted differently, so inviting a retry is
+      //     advice that can never come true.
+      // Tested positively on the retryable sentinel rather than on the fault,
+      // for installErrorText's reason: a reworded sentinel or a proxy's own
+      // generic "Service Unavailable" must land on the cautious side, not
+      // inherit «попробуйте ещё раз».
+      //
+      // Neither branch is an unknown outcome: one never reached the worker at
+      // all, the other was refused ahead of the shield drain and the cooldown
+      // stamp (jumpdrive.go:138-145). Nothing of the player's was spent either
+      // way, and the line says so rather than sending them to check the map.
+      if (msg.includes('sector busy')) return ERR_SECTOR_BUSY;
+      console.error('jump drive: unrecognised 503', err.message);
+      return 'Прыжок сейчас недоступен на стороне сервера. Ничего не потрачено, но повтор сейчас не поможет — попробуйте позже.';
     default:
       return err.message;
   }
@@ -1545,8 +1608,9 @@ const INSTALL_NOUNS: Record<InstallKind, { nominative: string; genitive: string 
 };
 
 // Statuses on which the request demonstrably reached the server but its answer
-// did not reach us. The single place this list lives: installErrorText phrases
-// them, and adding one here must not require touching the mapper.
+// did not reach us. The single place this list lives: friendlyError,
+// commandErrorText, installErrorText and jumpDriveErrorText each phrase them for
+// their own command, and adding one here must not require touching a mapper.
 //
 //   504 — the POST reached the worker's inbox and the HTTP wait for the ack
 //         expired; the command is queued or already applied.

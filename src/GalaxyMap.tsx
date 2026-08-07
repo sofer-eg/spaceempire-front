@@ -206,6 +206,14 @@ export function GalaxyMap({ currentSectorID, ownShipID, races, jumpMode = false 
       // near the sector centre, so we send only the sector. On success we return
       // to /sector — the WS snapshot re-renders the new sector and EventLog logs
       // the sector change, so no extra client log is needed here.
+      //
+      // jumpDriveErrorText, which since TASK-157 also owns the case where no
+      // answer arrived (502/504/dropped connection): the footer then says the
+      // outcome is unknown instead of promising a free retry, because the ship
+      // may already be in the target sector. It words a non-ApiError through
+      // friendlyError too, so the class-name leak fixed for set-course below is
+      // gone from this branch as well — which matters here beyond the network
+      // case, since this catch also covers navigate() throwing.
       void sendJumpDrive(ownShipID, target.id)
         .then(() => navigate('/sector'))
         .catch((err: unknown) =>

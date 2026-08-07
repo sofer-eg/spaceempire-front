@@ -247,7 +247,12 @@ export function ObjectActionsMenu({
   // calls on success — so the text is the only thing the player has to go on here.
   // Everything else (move, dock, jump, attack, capture, hack, cease-fire, mine)
   // records an intent and moves nothing, and keeps the raw backend message: it is
-  // more specific than any line we could write for it.
+  // more specific than any line we could write for it. Since TASK-185 that message
+  // is Russian — «слишком далеко для стыковки», not «out of dock range» — and the
+  // 5xx branch no longer hands a Go error through either (the handlers log it and
+  // answer one line), so «keeps the backend message» no longer means «shows the
+  // player English». That is what makes this the right default here rather than a
+  // compromise: the panel and the journal both print it.
   const run = (action: Promise<unknown>, toText: (err: unknown) => string = formatError) => {
     setPending(true);
     setError(null);

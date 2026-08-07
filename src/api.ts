@@ -698,7 +698,7 @@ export async function fetchPlayers(): Promise<PlayerSummary[]> {
 // position in the file.
 //
 // The fifteen used to read the body with res.text() and put the whole
-// `POST /api/cmd/dock 400: {"error":"out of dock range"}` string in the thrown
+// `POST /api/cmd/dock 400: {"error":"слишком далеко для стыковки"}` string in the thrown
 // message, JSON envelope and all. Where that string actually reached the player is
 // worth splitting three ways, since only the first group is why this shape is the
 // rule:
@@ -774,10 +774,12 @@ export async function sendJump(shipID: number, gateID: number): Promise<void> {
 // caller can pass it to jumpDriveErrorText for a Russian, human-readable line —
 // and note that 502/504 mean "outcome unknown", not "nothing happened": the
 // command may already be in the worker's inbox. A caller must not print
-// err.message itself; the mapper is the one place that decides the wording, and
-// it still returns the backend's English message verbatim for the statuses it
-// does not word (TASK-185 territory), so a raw body reaches the screen only
-// where nobody has chosen a line for it yet.
+// err.message itself; the mapper is the one place that decides the wording.
+//
+// One of the three senders that read the body with parseErrorPayload rather
+// than parseErrorBody: its mapper has to tell two outcomes apart under 409,
+// 422, 400 and 503, and since TASK-185 it does that on the code (ERROR_CODE),
+// not on the message — which is now Russian and shown to the player.
 export async function sendJumpDrive(shipID: number, targetSectorID: number): Promise<void> {
   const res = await netFetch('/api/cmd/jump-drive', {
     method: 'POST',
@@ -785,7 +787,8 @@ export async function sendJumpDrive(shipID: number, targetSectorID: number): Pro
     body: JSON.stringify({ shipID, targetSectorID }),
   });
   if (!res.ok) {
-    throw new ApiError(res.status, await parseErrorBody(res));
+    const { message, code } = await parseErrorPayload(res);
+    throw new ApiError(res.status, message, code);
   }
 }
 
@@ -1159,7 +1162,7 @@ export async function sendPickupContainer(
 // the ship's current position (phase 10.15). The HTTP handler only forwards the
 // command: the 1× goods id 26 debit happens inside the sector worker, in the
 // same transaction as the satellite INSERT (TASK-144), so goods and object
-// always agree. Throws ApiError on a non-2xx (e.g. 400 no satellite in cargo,
+// always agree. Throws ApiError on a non-2xx (e.g. 400 with an empty hold,
 // 400 ship docked) — and note that 504 now means "outcome unknown", not
 // "nothing happened": the command may already have applied. Map failures with
 // installErrorText(err, 'satellite') instead of showing err.message raw.
@@ -1172,7 +1175,10 @@ export async function sendInstallSatellite(
     body: JSON.stringify({ shipID }),
   });
   if (!res.ok) {
-    throw new ApiError(res.status, await parseErrorBody(res));
+    // parseErrorPayload, not parseErrorBody: installErrorText tells the two
+    // 400s and the two 503s apart on the code (TASK-185).
+    const { message, code } = await parseErrorPayload(res);
+    throw new ApiError(res.status, message, code);
   }
   const body = (await res.json()) as { ok: boolean; satelliteID: number };
   return { satelliteID: body.satelliteID };
@@ -1195,7 +1201,10 @@ export async function sendInstallJammer(
     body: JSON.stringify({ shipID }),
   });
   if (!res.ok) {
-    throw new ApiError(res.status, await parseErrorBody(res));
+    // parseErrorPayload, not parseErrorBody: installErrorText tells the two
+    // 400s and the two 503s apart on the code (TASK-185).
+    const { message, code } = await parseErrorPayload(res);
+    throw new ApiError(res.status, message, code);
   }
   const body = (await res.json()) as { ok: boolean; jammerID: number };
   return { jammerID: body.jammerID };
@@ -1264,12 +1273,21 @@ export function wsURL(): string {
 // ApiError carries the parsed `error` field the backend returns on every
 // non-2xx JSON response. UI components show err.message instead of the raw
 // `Error: POST /api/... 400: {"error":"..."}` chain produced by Error().
+//
+// code is the machine-readable half of that body (TASK-185), empty when the
+// backend sent none — which is most failures. It exists only for the statuses
+// the backend overloads, where a mapper has to pick between two outcomes that
+// share a status and need different advice; see ERROR_CODE below. The message
+// is now Russian, so keying on its wording would be the coupling that existed
+// before in a new language.
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  code: string;
+  constructor(status: number, message: string, code = '') {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -1333,13 +1351,49 @@ export async function netFetch(input: string, init?: RequestInit): Promise<Respo
 // JSON, res.json() threw, and the reason phrase went straight to the screen under
 // a Russian prefix.
 export async function parseErrorBody(res: Response): Promise<string> {
+  return (await parseErrorPayload(res)).message;
+}
+
+// parseErrorPayload reads the same body and keeps the machine-readable `code`
+// beside the message (TASK-185). Both halves come out of one res.json() — a
+// Response body can only be read once, so the two cannot be separate calls.
+//
+// Only the senders whose failures reach jumpDriveErrorText / installErrorText
+// use it: those are the mappers that have to tell two outcomes apart under one
+// status. The rest keep parseErrorBody, because a code they never read would be
+// carried around for nobody. An absent code is '' rather than undefined, so
+// every reader compares strings and none of them has to guard a missing field.
+export async function parseErrorPayload(res: Response): Promise<{ message: string; code: string }> {
   try {
-    const body = (await res.json()) as { error?: string };
-    return body.error ?? statusLine(res.status);
+    const body = (await res.json()) as { error?: string; code?: string };
+    return { message: body.error ?? statusLine(res.status), code: body.code ?? '' };
   } catch {
-    return statusLine(res.status);
+    return { message: statusLine(res.status), code: '' };
   }
 }
+
+// ERROR_CODE is the vocabulary the backend writes on the statuses it overloads
+// (back/internal/api/error_code.go — the constants there are the source, these
+// are the six the SPA acts on):
+//
+//   409 jump-drive  jumpBlockedAntijump, else the ship is docked
+//   422 jump-drive  shieldRequired,      else no up_jump_drive fitted
+//   400 jump-drive  jumpForbiddenSector, else the destination is invalid
+//   503 jump-drive  sectorBusy,          else the handoff is unwired
+//   400 install-*   shipDocked | cargoInsufficient, else a malformed request
+//   503 install-*   sectorBusy,          else the installer is unwired
+//
+// Each pair is tested positively on the branch the player can act on, so an
+// unrecognised body — a new sentinel, a proxy's own error page — falls to the
+// cautious side instead of inheriting «попробуйте ещё раз».
+export const ERROR_CODE = {
+  sectorBusy: 'sector_busy',
+  shipDocked: 'ship_docked',
+  jumpBlockedAntijump: 'jump_blocked_antijump',
+  shieldRequired: 'shield_required',
+  jumpForbiddenSector: 'jump_forbidden_sector',
+  cargoInsufficient: 'cargo_insufficient',
+} as const;
 
 // statusLine is the last-resort wording when a failure carries no message of its
 // own. friendlyError repeats it verbatim for the same case, so it lives here.
@@ -1549,15 +1603,18 @@ const JUMP_UNKNOWN_OUTCOME_TEXT =
 
 // jumpDriveErrorText turns a sendJumpDrive failure into a Russian, human-
 // readable line for the galaxy-map footer / Journal (TASK-129). It branches on
-// the HTTP status ApiError carries and — for the three statuses the backend
-// overloads — on a substring of its English sentinel text: the same 422 covers
-// both "no jump drive" and "shield generator damaged", the same 400 covers
-// both "jump blocked in this sector" and "invalid target sector", and the same
-// 409 covers both "ship is docked" and "jump blocked by antijump field"
-// (TASK-131 — before that the jammed case read as "you are docked"). The backend
-// does not distinguish these by status alone, so keying on the English wording
-// ("shield" / "blocked") is a deliberate, documented coupling to those
-// sentinels (see the error table in TASK-129).
+// the HTTP status ApiError carries and — for the four statuses the backend
+// overloads — on the code beside it: the same 422 covers both "no jump drive"
+// and "shield generator damaged", the same 400 covers both "jump blocked in
+// this sector" and "invalid target sector", the same 409 covers both "ship is
+// docked" and "jump blocked by antijump field" (TASK-131 — before that the
+// jammed case read as "you are docked"), and the same 503 covers a busy inbox
+// and an unwired handoff.
+//
+// It used to key on a substring of the backend's English message ("shield",
+// "blocked", "antijump", "sector busy"). TASK-185 made those messages Russian —
+// the player reads them — so the pairs now travel as ERROR_CODE, which no
+// rewording can break.
 //
 // The in-doubt case is asked first, exactly as installErrorText does and in the
 // same shape as commandErrorText, so the set of unanswered statuses stays stated
@@ -1574,7 +1631,6 @@ export function jumpDriveErrorText(err: unknown): string {
   // A TypeError from our own .then chain, or a non-Error rejection: friendlyError
   // words both and strips a route prefix if one got in.
   if (!(err instanceof ApiError)) return friendlyError(err);
-  const msg = err.message.toLowerCase();
   switch (err.status) {
     case 401:
       // The session cookie expired: back/internal/auth/middleware.go answers
@@ -1586,49 +1642,50 @@ export function jumpDriveErrorText(err: unknown): string {
     case 403:
       return ERR_NOT_YOUR_SHIP;
     case 409:
-      // Overloaded status: "antijump" sentinel → hyper-interference jams the
+      // Overloaded status: jump_blocked_antijump → hyper-interference jams the
       // jump (a powered up_antijump ship, TASK-100.3.8, or a deployed
       // «Генератор гипер-помех», TASK-131), otherwise the ship is docked.
-      return msg.includes('antijump')
+      return err.code === ERROR_CODE.jumpBlockedAntijump
         ? 'Гипер-помехи глушат прыжок: рядом генератор гипер-помех или корабль с полем подавления.'
         : 'Нельзя прыгнуть пристыкованным — сначала отстыкуйтесь.';
     case 422:
-      // Overloaded status: "shield" sentinel → damaged/missing shield generator,
+      // Overloaded status: shield_required → damaged/missing shield generator,
       // otherwise the ship simply has no up_jump_drive fitted.
-      return msg.includes('shield')
+      return err.code === ERROR_CODE.shieldRequired
         ? 'Нужен исправный генератор щита.'
         : 'На корабле нет прыжкового двигателя (up_jump_drive).';
     case 429:
       return 'Прыжковый двигатель ещё не готов — идёт перезарядка.';
     case 400:
-      // Overloaded status: "blocked" sentinel → this sector forbids jumping out,
-      // otherwise the target sector is invalid (own sector / unknown / bad json).
-      return msg.includes('blocked')
+      // Overloaded status: jump_forbidden_sector → this sector forbids jumping
+      // out, otherwise the target sector is invalid (own sector / unknown / bad
+      // json).
+      return err.code === ERROR_CODE.jumpForbiddenSector
         ? 'Прыжок из этого сектора запрещён.'
         : 'Недопустимый сектор назначения.';
     case 503:
       // Two backend faults behind one status, and only the first is worth a
       // retry (TASK-157 — this branch used to answer ERR_SECTOR_BUSY to both):
-      //   "sector busy" — ErrInboxFull, refused at the door
+      //   sector_busy — ErrInboxFull, refused at the door
       //     (back/internal/api/jump_drive.go:42-45). The command was never
       //     enqueued and the worker is merely behind, so «попробуйте ещё раз»
       //     is exactly right.
-      //   "handoff unavailable" — ErrHandoffUnavailable, a worker built without
+      //   uncoded — ErrHandoffUnavailable, a worker built without
       //     topology or bus (back/internal/sector/jumpdrive.go:69-70 — after the
       //     ship lookup and the ownership check, but ahead of every gate the
       //     player could act on: dock, module, shield, cooldown). That is how
       //     the process was wired; it will answer the same until it is restarted
       //     differently, so inviting a retry is advice that can never come true.
-      // Tested positively on the retryable sentinel rather than on the fault,
-      // for installErrorText's reason: a reworded sentinel or a proxy's own
-      // generic "Service Unavailable" must land on the cautious side, not
-      // inherit «попробуйте ещё раз».
+      // Tested positively on the retryable code rather than on the fault, for
+      // installErrorText's reason: an uncoded 503 — a new backend fault, or a
+      // proxy's own generic "Service Unavailable" — must land on the cautious
+      // side, not inherit «попробуйте ещё раз».
       //
       // Neither branch is an unknown outcome: one never reached the worker at
       // all, the other was refused ahead of the shield drain and the cooldown
       // stamp (jumpdrive.go:138-145). Nothing of the player's was spent either
       // way, and the line says so rather than sending them to check the map.
-      if (msg.includes('sector busy')) return ERR_SECTOR_BUSY;
+      if (err.code === ERROR_CODE.sectorBusy) return ERR_SECTOR_BUSY;
       console.error('jump drive: unrecognised 503', err.message);
       return 'Прыжок сейчас недоступен на стороне сервера. Ничего не потрачено, но повтор сейчас не поможет — попробуйте позже.';
     default:
@@ -1723,8 +1780,8 @@ function installUnknownOutcomeText(nominative: string): string {
 
 // installErrorText turns a sendInstallSatellite / sendInstallJammer failure into
 // a Russian, human-readable line for the combat HUD (TASK-149). Shaped like
-// jumpDriveErrorText: branch on the HTTP status ApiError carries, and on a
-// substring of the English sentinel where the backend overloads a status.
+// jumpDriveErrorText: branch on the HTTP status ApiError carries, and on the
+// ERROR_CODE beside it where the backend overloads a status.
 //
 // The unknown outcome — 504, a proxy 502, or a dropped connection, the last two
 // being commoner ways to lose an ack than a genuine worker timeout — is the
@@ -1736,16 +1793,15 @@ function installUnknownOutcomeText(nominative: string): string {
 // just try again would deploy (and charge for) a second one.
 //
 // Statuses the two handlers overload:
-//   400 — "ship is docked" | "no satellite|jammer in cargo" | bad request body;
-//   503 — "sector busy" (ErrInboxFull, the only genuinely retryable one) |
-//         "install unavailable: server misconfigured" (ErrInstallerUnavailable).
-// The 503 test is deliberately positive on the retryable sentinel rather than on
-// the misconfigured one: "misconfigured" lives only in a hand-written handler
-// literal, while ErrInstallerUnavailable's own text is "static installer not
-// wired". Keying on the fault would make a routine backend rewording — or a
-// proxy's generic "Service Unavailable" — silently read as "try again", which
-// is exactly the advice this mapper exists to withhold. Unrecognised 503s
-// therefore land on the cautious side.
+//   400 — ship_docked | cargo_insufficient | bad request body (uncoded);
+//   503 — sector_busy (ErrInboxFull, the only genuinely retryable one) |
+//         the unwired installer (ErrInstallerUnavailable, uncoded).
+// The 503 test is deliberately positive on the retryable code rather than on
+// the misconfigured fault, and the backend leaves that fault uncoded on purpose
+// (back/internal/api/error_code.go). Keying on the fault would make a new
+// backend sentinel — or a proxy's generic "Service Unavailable" — silently read
+// as "try again", which is exactly the advice this mapper exists to withhold.
+// Unrecognised 503s therefore land on the cautious side.
 export function installErrorText(err: unknown, kind: InstallKind): string {
   const noun = INSTALL_NOUNS[kind];
   // Asked before the switch so the set of in-doubt statuses is stated once, in
@@ -1757,7 +1813,6 @@ export function installErrorText(err: unknown, kind: InstallKind): string {
     console.error('install command: outcome unknown', err);
     return installUnknownOutcomeText(noun.nominative);
   }
-  const msg = err.message.toLowerCase();
   switch (err.status) {
     case 401:
       return ERR_SESSION_EXPIRED;
@@ -1766,17 +1821,17 @@ export function installErrorText(err: unknown, kind: InstallKind): string {
     case 403:
       return ERR_NOT_YOUR_SHIP;
     case 400:
-      // Overloaded status: "docked" sentinel → the ship must undock first,
-      // "cargo" → the hold ran empty (the button count can lag a snapshot),
-      // otherwise the request itself was malformed.
-      if (msg.includes('docked')) {
+      // Overloaded status: ship_docked → the ship must undock first,
+      // cargo_insufficient → the hold ran empty (the button count can lag a
+      // snapshot), otherwise the request itself was malformed.
+      if (err.code === ERROR_CODE.shipDocked) {
         return 'Нельзя разворачивать оборудование пристыкованным — сначала отстыкуйтесь.';
       }
-      if (msg.includes('cargo')) return `В трюме нет ${noun.genitive}.`;
+      if (err.code === ERROR_CODE.cargoInsufficient) return `В трюме нет ${noun.genitive}.`;
       console.error('install command: unrecognised 400', err.message);
       return 'Некорректный запрос на установку.';
     case 503:
-      if (msg.includes('sector busy')) return ERR_SECTOR_BUSY;
+      if (err.code === ERROR_CODE.sectorBusy) return ERR_SECTOR_BUSY;
       // Catch-all by design (see the header), which makes it the one branch
       // where the body is most likely to be news — a renamed sentinel, a proxy's
       // own wording — so it must not be swallowed. Retrying later can genuinely

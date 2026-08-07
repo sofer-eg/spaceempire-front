@@ -13,6 +13,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ApiError,
+  ERROR_CODE,
   EntityKind,
   NetworkError,
   commandErrorText,
@@ -22,6 +23,7 @@ import {
   jumpDriveErrorText,
   netFetch,
   parseErrorBody,
+  parseErrorPayload,
   STATIC_LIST_KIND,
   staticCombatMap,
   staticKey,
@@ -30,20 +32,20 @@ import {
 } from './api.ts';
 
 test('jumpDriveErrorText maps each backend status to a Russian line', () => {
-  assert.equal(jumpDriveErrorText(new ApiError(404, 'ship not found')), 'Корабль не найден.');
+  assert.equal(jumpDriveErrorText(new ApiError(404, 'корабль не найден')), 'Корабль не найден.');
+  assert.equal(jumpDriveErrorText(new ApiError(403, 'чужой корабль')), 'Это не ваш корабль.');
   assert.equal(
-    jumpDriveErrorText(new ApiError(403, 'ship belongs to another player')),
-    'Это не ваш корабль.',
-  );
-  assert.equal(
-    jumpDriveErrorText(new ApiError(409, 'ship is docked')),
+    jumpDriveErrorText(new ApiError(409, 'корабль пристыкован', ERROR_CODE.shipDocked)),
     'Нельзя прыгнуть пристыкованным — сначала отстыкуйтесь.',
   );
   assert.equal(
-    jumpDriveErrorText(new ApiError(429, 'jump drive not ready')),
+    jumpDriveErrorText(new ApiError(429, 'прыжковый двигатель ещё не готов')),
     'Прыжковый двигатель ещё не готов — идёт перезарядка.',
   );
-  assert.equal(jumpDriveErrorText(new ApiError(503, 'sector busy')), 'Сектор занят, попробуйте ещё раз.');
+  assert.equal(
+    jumpDriveErrorText(new ApiError(503, 'сектор занят', ERROR_CODE.sectorBusy)),
+    'Сектор занят, попробуйте ещё раз.',
+  );
 });
 
 // TASK-157: 503 arrives from two places in back/internal/api/jump_drive.go, and
@@ -54,10 +56,10 @@ test('jumpDriveErrorText maps each backend status to a Russian line', () => {
 // come true. Positive test on the retryable sentinel, as installErrorText does,
 // so a proxy's own 503 body lands on the cautious side too.
 test('jumpDriveErrorText separates a busy sector from an unavailable handoff', () => {
-  const busy = jumpDriveErrorText(new ApiError(503, 'sector busy'));
+  const busy = jumpDriveErrorText(new ApiError(503, 'сектор занят', ERROR_CODE.sectorBusy));
   assert.equal(busy, 'Сектор занят, попробуйте ещё раз.');
 
-  const unavailable = jumpDriveErrorText(new ApiError(503, 'handoff unavailable'));
+  const unavailable = jumpDriveErrorText(new ApiError(503, 'передача сектора недоступна'));
   assert.notEqual(unavailable, busy);
   assert.doesNotMatch(unavailable, /попробуйте ещё раз/i);
   assert.match(unavailable, /недоступен на стороне сервера/);
@@ -69,7 +71,7 @@ test('jumpDriveErrorText separates a busy sector from an unavailable handoff', (
 
   // An unrecognised body — a reworded sentinel, or a proxy's generic page —
   // must read like the misconfigured case, not like the retryable one.
-  for (const body of ['Service Unavailable', 'sector: handoff not wired']) {
+  for (const body of ['Service Unavailable', 'передача сектора недоступна']) {
     assert.equal(jumpDriveErrorText(new ApiError(503, body)), unavailable, `503 «${body}»`);
   }
 });
@@ -80,7 +82,7 @@ test('jumpDriveErrorText separates a busy sector from an unavailable handoff', (
 // that the jump's line words that instead of asserting a failure, as the wording
 // it replaced («Команда не успела выполниться, попробуйте ещё раз») did.
 test('jumpDriveErrorText words a lost ack as an unknown outcome, not as a failure', () => {
-  const timeout = jumpDriveErrorText(new ApiError(504, 'command timeout'));
+  const timeout = jumpDriveErrorText(new ApiError(504, 'таймаут команды'));
   // The exact line, so a rewrite that keeps every property below but breaks the
   // sentence — «Прыжок мог состояться» drifting away from «Посмотрите, где он»,
   // for instance — has to be made deliberately rather than slipping through.
@@ -110,53 +112,50 @@ test('jumpDriveErrorText words a lost ack as an unknown outcome, not as a failur
   assert.doesNotMatch(dropped, /Failed to fetch/);
 });
 
-// TASK-131: 409 is overloaded by the backend — ErrShipDocked ("ship is docked")
-// and ErrJumpBlockedByAntijump ("jump blocked by antijump field", raised both by
-// a powered up_antijump ship and by a deployed hyper-interference generator).
-// Reported live: a jammed jump used to tell the player they were docked.
-test('jumpDriveErrorText disambiguates the two 409 branches by sentinel text', () => {
+// TASK-131: 409 is overloaded by the backend — ErrShipDocked and
+// ErrJumpBlockedByAntijump (raised both by a powered up_antijump ship and by a
+// deployed hyper-interference generator). Reported live: a jammed jump used to
+// tell the player they were docked. Since TASK-185 the pair is told apart by the
+// code, because the messages themselves are Russian and shown to the player.
+test('jumpDriveErrorText disambiguates the two 409 branches by code', () => {
   assert.equal(
-    jumpDriveErrorText(new ApiError(409, 'jump blocked by antijump field')),
-    'Гипер-помехи глушат прыжок: рядом генератор гипер-помех или корабль с полем подавления.',
-  );
-  // Case-insensitive substring match.
-  assert.equal(
-    jumpDriveErrorText(new ApiError(409, 'Jump blocked by ANTIJUMP field')),
+    jumpDriveErrorText(new ApiError(409, 'прыжок глушат гипер-помехи', ERROR_CODE.jumpBlockedAntijump)),
     'Гипер-помехи глушат прыжок: рядом генератор гипер-помех или корабль с полем подавления.',
   );
   assert.equal(
-    jumpDriveErrorText(new ApiError(409, 'ship is docked')),
+    jumpDriveErrorText(new ApiError(409, 'корабль пристыкован', ERROR_CODE.shipDocked)),
+    'Нельзя прыгнуть пристыкованным — сначала отстыкуйтесь.',
+  );
+  // An uncoded 409 — an older backend, a proxy — falls to the docked branch, the
+  // one that costs a player nothing to read when it is wrong.
+  assert.equal(
+    jumpDriveErrorText(new ApiError(409, 'конфликт')),
     'Нельзя прыгнуть пристыкованным — сначала отстыкуйтесь.',
   );
 });
 
-test('jumpDriveErrorText disambiguates the two 422 branches by sentinel text', () => {
+test('jumpDriveErrorText disambiguates the two 422 branches by code', () => {
   assert.equal(
-    jumpDriveErrorText(new ApiError(422, 'shield generator damaged or missing')),
-    'Нужен исправный генератор щита.',
-  );
-  // Case-insensitive substring match.
-  assert.equal(
-    jumpDriveErrorText(new ApiError(422, 'SHIELD generator damaged or missing')),
+    jumpDriveErrorText(new ApiError(422, 'генератор щита повреждён или отсутствует', ERROR_CODE.shieldRequired)),
     'Нужен исправный генератор щита.',
   );
   assert.equal(
-    jumpDriveErrorText(new ApiError(422, 'ship has no jump drive')),
+    jumpDriveErrorText(new ApiError(422, 'на корабле нет прыжкового двигателя (up_jump_drive)', 'jump_drive_required')),
     'На корабле нет прыжкового двигателя (up_jump_drive).',
   );
 });
 
-test('jumpDriveErrorText disambiguates the two 400 branches by sentinel text', () => {
+test('jumpDriveErrorText disambiguates the two 400 branches by code', () => {
   assert.equal(
-    jumpDriveErrorText(new ApiError(400, 'jump blocked in this sector')),
+    jumpDriveErrorText(new ApiError(400, 'прыжок из этого сектора запрещён', ERROR_CODE.jumpForbiddenSector)),
     'Прыжок из этого сектора запрещён.',
   );
   assert.equal(
-    jumpDriveErrorText(new ApiError(400, 'invalid target sector')),
+    jumpDriveErrorText(new ApiError(400, 'недопустимый сектор назначения')),
     'Недопустимый сектор назначения.',
   );
   assert.equal(
-    jumpDriveErrorText(new ApiError(400, 'invalid json')),
+    jumpDriveErrorText(new ApiError(400, 'некорректный запрос')),
     'Недопустимый сектор назначения.',
   );
 });
@@ -184,7 +183,7 @@ test('jumpDriveErrorText hides raw 5xx bodies without asserting the jump failed'
 
   // Not the lost-ack line: 500 is a rarer, differently-worded member of the same
   // in-doubt class (TASK-157 AC #1).
-  assert.notEqual(text, jumpDriveErrorText(new ApiError(504, 'command timeout')));
+  assert.notEqual(text, jumpDriveErrorText(new ApiError(504, 'таймаут команды')));
   // Every other 5xx the switch does not word lands on the same cautious line.
   assert.equal(jumpDriveErrorText(new ApiError(507, 'Insufficient Storage')), text);
 });
@@ -222,31 +221,29 @@ test('jumpDriveErrorText words non-ApiError failures through friendlyError', () 
 });
 
 // --- installErrorText (TASK-149) -------------------------------------------
-// Sentinels mirror back/internal/api/install_satellite.go + install_jammer.go.
+// Messages and codes mirror back/internal/api/install_satellite.go +
+// install_jammer.go.
 
 test('installErrorText maps the unambiguous install statuses', () => {
-  assert.equal(installErrorText(new ApiError(404, 'ship not found'), 'satellite'), 'Корабль не найден.');
-  assert.equal(
-    installErrorText(new ApiError(403, 'ship belongs to another player'), 'jammer'),
-    'Это не ваш корабль.',
-  );
+  assert.equal(installErrorText(new ApiError(404, 'корабль не найден'), 'satellite'), 'Корабль не найден.');
+  assert.equal(installErrorText(new ApiError(403, 'чужой корабль'), 'jammer'), 'Это не ваш корабль.');
 });
 
-test('installErrorText disambiguates the three 400 branches by sentinel text', () => {
+test('installErrorText disambiguates the three 400 branches by code', () => {
   assert.equal(
-    installErrorText(new ApiError(400, 'ship is docked'), 'satellite'),
+    installErrorText(new ApiError(400, 'корабль пристыкован', ERROR_CODE.shipDocked), 'satellite'),
     'Нельзя разворачивать оборудование пристыкованным — сначала отстыкуйтесь.',
   );
   assert.equal(
-    installErrorText(new ApiError(400, 'no satellite in cargo'), 'satellite'),
+    installErrorText(new ApiError(400, 'в трюме нет спутников', ERROR_CODE.cargoInsufficient), 'satellite'),
     'В трюме нет спутников.',
   );
   assert.equal(
-    installErrorText(new ApiError(400, 'no jammer in cargo'), 'jammer'),
+    installErrorText(new ApiError(400, 'в трюме нет генераторов гипер-помех', ERROR_CODE.cargoInsufficient), 'jammer'),
     'В трюме нет генераторов гипер-помех.',
   );
   assert.equal(
-    installErrorText(new ApiError(400, 'invalid request fields'), 'jammer'),
+    installErrorText(new ApiError(400, 'некорректные поля запроса'), 'jammer'),
     'Некорректный запрос на установку.',
   );
 });
@@ -255,7 +252,7 @@ test('installErrorText disambiguates the three 400 branches by sentinel text', (
 // the retryable «сектор занят» (ErrInboxFull) line.
 test('installErrorText separates the misconfigured installer from a busy sector', () => {
   const misconfigured = installErrorText(
-    new ApiError(503, 'install unavailable: server misconfigured'),
+    new ApiError(503, 'установка недоступна: ошибка конфигурации сервера'),
     'jammer',
   );
   assert.match(misconfigured, /Установка сейчас недоступна на стороне сервера/);
@@ -263,7 +260,7 @@ test('installErrorText separates the misconfigured installer from a busy sector'
   // Cautious, but without claiming a later retry is pointless: the commonest
   // non-sentinel 503 is a backend that is simply down, and it will come back.
   assert.doesNotMatch(misconfigured, /не поможет/i);
-  const busy = installErrorText(new ApiError(503, 'sector busy'), 'jammer');
+  const busy = installErrorText(new ApiError(503, 'сектор занят', ERROR_CODE.sectorBusy), 'jammer');
   assert.equal(busy, 'Сектор занят, попробуйте ещё раз.');
   assert.notEqual(misconfigured, busy);
 });
@@ -273,23 +270,23 @@ test('installErrorText separates the misconfigured installer from a busy sector'
 // arrives from proxies with a generic body. Anything unrecognised must fall to
 // the cautious side, not to «попробуйте ещё раз».
 test('installErrorText treats an unrecognised 503 as non-retryable', () => {
-  for (const body of ['Service Unavailable', 'sector: static installer not wired']) {
+  for (const body of ['Service Unavailable', 'установка недоступна: ошибка конфигурации сервера']) {
     const text = installErrorText(new ApiError(503, body), 'jammer');
     assert.doesNotMatch(text, /попробуйте ещё раз/i, `503 «${body}» must not invite a retry`);
-    assert.equal(text, installErrorText(new ApiError(503, 'install unavailable: server misconfigured'), 'jammer'));
+    assert.equal(text, installErrorText(new ApiError(503, 'установка недоступна'), 'jammer'));
   }
 });
 
 // AC-2: since TASK-144 the goods debit commits with the object INSERT, so 504
 // means "outcome unknown" — the line must not tell the player to just retry.
 test('installErrorText 504 says the outcome is unknown instead of inviting a retry', () => {
-  const satellite = installErrorText(new ApiError(504, 'command timeout'), 'satellite');
+  const satellite = installErrorText(new ApiError(504, 'таймаут команды'), 'satellite');
   assert.match(satellite, /исход неизвестен/i);
   assert.match(satellite, /Спутник мог быть уже развёрнут/);
   assert.match(satellite, /Проверьте трюм и радар/);
   assert.doesNotMatch(satellite, /попробуйте ещё раз/i);
 
-  const jammer = installErrorText(new ApiError(504, 'command timeout'), 'jammer');
+  const jammer = installErrorText(new ApiError(504, 'таймаут команды'), 'jammer');
   assert.match(jammer, /Генератор гипер-помех мог быть уже развёрнут/);
   assert.doesNotMatch(jammer, /попробуйте ещё раз/i);
 });
@@ -301,14 +298,14 @@ test('installErrorText 504 says the outcome is unknown instead of inviting a ret
 // generator.
 test('installErrorText gives a dropped connection the same unknown-outcome line as 504', () => {
   const dropped = installErrorText(new NetworkError(new TypeError('Failed to fetch')), 'jammer');
-  assert.equal(dropped, installErrorText(new ApiError(504, 'command timeout'), 'jammer'));
+  assert.equal(dropped, installErrorText(new ApiError(504, 'таймаут команды'), 'jammer'));
   assert.match(dropped, /исход неизвестен/i);
   assert.doesNotMatch(dropped, /Failed to fetch/);
 
   // Same for a non-Error rejection and for the satellite wording.
   assert.equal(
     installErrorText('boom', 'satellite'),
-    installErrorText(new ApiError(504, 'command timeout'), 'satellite'),
+    installErrorText(new ApiError(504, 'таймаут команды'), 'satellite'),
   );
 });
 
@@ -318,7 +315,7 @@ test('installErrorText gives a dropped connection the same unknown-outcome line 
 // most likely to hit a player mid-deploy.
 test('installErrorText 502 reads as an unknown outcome, not as a failure', () => {
   const badGateway = installErrorText(new ApiError(502, 'Bad Gateway'), 'jammer');
-  assert.equal(badGateway, installErrorText(new ApiError(504, 'command timeout'), 'jammer'));
+  assert.equal(badGateway, installErrorText(new ApiError(504, 'таймаут команды'), 'jammer'));
   assert.match(badGateway, /исход неизвестен/i);
   assert.doesNotMatch(badGateway, /не смог|не прошла/i);
   assert.doesNotMatch(badGateway, /Bad Gateway/);
@@ -328,12 +325,12 @@ test('installErrorText 502 reads as an unknown outcome, not as a failure', () =>
 // A proxy 503 stays out: it means the connection was never established, so the
 // command cannot have been enqueued.
 test('isOutcomeUnknown covers 502, 504 and non-ApiError failures only', () => {
-  assert.equal(isOutcomeUnknown(new ApiError(504, 'command timeout')), true);
+  assert.equal(isOutcomeUnknown(new ApiError(504, 'таймаут команды')), true);
   assert.equal(isOutcomeUnknown(new ApiError(502, 'Bad Gateway')), true);
   assert.equal(isOutcomeUnknown(new NetworkError(new TypeError('Failed to fetch'))), true);
   assert.equal(isOutcomeUnknown('boom'), true);
-  assert.equal(isOutcomeUnknown(new ApiError(400, 'no jammer in cargo')), false);
-  assert.equal(isOutcomeUnknown(new ApiError(503, 'sector busy')), false);
+  assert.equal(isOutcomeUnknown(new ApiError(400, 'в трюме нет генераторов гипер-помех', ERROR_CODE.cargoInsufficient)), false);
+  assert.equal(isOutcomeUnknown(new ApiError(503, 'сектор занят', ERROR_CODE.sectorBusy)), false);
   assert.equal(isOutcomeUnknown(new ApiError(503, 'Service Unavailable')), false);
   assert.equal(isOutcomeUnknown(new ApiError(500, 'boom')), false);
 });
@@ -359,6 +356,89 @@ test('installErrorText hides raw 5xx bodies without asserting the install failed
 
 test('installErrorText echoes unmapped non-5xx statuses', () => {
   assert.equal(installErrorText(new ApiError(409, 'unexpected conflict'), 'jammer'), 'unexpected conflict');
+});
+
+// TASK-185: the code decides, the wording does not. Both halves matter — a
+// reworded message must keep mapping (the backend is free to reword a player-
+// facing line), and the same message under two codes must map two ways (the
+// codes are what the branches are for). Together they say the coupling to the
+// English sentinel text is gone rather than translated.
+test('jumpDriveErrorText branches on the code, not on the message wording', () => {
+  const jammed = 'Гипер-помехи глушат прыжок: рядом генератор гипер-помех или корабль с полем подавления.';
+  const docked = 'Нельзя прыгнуть пристыкованным — сначала отстыкуйтесь.';
+
+  // Same status, same message, different code → different advice.
+  assert.equal(jumpDriveErrorText(new ApiError(409, 'нельзя', ERROR_CODE.jumpBlockedAntijump)), jammed);
+  assert.equal(jumpDriveErrorText(new ApiError(409, 'нельзя', ERROR_CODE.shipDocked)), docked);
+
+  // Reworded backend messages keep their branch.
+  assert.equal(
+    jumpDriveErrorText(new ApiError(409, 'прыжок подавлен полем', ERROR_CODE.jumpBlockedAntijump)),
+    jammed,
+  );
+  assert.equal(
+    jumpDriveErrorText(new ApiError(422, 'щит не заряжен', ERROR_CODE.shieldRequired)),
+    'Нужен исправный генератор щита.',
+  );
+  assert.equal(
+    jumpDriveErrorText(new ApiError(400, 'отсюда не прыгнуть', ERROR_CODE.jumpForbiddenSector)),
+    'Прыжок из этого сектора запрещён.',
+  );
+  assert.equal(
+    jumpDriveErrorText(new ApiError(503, 'подождите', ERROR_CODE.sectorBusy)),
+    'Сектор занят, попробуйте ещё раз.',
+  );
+
+  // And the old coupling is really gone: the English sentinels that used to
+  // drive these branches now decide nothing.
+  assert.equal(jumpDriveErrorText(new ApiError(409, 'jump blocked by antijump field')), docked);
+  assert.equal(
+    jumpDriveErrorText(new ApiError(422, 'shield generator damaged or missing')),
+    'На корабле нет прыжкового двигателя (up_jump_drive).',
+  );
+});
+
+test('installErrorText branches on the code, not on the message wording', () => {
+  const undock = 'Нельзя разворачивать оборудование пристыкованным — сначала отстыкуйтесь.';
+
+  assert.equal(installErrorText(new ApiError(400, 'нельзя', ERROR_CODE.shipDocked), 'jammer'), undock);
+  assert.equal(
+    installErrorText(new ApiError(400, 'нельзя', ERROR_CODE.cargoInsufficient), 'jammer'),
+    'В трюме нет генераторов гипер-помех.',
+  );
+  assert.equal(
+    installErrorText(new ApiError(503, 'подождите', ERROR_CODE.sectorBusy), 'satellite'),
+    'Сектор занят, попробуйте ещё раз.',
+  );
+
+  // The word "docked" in a body no longer routes anything, and an uncoded 400
+  // is the malformed-request branch.
+  assert.equal(
+    installErrorText(new ApiError(400, 'ship is docked'), 'jammer'),
+    'Некорректный запрос на установку.',
+  );
+});
+
+// parseErrorPayload is what puts the code on the ApiError. The three senders
+// whose failures reach the two mappers read the body through it; everything else
+// keeps parseErrorBody, whose contract (message only) must not change.
+test('parseErrorPayload carries the code beside the message', async () => {
+  const coded = await parseErrorPayload(
+    new Response('{"error":"корабль пристыкован","code":"ship_docked"}', { status: 409 }),
+  );
+  assert.deepEqual(coded, { message: 'корабль пристыкован', code: ERROR_CODE.shipDocked });
+
+  // Most failures carry no code: '' rather than undefined, so every reader
+  // compares strings and none has to guard a missing field.
+  const uncoded = await parseErrorPayload(new Response('{"error":"корабль не найден"}', { status: 404 }));
+  assert.deepEqual(uncoded, { message: 'корабль не найден', code: '' });
+
+  // Not JSON at all (a proxy error page): same fallback line parseErrorBody uses.
+  const proxied = await parseErrorPayload(new Response('Service Unavailable', { status: 503 }));
+  assert.deepEqual(proxied, { message: 'Сервер вернул ошибку 503.', code: '' });
+
+  // An ApiError built without a code reports '', not undefined.
+  assert.equal(new ApiError(404, 'корабль не найден').code, '');
 });
 
 test('friendlyError strips the route prefix off a backend error', () => {

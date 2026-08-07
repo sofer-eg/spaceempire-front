@@ -2056,7 +2056,10 @@ html, body, #root {
 /* ...but min-width:0 alone traded one lost control for one unreadable one: the
    goods <select> then shrank to its track and cut 176-194px off the option text
    at EVERY width (94px of «Gold ring with diamonds "charm" (300)» visible on a
-   1920px monitor, with 200px of the row left empty). That suffix is not
+   1920px monitor, with 200px of the row left empty -- that good was dropped from
+   the catalog by TASK-177, so the measurement is historic and no longer
+   reproducible; the conclusion still holds, goods names of that length remain).
+   That suffix is not
    decoration -- it is the ceiling «Кол-во» silently clamps to via max={max}.
    The three number fields are happy in a 150px track; this one is not, so it
    takes the whole row and puts its caption ABOVE the control. Not the shared

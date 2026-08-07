@@ -714,8 +714,10 @@ export async function fetchPlayers(): Promise<PlayerSummary[]> {
 //     exitShip reach only PilotPanel, whose reportFailure runs the failure through
 //     friendlyError and emits it as a journal line. This bullet read «shown to
 //     nobody — console.error and nothing on screen» until TASK-187, which was true
-//     of them then and is not now: the journal is a third place a refusal from this
-//     file is read, so what the player sees here is the mapper, not the raw shape.
+//     of them then and is not now: the journal, not just the console, is where these
+//     are read now, so what the player sees is the mapper, not the raw shape. (The
+//     journal itself is not new to this file — the raw-printing group above has
+//     always landed there too, via ObjectActionsMenu.)
 // requireOk would fix the envelope but add its own `POST /api/…: ` label, which the
 // raw-printing views do not strip. So these get the bare backend message, and the
 // route stays where it is useful — the browser's network panel.
@@ -1459,7 +1461,9 @@ export function friendlyError(err: unknown): string {
 // was actually checked against. The four just named pass it, database writes and
 // all: a repeated exit-ship spawns one more free suit and still lands the player
 // where they asked to be, a repeated disembark is refused outright (the passenger
-// link is already cleared → 409), undock and ship-access overwrite the same field.
+// link is already cleared → 409), ship-access overwrites the same field, and a
+// repeat of undock is refused rather than reapplied (ErrNotDocked, the worker's
+// own gate in internal/sector/docking.go UndockCommand.apply).
 // So friendlyError's «попробуйте позже» is honest for them, and naming a wallet none
 // of them touches would not be.
 //

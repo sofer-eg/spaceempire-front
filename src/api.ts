@@ -1405,6 +1405,7 @@ export const ERROR_CODE = {
   jumpDriveRequired: 'jump_drive_required',
   shieldRequired: 'shield_required',
   jumpForbiddenSector: 'jump_forbidden_sector',
+  invalidSector: 'invalid_sector',
   cargoInsufficient: 'cargo_insufficient',
 } as const;
 
@@ -1683,16 +1684,25 @@ export function jumpDriveErrorText(err: unknown): string {
         return 'На корабле нет прыжкового двигателя (up_jump_drive).';
       }
       console.error('jump drive: unrecognised 422', err.code, err.message);
-      return 'Прыжок отклонён: корабль не готов к прыжку — проверьте прыжковый двигатель и щит.';
+      // No tail naming the two preconditions we know: a third one added later
+      // (energy, crew) would send the player to check the wrong equipment. The
+      // head alone is true of every 422 — the status is «precondition unmet» —
+      // which is why the 409 fallback above names no cause either.
+      return 'Прыжок отклонён: корабль не готов к прыжку.';
     case 429:
       return 'Прыжковый двигатель ещё не готов — идёт перезарядка.';
     case 400:
-      // Overloaded status: jump_forbidden_sector → this sector forbids jumping
-      // out, otherwise the target sector is invalid (own sector / unknown / bad
-      // json).
-      return err.code === ERROR_CODE.jumpForbiddenSector
-        ? 'Прыжок из этого сектора запрещён.'
-        : 'Недопустимый сектор назначения.';
+      // Overloaded status, both game outcomes coded, same reasoning as the two
+      // above: jump_forbidden_sector → the ship may not leave this sector,
+      // invalid_sector → the destination is the ship's own sector or unknown to
+      // the topology. What is left uncoded is a malformed body (bad json, a
+      // missing field), which is not a claim about either sector — so it must
+      // not inherit «недопустимый сектор назначения», the way the 409 pair used
+      // to hand «вы пристыкованы» to a jammed jump.
+      if (err.code === ERROR_CODE.jumpForbiddenSector) return 'Прыжок из этого сектора запрещён.';
+      if (err.code === ERROR_CODE.invalidSector) return 'Недопустимый сектор назначения.';
+      console.error('jump drive: unrecognised 400', err.code, err.message);
+      return 'Некорректный запрос на прыжок.';
     case 503:
       // Two backend faults behind one status, and only the first is worth a
       // retry (TASK-157 — this branch used to answer ERR_SECTOR_BUSY to both):

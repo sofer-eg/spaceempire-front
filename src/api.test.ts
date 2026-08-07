@@ -148,9 +148,11 @@ test('jumpDriveErrorText disambiguates the two 422 branches by code', () => {
     jumpDriveErrorText(new ApiError(422, 'на корабле нет прыжкового двигателя (up_jump_drive)', ERROR_CODE.jumpDriveRequired)),
     'На корабле нет прыжкового двигателя (up_jump_drive).',
   );
-  // Two different things to go and fix, so an unrecognised 422 is handed neither
-  // — it names both.
-  const neutral422 = 'Прыжок отклонён: корабль не готов к прыжку — проверьте прыжковый двигатель и щит.';
+  // Two different things to go and fix, so an unrecognised 422 is handed
+  // neither — and it names neither, so a precondition added later (energy,
+  // crew) cannot point the player at the wrong equipment.
+  const neutral422 = 'Прыжок отклонён: корабль не готов к прыжку.';
+  assert.doesNotMatch(neutral422, /двигател|щит/);
   assert.equal(jumpDriveErrorText(new ApiError(422, 'нельзя')), neutral422);
   assert.equal(jumpDriveErrorText(new ApiError(422, 'нечто новое', 'crew_required')), neutral422);
 });
@@ -161,13 +163,17 @@ test('jumpDriveErrorText disambiguates the two 400 branches by code', () => {
     'Прыжок из этого сектора запрещён.',
   );
   assert.equal(
-    jumpDriveErrorText(new ApiError(400, 'недопустимый сектор назначения')),
+    jumpDriveErrorText(new ApiError(400, 'недопустимый сектор назначения', ERROR_CODE.invalidSector)),
     'Недопустимый сектор назначения.',
   );
-  assert.equal(
-    jumpDriveErrorText(new ApiError(400, 'некорректный запрос')),
-    'Недопустимый сектор назначения.',
-  );
+  // A malformed body is the uncoded third case on this status. It is not a claim
+  // about either sector, so it must not inherit one: before TASK-185's review
+  // «некорректный запрос» was answered «Недопустимый сектор назначения.», which
+  // is the 409 elimination defect one status over.
+  const neutral400 = jumpDriveErrorText(new ApiError(400, 'некорректный запрос'));
+  assert.equal(neutral400, 'Некорректный запрос на прыжок.');
+  assert.doesNotMatch(neutral400, /сектор/);
+  assert.equal(jumpDriveErrorText(new ApiError(400, 'нечто новое', 'route_unknown')), neutral400);
 });
 
 test('jumpDriveErrorText echoes the raw message for an unmapped ApiError status', () => {
@@ -409,7 +415,7 @@ test('jumpDriveErrorText branches on the code, not on the message wording', () =
   assert.notEqual(jumpDriveErrorText(new ApiError(409, 'jump blocked by antijump field')), docked);
   assert.equal(
     jumpDriveErrorText(new ApiError(422, 'shield generator damaged or missing')),
-    'Прыжок отклонён: корабль не готов к прыжку — проверьте прыжковый двигатель и щит.',
+    'Прыжок отклонён: корабль не готов к прыжку.',
   );
 });
 
@@ -429,6 +435,7 @@ test('ERROR_CODE spells the wire values the backend writes', () => {
       jumpDriveRequired: 'jump_drive_required',
       shieldRequired: 'shield_required',
       jumpForbiddenSector: 'jump_forbidden_sector',
+      invalidSector: 'invalid_sector',
       cargoInsufficient: 'cargo_insufficient',
     },
   );

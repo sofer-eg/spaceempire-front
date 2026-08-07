@@ -28,19 +28,13 @@ type Props = {
 // this panel is stateless by design and sits in a 240px column — same catch
 // shape as ObjectActionsMenu.run, minus its inline half.
 //
-// friendlyError, not commandErrorText, for all four — checked against the
-// handlers rather than taken from commandErrorText's own list, which claims all
-// four merely «record an intent the worker acts on later» and is wrong for two
-// of them: exit-ship and disembark INSERT a spacesuit row synchronously
-// (app/eva.go → shipSpawner.SpawnSpacesuit → repo.Create) and rewrite
-// active_ship_id / passenger_of_ship_id in the request path. They still fail the
-// cautious mapper's actual test — none of the four moves credits, goods or a
-// hull the player paid for. Undock and ship-access only enqueue a worker command
-// (a repeat overwrites the same field); a repeat of exit-ship spawns a second
-// free suit but still lands the player exactly where they asked to be; a repeat
-// of disembark is refused outright (the passenger link is already cleared → 409).
-// So «попробуйте позже» is honest advice here, while commandErrorText's line
-// («вместе со списанием или начислением») would name a wallet none of them touches.
+// friendlyError, not commandErrorText, for all four: none of them moves credits,
+// goods or a hull the player paid for, so «попробуйте позже» is honest advice and
+// the cautious line («вместе со списанием или начислением») would name a wallet
+// none of them touches. TASK-187 checked that against the handlers instead of
+// taking it from commandErrorText's own list, and corrected the list where it was
+// wrong (two of the four do write to the database in the request path) — the
+// reasoning lives in that note in api.ts, where the mapper is chosen, not here.
 //
 // console.error is kept alongside: friendlyError only logs the raw object for the
 // network/502 cases, and the rest are still worth having in the console.

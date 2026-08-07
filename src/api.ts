@@ -710,9 +710,12 @@ export async function fetchPlayers(): Promise<PlayerSummary[]> {
 //     SetCoursePanel → friendlyError / jumpDriveErrorText), activateShip and
 //     sellShip (fleet/useFleet → friendlyError / commandErrorText). Either shape
 //     would read fine here; they keep this one so the group stays uniform.
-//   - shown to nobody (4): sendUndock, disembark, setShipAccess, exitShip reach only
-//     PilotPanel, which console.errors and puts nothing on screen, so for these the
-//     conversion only cleans up what a developer reads in the console.
+//   - mapped into the event journal (4): sendUndock, disembark, setShipAccess and
+//     exitShip reach only PilotPanel, whose reportFailure runs the failure through
+//     friendlyError and emits it as a journal line. This bullet read «shown to
+//     nobody — console.error and nothing on screen» until TASK-187, which was true
+//     of them then and is not now: the journal is a third place a refusal from this
+//     file is read, so what the player sees here is the mapper, not the raw shape.
 // requireOk would fix the envelope but add its own `POST /api/…: ` label, which the
 // raw-printing views do not strip. So these get the bare backend message, and the
 // route stays where it is useful — the browser's network panel.
@@ -1433,10 +1436,32 @@ export function friendlyError(err: unknown): string {
 // the worker a Course), sendMine (internal/api/mine.go only stores MiningTarget —
 // the drilling, the energy gate and the ore are per-tick in the worker),
 // activateShip, sendMove, sendDock, sendUndock, sendJump, sendAttack, sendCapture,
-// sendHack, sendCeaseFire, disembark, exitShip, setShipAccess — all record an intent
-// the worker acts on later, and internal/sector/docking.go and jump*.go touch no
-// wallet — plus the clan commands (create/invite/accept/kick/leave/role), which
-// debit nothing and are refused on a repeat by a unique key.
+// sendHack, sendCeaseFire, disembark, exitShip, setShipAccess — internal/sector's
+// docking.go and jump*.go touch no wallet — plus the clan commands
+// (create/invite/accept/kick/leave/role), which debit nothing and are refused on a
+// repeat by a unique key.
+//
+// What is NOT the reason any of them is off this mapper: «they only record an intent
+// the worker acts on later», which this paragraph used to assert of that whole tail.
+// TASK-187 checked it against the handlers. It is flatly false for the eva pair —
+// exit-ship and disembark (internal/app/eva.go, handleExitShip / handleDisembark)
+// call SpawnSpacesuit → repo.Create, i.e. INSERT INTO ships … RETURNING id, plus
+// UPDATE players (active_ship_id, and passenger_of_ship_id for disembark),
+// synchronously in the request path, before the response is written. And it is loose
+// for undock and ship-access: those do go through the worker inbox, but the worker's
+// saveShip UPDATEs the ships row before it acks (internal/sector/docking.go
+// executeUndock, internal/sector/ship_access.go SetShipAccessCommand.apply), so a
+// lost ack there does not mean an untouched row either.
+//
+// The test is not «does it write to the database» — it is «does it move credits,
+// goods or a hull the player paid for», which is the thing this mapper's line
+// («вместе со списанием или начислением») names, and which is what the tail above
+// was actually checked against. The four just named pass it, database writes and
+// all: a repeated exit-ship spawns one more free suit and still lands the player
+// where they asked to be, a repeated disembark is refused outright (the passenger
+// link is already cleared → 409), undock and ship-access overwrite the same field.
+// So friendlyError's «попробуйте позже» is honest for them, and naming a wallet none
+// of them touches would not be.
 //
 // It exists because friendlyError's advice is wrong for those. When no answer
 // arrives the request may still have reached the backend and committed — the

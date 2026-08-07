@@ -24,11 +24,14 @@ export function ReputationPanel({ races, refreshSeq }: { races: Race[]; refreshS
         setLoadError(null);
       } catch (err) {
         // Deliberately NOT cleared at the start of a refetch (the TASK-168 flee
-        // trap): this effect re-runs on every police_scan frame, so blanking the
-        // message here would erase it a few seconds after the player saw it and
-        // put the panel back on «Загрузка…». A refetch that succeeds clears it;
-        // one that fails again just rewrites the same line, so the failure stays
-        // on screen for as long as it lasts.
+        // trap): this effect re-runs on every police_scan frame, and a single one
+        // is enough to blank the message and put the panel back on «Загрузка…»
+        // while the player is still reading it. Frames are not periodic and not a
+        // poll — the backend publishes one only when a scan actually confiscates
+        // something, under a per-target cooldown (internal/sector/police.go) — so
+        // this is about one badly-timed frame, not a stream of them. A refetch that
+        // succeeds clears the message; one that fails again rewrites the same line,
+        // so the failure stays on screen for as long as it lasts.
         if (!cancelled) setLoadError(friendlyError(err));
       }
     })();

@@ -126,7 +126,7 @@ export function SetCoursePanel({ shipID, currentSectorID, equipment }: Props) {
             type="submit"
             className="sw-btn"
             disabled={shipUnknown || destSector === 0 || status.kind === 'pending' || !hasAutopilot}
-            title={shipUnknown ? 'Корабль ещё не загружен' : !hasAutopilot ? 'Нужен модуль автопилота (up_autopilot)' : undefined}
+            title={shipUnknown ? 'Корабль не назначен.' : !hasAutopilot ? 'Нужен модуль автопилота (up_autopilot)' : undefined}
           >
             Задать курс
           </button>
@@ -135,7 +135,12 @@ export function SetCoursePanel({ shipID, currentSectorID, equipment }: Props) {
               status.kind === 'ok' ? 'ok' : status.kind === 'error' ? 'error' : ''
             }`}
           >
-            {shipUnknown && 'Корабль ещё не загружен'}
+            {/* PilotPanel's exact wording, one 240px column away, for the same
+                ownShip === null fact. «ещё не загружен» promised a load that may
+                never come: a spacesuit respawn can fail on the ack timeout
+                (internal/sector/worker.go), and then the player really has no
+                ship rather than one still in flight (TASK-187 review). */}
+            {shipUnknown && 'Корабль не назначен.'}
             {!shipUnknown && !hasAutopilot && 'Нужен модуль автопилота (up_autopilot)'}
             {hasAutopilot && status.kind === 'ok' && `Курс задан, ${status.hops} прыжков`}
             {hasAutopilot && status.kind === 'error' && status.message}

@@ -517,10 +517,11 @@ test('netFetch wraps a fetch rejection in NetworkError and passes a response thr
     // Some views still render err.message with no mapper at all —
     // ObjectActionsMenu.formatError (which also writes it to the journal),
     // TargetsPanel.onRowClick, SpacePointMenu, CombatHUD.run for the commands that
-    // pass no toText, PilotPanel's console — so the message itself has to be the
-    // Russian line, not "Failed to fetch" under a new name. (Clans, bounties, fleet
-    // and the galaxy map were the examples here until TASK-168 put all four on a
-    // mapper; they no longer make the point.)
+    // pass no toText — so the message itself has to be the Russian line, not
+    // "Failed to fetch" under a new name. (Clans, bounties, fleet and the galaxy map
+    // were the examples here until TASK-168 put all four on a mapper; PilotPanel's
+    // console was one until TASK-187 put its four on friendlyError. They no longer
+    // make the point.)
     assert.equal(err.message, friendlyError(err));
     assert.match(err.message, /Нет связи с сервером/);
 

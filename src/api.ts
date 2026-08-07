@@ -1495,8 +1495,9 @@ const ERR_SESSION_EXPIRED = 'Сессия истекла — войдите в �
 //     wording it replaced, «Команда не успела выполниться, попробуйте ещё раз»,
 //     asserted a failure nobody knows about — that is the TASK-140 class of
 //     defect, not a matter of wording taste.
-//   - a NetworkError is the commonest of the three and never reaches the status
-//     switch at all: netFetch rejects, the POST may still have landed.
+//   - a NetworkError is the commonest of the three ways an ack goes missing, and
+//     never reaches the status switch at all: netFetch rejects, the POST may
+//     still have landed.
 //   - 500 belongs to the same class and is worded separately, in the switch's
 //     default branch — see it for why a server-side error can still leave the
 //     ship in the target sector.

@@ -1,4 +1,5 @@
-import { disembark, exitShip, sendUndock, setShipAccess, type CargoInventory, type Race } from './api';
+import { disembark, exitShip, friendlyError, sendUndock, setShipAccess, type CargoInventory, type Race } from './api';
+import { emitLog } from './eventBus';
 import { shipDisplayName } from './gameContext';
 import { fmtScalar, hullVariant } from './shipStats';
 import type { TrackedShip } from './useWorldState';
@@ -19,6 +20,34 @@ type Props = {
   // controls are hidden and only «Высадиться» is offered.
   riding: boolean;
 };
+
+// reportFailure puts a refused command into the event journal. Until TASK-187
+// the four handlers below only console.error'd: a 502 on «Отстыковаться» left
+// the player with no ship movement and no explanation, and the browser console
+// was the one place the reason existed. The journal, not an inline slot, because
+// this panel is stateless by design and sits in a 240px column — same catch
+// shape as ObjectActionsMenu.run, minus its inline half.
+//
+// friendlyError, not commandErrorText, for all four — checked against the
+// handlers rather than taken from commandErrorText's own list, which claims all
+// four merely «record an intent the worker acts on later» and is wrong for two
+// of them: exit-ship and disembark INSERT a spacesuit row synchronously
+// (app/eva.go → shipSpawner.SpawnSpacesuit → repo.Create) and rewrite
+// active_ship_id / passenger_of_ship_id in the request path. They still fail the
+// cautious mapper's actual test — none of the four moves credits, goods or a
+// hull the player paid for. Undock and ship-access only enqueue a worker command
+// (a repeat overwrites the same field); a repeat of exit-ship spawns a second
+// free suit but still lands the player exactly where they asked to be; a repeat
+// of disembark is refused outright (the passenger link is already cleared → 409).
+// So «попробуйте позже» is honest advice here, while commandErrorText's line
+// («вместе со списанием или начислением») would name a wallet none of them touches.
+//
+// console.error is kept alongside: friendlyError only logs the raw object for the
+// network/502 cases, and the rest are still worth having in the console.
+function reportFailure(action: string, err: unknown): void {
+  console.error(action, err);
+  emitLog({ category: 'system', kind: 'danger', message: `${action}: ${friendlyError(err)}` });
+}
 
 // PilotPanel is the "КОРАБЛЬ" HUD: identity + vital bars (hull, shield,
 // speed, cargo) + the flight telemetry that the mockup omits but is useful
@@ -82,7 +111,7 @@ export function PilotPanel({ ownShip, ownCargo, races, onExit, riding }: Props) 
                   onClick={() => {
                     void disembark()
                       .then(onExit)
-                      .catch((err: unknown) => console.error('disembark', err));
+                      .catch((err: unknown) => reportFailure('Высадка', err));
                   }}
                 >
                   Высадиться
@@ -94,7 +123,7 @@ export function PilotPanel({ ownShip, ownCargo, races, onExit, riding }: Props) 
                   className="sw-btn ghost"
                   onClick={() => {
                     void sendUndock(ownShip.id).catch((err: unknown) =>
-                      console.error('sendUndock', err),
+                      reportFailure('Отстыковка', err),
                     );
                   }}
                 >
@@ -114,7 +143,7 @@ export function PilotPanel({ ownShip, ownCargo, races, onExit, riding }: Props) 
                     }
                     onClick={() => {
                       void setShipAccess(ownShip.id, !ownShip.isOpen).catch((err: unknown) =>
-                        console.error('setShipAccess', err),
+                        reportFailure('Смена доступа на корабль', err),
                       );
                     }}
                   >
@@ -127,7 +156,7 @@ export function PilotPanel({ ownShip, ownCargo, races, onExit, riding }: Props) 
                     onClick={() => {
                       void exitShip(ownShip.id)
                         .then(onExit)
-                        .catch((err: unknown) => console.error('exitShip', err));
+                        .catch((err: unknown) => reportFailure('Выход из корабля', err));
                     }}
                   >
                     Покинуть корабль

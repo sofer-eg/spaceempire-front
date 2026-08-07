@@ -23,6 +23,20 @@ type Status =
 
 export function SetCoursePanel({ shipID, currentSectorID, equipment }: Props) {
   const galaxy = useGalaxy();
+  // shipUnknown: SectorView renders this panel before the WS has delivered the
+  // player's ship (GameLayout's ownShip is null → shipID 0 → equipment
+  // undefined). Without this split the missing list read as a missing module and
+  // the panel asserted «Нужен модуль автопилота» about a ship it had not seen
+  // yet — the TASK-140/166 class of false statement (TASK-187).
+  //
+  // An undefined `equipment` on a ship that IS here is NOT that case and needs no
+  // guard: every WS frame carries the whole Ship DTO (buildSnapshotDTO →
+  // dto.ShipsFromDomain for both the first frame's Added and later Updated) and
+  // useWorldState's upsert overwrites the field from each one, so undefined means
+  // exactly `len(Ship.Equipment) == 0` server-side — no modules fitted, and
+  // «нужен автопилот» is then true. There is no partial ship frame to be caught
+  // half-loaded by.
+  const shipUnknown = shipID === 0;
   const hasAutopilot = !!equipment?.some((e) => e.type === 'up_autopilot');
   const [destSectorChoice, setDestSectorChoice] = useState<number>(0);
   const [destX, setDestX] = useState<string>('0');
@@ -111,8 +125,8 @@ export function SetCoursePanel({ shipID, currentSectorID, equipment }: Props) {
           <button
             type="submit"
             className="sw-btn"
-            disabled={shipID === 0 || destSector === 0 || status.kind === 'pending' || !hasAutopilot}
-            title={!hasAutopilot ? 'Нужен модуль автопилота (up_autopilot)' : undefined}
+            disabled={shipUnknown || destSector === 0 || status.kind === 'pending' || !hasAutopilot}
+            title={shipUnknown ? 'Корабль ещё не загружен' : !hasAutopilot ? 'Нужен модуль автопилота (up_autopilot)' : undefined}
           >
             Задать курс
           </button>
@@ -121,7 +135,8 @@ export function SetCoursePanel({ shipID, currentSectorID, equipment }: Props) {
               status.kind === 'ok' ? 'ok' : status.kind === 'error' ? 'error' : ''
             }`}
           >
-            {!hasAutopilot && 'Нужен модуль автопилота (up_autopilot)'}
+            {shipUnknown && 'Корабль ещё не загружен'}
+            {!shipUnknown && !hasAutopilot && 'Нужен модуль автопилота (up_autopilot)'}
             {hasAutopilot && status.kind === 'ok' && `Курс задан, ${status.hops} прыжков`}
             {hasAutopilot && status.kind === 'error' && status.message}
             {hasAutopilot && status.kind === 'pending' && 'Отправка…'}

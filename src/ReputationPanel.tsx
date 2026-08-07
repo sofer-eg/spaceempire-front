@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { fetchRaceStandings, type Race, type RaceStanding } from './api';
+import { fetchRaceStandings, friendlyError, type Race, type RaceStanding } from './api';
 import { raceColor, raceName } from './gameContext';
 
 // ReputationPanel shows the player's standing with each main race (1-5) and a
@@ -7,16 +7,29 @@ import { raceColor, raceName } from './gameContext';
 // on mount and whenever refreshSeq changes — useWorldState bumps that on every
 // police_scan frame, so a confiscation updates the panel without polling.
 export function ReputationPanel({ races, refreshSeq }: { races: Race[]; refreshSeq: number }) {
-  const [standings, setStandings] = useState<RaceStanding[]>([]);
+  // null = the first fetch has not answered yet. Until TASK-187 this was an
+  // empty array and the body printed «Нет данных.» for all three of loading, a
+  // genuinely empty list and a failed fetch — the player could not tell «you
+  // have no reputation anywhere» from «we could not read it».
+  const [standings, setStandings] = useState<RaceStanding[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
         const res = await fetchRaceStandings();
-        if (!cancelled) setStandings(res.items);
+        if (cancelled) return;
+        setStandings(res.items);
+        setLoadError(null);
       } catch (err) {
-        console.error('fetchRaceStandings', err);
+        // Deliberately NOT cleared at the start of a refetch (the TASK-168 flee
+        // trap): this effect re-runs on every police_scan frame, so blanking the
+        // message here would erase it a few seconds after the player saw it and
+        // put the panel back on «Загрузка…». A refetch that succeeds clears it;
+        // one that fails again just rewrites the same line, so the failure stays
+        // on screen for as long as it lasts.
+        if (!cancelled) setLoadError(friendlyError(err));
       }
     })();
     return () => {
@@ -24,7 +37,8 @@ export function ReputationPanel({ races, refreshSeq }: { races: Race[]; refreshS
     };
   }, [refreshSeq]);
 
-  const anyWanted = standings.some((s) => s.wanted);
+  const rows = standings ?? [];
+  const anyWanted = rows.some((s) => s.wanted);
 
   return (
     <div className="sw-panel">
@@ -37,13 +51,28 @@ export function ReputationPanel({ races, refreshSeq }: { races: Race[]; refreshS
         )}
       </div>
       <div className="sw-panel-body">
-        {standings.length === 0 ? (
+        {/* Three states, one per line of this chain: a failed read says so (and
+            keeps the last good list underneath it — stale numbers still beat a
+            blank panel), a first fetch that has not answered says «Загрузка…»,
+            and only a list that really came back empty says «Нет данных.». */}
+        {loadError !== null && (
+          <span className="sw-mono" style={{ color: 'var(--danger)', fontSize: 11 }}>
+            {loadError}
+          </span>
+        )}
+        {loadError === null && standings === null && (
+          <span className="sw-mono" style={{ color: 'var(--ink-mute)', fontSize: 11 }}>
+            Загрузка…
+          </span>
+        )}
+        {loadError === null && standings !== null && rows.length === 0 && (
           <span className="sw-mono" style={{ color: 'var(--ink-mute)', fontSize: 11 }}>
             Нет данных.
           </span>
-        ) : (
-          <div className="sw-col" style={{ gap: 6 }}>
-            {standings.map((s) => (
+        )}
+        {rows.length > 0 && (
+          <div className="sw-col" style={{ gap: 6, marginTop: loadError !== null ? 6 : 0 }}>
+            {rows.map((s) => (
               <div
                 key={s.race}
                 className="sw-row"
